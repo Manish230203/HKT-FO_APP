@@ -1,0 +1,423 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* --- Colors --- */
+    --background: 210 40% 98%;          /* #F8FAFC */
+    --foreground: 222 47% 11%;          /* #0F172A (Text Primary) */
+
+    --card: 0 0% 100%;                  /* #FFFFFF */
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 215 25% 17%;             /* #1E293B - Primary */
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 199 89% 48%;            /* #0EA5E9 - Accent Blue (Primary Action) */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 40% 96.1%;             /* #F1F5F9 */
+    --muted-foreground: 215 16% 47%;    /* #64748B - Text Secondary */
+
+    --accent: 199 89% 38%;              /* #0A80B7 - Accent Blue (darker) */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;           /* #DC2626 - Danger Red */
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;              /* #E2E8F0 - Border */
+    --input: 214 32% 91%;
+    --ring: 199 89% 48%;                /* #0EA5E9 - Accent Blue Focus ring */
+
+    /* --- Border Radius --- */
+    --radius: 1rem;                     /* 16px Premium Radius */
+
+    /* --- Sidebar Specific --- */
+    --sidebar-background: 210 40% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 215 25% 17%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 199 89% 48%;       /* #0EA5E9 - Accent Blue */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 199 89% 48%;        /* #0EA5E9 - Accent Blue */
+
+    /* --- Status Colors (Global System) --- */
+    --status-active: 162 94% 30%;       /* #059669 - Success Green */
+    --status-active-foreground: 0 0% 100%;
+    --status-warning: 32 95% 44%;       /* #D97706 - Warning Amber */
+    --status-warning-foreground: 0 0% 100%;
+    --status-critical: 0 72% 51%;      /* #DC2626 - Danger Red */
+    --status-critical-foreground: 0 0% 100%;
+    --status-info: 239 84% 67%;         /* #6366F1 - Info Indigo */
+    --status-info-foreground: 0 0% 100%;
+
+    --surface-elevated: 0 0% 100%;
+    --surface-sunken: 210 40% 96%;
+
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  .dark {
+    /* --- Colors --- */
+    --background: 224 48% 8%;           /* #0B1020 */
+    --foreground: 210 40% 96%;          /* #F1F5F9 - Text Primary */
+
+    --card: 223 36% 11%;                /* #121826 (Card surface) */
+    --card-foreground: 210 40% 96%;
+
+    --popover: 223 36% 11%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 210 40% 91%;             /* #E2E8F0 - Slate 200 Primary */
+    --primary-foreground: 224 48% 8%;
+
+    --secondary: 214 95% 60%;            /* #3B8DF8 - Accent Blue */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217 25% 16%;
+    --muted-foreground: 215 25% 65%;    /* #94A3B8 - Text Secondary */
+
+    --accent: 214 95% 60%;              /* #3B8DF8 - Accent Blue */
+    --accent-foreground: 224 48% 8%;
+
+    --destructive: 350 89% 60%;           /* #F43F5E - Danger Red */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 28% 17%;              /* #1F2937 - Border */
+    --input: 215 28% 17%;
+    --ring: 214 95% 60%;                /* #3B8DF8 - Accent Blue Focus ring */
+
+    /* --- Sidebar Specific --- */
+    --sidebar-background: 224 48% 8%;   /* #0B1020 */
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 210 40% 91%;
+    --sidebar-primary-foreground: 224 48% 8%;
+    --sidebar-accent: 214 95% 60%;       /* #3B8DF8 - Accent Blue */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 215 28% 17%;
+    --sidebar-ring: 214 95% 60%;        /* #3B8DF8 - Accent Blue */
+
+    /* --- Status Colors (Global System) --- */
+    --status-active: 142 72% 45%;       /* #22C55E - Success Green */
+    --status-active-foreground: 0 0% 100%;
+    --status-warning: 38 92% 50%;       /* #F59E0B - Warning Amber */
+    --status-warning-foreground: 0 0% 100%;
+    --status-critical: 350 89% 60%;      /* #F43F5E - Danger Red */
+    --status-critical-foreground: 0 0% 100%;
+    --status-info: 235 89% 74%;         /* #818CF8 - Info Indigo */
+    --status-info-foreground: 0 0% 100%;
+
+    --surface-elevated: 217 38% 11%;
+    --surface-sunken: 224 48% 5%;
+  }
+}
+
+@layer base {
+  html {
+    font-size: 19.5px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  h1, .h1 {
+    @apply text-foreground font-bold tracking-tight mb-4 block;
+    font-size: 2.25rem; /* 36px */
+    line-height: 2.5rem;
+  }
+
+  h2, .h2 {
+    @apply text-foreground font-semibold tracking-tight mb-3 block;
+    font-size: 1.5rem; /* 24px */
+    line-height: 2rem;
+  }
+
+  h3, .h3 {
+    @apply text-foreground font-semibold tracking-tight mb-2.5 block;
+    font-size: 1.25rem; /* 20px */
+    line-height: 1.75rem;
+  }
+
+  h4, .h4 {
+    @apply text-foreground font-medium tracking-tight mb-2 block;
+    font-size: 1.125rem; /* 18px */
+    line-height: 1.5rem;
+  }
+
+  h5, .h5 {
+    @apply text-foreground font-medium mb-1.5 block;
+    font-size: 0.95rem; /* 15px */
+    line-height: 1.35rem;
+  }
+
+  h6, .h6 {
+    @apply text-foreground font-medium mb-1 block;
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.25rem;
+  }
+}
+
+@layer utilities {
+  .font-mono-data {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Status Colors */
+  .text-status-active {
+    color: hsl(var(--status-active));
+  }
+  .text-status-warning {
+    color: hsl(var(--status-warning));
+  }
+  .text-status-critical {
+    color: hsl(var(--status-critical));
+  }
+  .bg-status-active {
+    background-color: hsl(var(--status-active));
+  }
+  .bg-status-warning {
+    background-color: hsl(var(--status-warning));
+  }
+  .bg-status-critical {
+    background-color: hsl(var(--status-critical));
+  }
+  .bg-status-info {
+    background-color: hsl(var(--status-info));
+  }
+
+  .bg-surface-elevated {
+    background-color: hsl(var(--surface-elevated));
+  }
+  .bg-surface-sunken {
+    background-color: hsl(var(--surface-sunken));
+  }
+
+  /* Glassmorphism card utilities */
+  .glass-card {
+    background: rgba(18, 24, 38, 0.85); /* Dark background matching #121826 surface */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .glass-card-light {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 8px 32px 0 rgba(30, 41, 59, 0.04);
+  }
+
+  /* Cyber Glow effect utilities */
+  .glow-primary {
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.15);
+  }
+  .glow-secondary {
+    box-shadow: 0 0 15px hsl(var(--secondary) / 0.15);
+  }
+  .glow-success {
+    box-shadow: 0 0 15px hsl(var(--status-active) / 0.15);
+  }
+  .glow-critical {
+    box-shadow: 0 0 15px hsl(var(--status-critical) / 0.15);
+  }
+
+  /* Scrollbars */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+
+  /* --- KPI Visual Enhancement System --- */
+  .kpi-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left-width: 4px !important;
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+  }
+
+  /* Blue Information Cards */
+  .kpi-card-blue {
+    background-color: rgba(14, 165, 233, 0.04) !important;
+    border-color: rgba(14, 165, 233, 0.35) !important;
+    border-left-color: rgb(14, 165, 233) !important;
+  }
+  .kpi-card-blue:hover {
+    background-color: rgba(14, 165, 233, 0.06) !important;
+  }
+  .kpi-icon-blue {
+    background-color: rgba(14, 165, 233, 0.12) !important;
+    color: rgb(14, 165, 233) !important;
+  }
+
+  /* Green Success Cards */
+  .kpi-card-green {
+    background-color: rgba(5, 150, 105, 0.04) !important;
+    border-color: rgba(5, 150, 105, 0.35) !important;
+    border-left-color: rgb(5, 150, 105) !important;
+  }
+  .kpi-card-green:hover {
+    background-color: rgba(5, 150, 105, 0.06) !important;
+  }
+  .kpi-icon-green {
+    background-color: rgba(5, 150, 105, 0.12) !important;
+    color: rgb(5, 150, 105) !important;
+  }
+
+  /* Purple / Indigo Information Cards */
+  .kpi-card-purple {
+    background-color: rgba(99, 102, 241, 0.04) !important;
+    border-color: rgba(99, 102, 241, 0.35) !important;
+    border-left-color: rgb(99, 102, 241) !important;
+  }
+  .kpi-card-purple:hover {
+    background-color: rgba(99, 102, 241, 0.06) !important;
+  }
+  .kpi-icon-purple {
+    background-color: rgba(99, 102, 241, 0.12) !important;
+    color: rgb(99, 102, 241) !important;
+  }
+
+  /* Amber Warning Cards */
+  .kpi-card-amber {
+    background-color: rgba(217, 119, 6, 0.04) !important;
+    border-color: rgba(217, 119, 6, 0.35) !important;
+    border-left-color: rgb(217, 119, 6) !important;
+  }
+  .kpi-card-amber:hover {
+    background-color: rgba(217, 119, 6, 0.06) !important;
+  }
+  .kpi-icon-amber {
+    background-color: rgba(217, 119, 6, 0.12) !important;
+    color: rgb(217, 119, 6) !important;
+  }
+
+  /* Red Critical Cards */
+  .kpi-card-red {
+    background-color: rgba(220, 38, 38, 0.04) !important;
+    border-color: rgba(220, 38, 38, 0.35) !important;
+    border-left-color: rgb(220, 38, 38) !important;
+  }
+  .kpi-card-red:hover {
+    background-color: rgba(220, 38, 38, 0.06) !important;
+  }
+  .kpi-icon-red {
+    background-color: rgba(220, 38, 38, 0.12) !important;
+    color: rgb(220, 38, 38) !important;
+  }
+
+  /* --- Dark Mode Styles --- */
+  .dark .kpi-card-blue {
+    background: linear-gradient(135deg, rgba(59, 141, 248, 0.08), rgba(59, 141, 248, 0.02)) !important;
+    border-color: rgba(59, 141, 248, 0.35) !important;
+    border-left-color: rgb(59, 141, 248) !important;
+    box-shadow: 0 0 30px rgba(59, 141, 248, 0.08) !important;
+  }
+  .dark .kpi-card-blue:hover {
+    background: linear-gradient(135deg, rgba(59, 141, 248, 0.12), rgba(59, 141, 248, 0.04)) !important;
+  }
+  .dark .kpi-icon-blue {
+    background-color: rgba(59, 141, 248, 0.15) !important;
+    color: rgb(59, 141, 248) !important;
+  }
+
+  .dark .kpi-card-green {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.02)) !important;
+    border-color: rgba(34, 197, 94, 0.35) !important;
+    border-left-color: rgb(34, 197, 94) !important;
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.08) !important;
+  }
+  .dark .kpi-card-green:hover {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04)) !important;
+  }
+  .dark .kpi-icon-green {
+    background-color: rgba(34, 197, 94, 0.15) !important;
+    color: rgb(34, 197, 94) !important;
+  }
+
+  .dark .kpi-card-purple {
+    background: linear-gradient(135deg, rgba(129, 140, 248, 0.08), rgba(129, 140, 248, 0.02)) !important;
+    border-color: rgba(129, 140, 248, 0.35) !important;
+    border-left-color: rgb(129, 140, 248) !important;
+    box-shadow: 0 0 30px rgba(129, 140, 248, 0.08) !important;
+  }
+  .dark .kpi-card-purple:hover {
+    background: linear-gradient(135deg, rgba(129, 140, 248, 0.12), rgba(129, 140, 248, 0.04)) !important;
+  }
+  .dark .kpi-icon-purple {
+    background-color: rgba(129, 140, 248, 0.15) !important;
+    color: rgb(129, 140, 248) !important;
+  }
+
+  .dark .kpi-card-amber {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02)) !important;
+    border-color: rgba(245, 158, 11, 0.35) !important;
+    border-left-color: rgb(245, 158, 11) !important;
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.08) !important;
+  }
+  .dark .kpi-card-amber:hover {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04)) !important;
+  }
+  .dark .kpi-icon-amber {
+    background-color: rgba(245, 158, 11, 0.15) !important;
+    color: rgb(245, 158, 11) !important;
+  }
+
+  .dark .kpi-card-red {
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.08), rgba(244, 63, 94, 0.02)) !important;
+    border-color: rgba(244, 63, 94, 0.35) !important;
+    border-left-color: rgb(244, 63, 94) !important;
+    box-shadow: 0 0 30px rgba(244, 63, 94, 0.08) !important;
+  }
+  .dark .kpi-card-red:hover {
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.12), rgba(244, 63, 94, 0.04)) !important;
+  }
+  .dark .kpi-icon-red {
+    background-color: rgba(244, 63, 94, 0.15) !important;
+    color: rgb(244, 63, 94) !important;
+  }
+}
+
+/* --- Print overrides --- */
+@media print {
+  /* Hide all toast notifications and toasters during print/PDF generation */
+  [data-sonner-toaster],
+  .toaster,
+  [data-radix-toast-viewport],
+  .toast,
+  [role="status"] {
+    display: none !important;
+  }
+}
+
+/* Fix calendar picker indicator color in light and dark mode */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.5);
+}
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1);
+}
