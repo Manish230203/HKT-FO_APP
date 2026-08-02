@@ -12,6 +12,7 @@ import {
   Moon,
   LayoutDashboard,
   BookOpen,
+  MapPin,
 } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useTheme } from "@/hooks/useTheme";
@@ -156,6 +157,17 @@ export function AppLayout({ children }) {
             >
               <BookOpen className="h-4.5 w-4.5" />
               General Visit
+            </Link>
+            <Link
+              to="/my-sites"
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                location.pathname.startsWith("/my-sites")
+                  ? "bg-sky-500 text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <MapPin className="h-4.5 w-4.5" />
+              My Sites
             </Link>
             {renderGroup(roundsGroup)}
             {renderGroup(visitsGroup)}

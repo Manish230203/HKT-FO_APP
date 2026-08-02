@@ -24,7 +24,7 @@ export default function GeneralVisit() {
   const [visits, setVisits] = useState([]);
   const [clients, setClients] = useState([]);
   const [sites, setSites] = useState([]);
-  
+
   // Table Loading and Search State
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -35,6 +35,10 @@ export default function GeneralVisit() {
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const [personVisited, setPersonVisited] = useState("");
   const [reasonOfVisit, setReasonOfVisit] = useState("");
+  const [visitDate, setVisitDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [remark, setRemark] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Load General Visits and Clients list
@@ -43,7 +47,7 @@ export default function GeneralVisit() {
     try {
       const visitsRes = await api.get("/general-visits");
       setVisits(visitsRes.data || []);
-      
+
       const clientsRes = await api.get("/assessments/clients");
       setClients(clientsRes.data || []);
     } catch (error) {
@@ -64,8 +68,15 @@ export default function GeneralVisit() {
       setIsOpen(true);
       const pClientId = urlParams.get("clientId");
       const pSiteId = urlParams.get("siteId");
+      const pDate = urlParams.get("date");
+      const pRemark = urlParams.get("remark");
       if (pClientId) setSelectedClientId(pClientId);
       if (pSiteId) setSelectedSiteId(pSiteId);
+      if (pDate) setVisitDate(pDate);
+      else setVisitDate(new Date().toISOString().split("T")[0]);
+      if (pRemark) setRemark(decodeURIComponent(pRemark));
+    } else {
+      setVisitDate(new Date().toISOString().split("T")[0]);
     }
   }, []);
 
@@ -89,7 +100,7 @@ export default function GeneralVisit() {
   // Handle Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedClientId || !selectedSiteId || !personVisited.trim() || !reasonOfVisit.trim()) {
+    if (!selectedClientId || !selectedSiteId || !personVisited.trim() || !reasonOfVisit.trim() || !visitDate) {
       alert("All fields are mandatory.");
       return;
     }
@@ -107,18 +118,26 @@ export default function GeneralVisit() {
         siteName,
         personVisited: personVisited.trim(),
         reasonOfVisit: reasonOfVisit.trim(),
+        visitDate,
+        startTime,
+        endTime,
+        remark: remark.trim(),
         created_on: Date.now(),
       };
 
       await api.post("/general-visits", payload);
-      
+
       // Reset state and close modal
       setSelectedClientId("");
       setSelectedSiteId("");
       setPersonVisited("");
       setReasonOfVisit("");
+      setVisitDate(new Date().toISOString().split("T")[0]);
+      setStartTime("");
+      setEndTime("");
+      setRemark("");
       setIsOpen(false);
-      
+
       // Reload table
       loadData();
     } catch (error) {
@@ -163,7 +182,17 @@ export default function GeneralVisit() {
           </h1>
         </div>
         <Button
-          onClick={() => setIsOpen(true)}
+          onClick={() => {
+            setSelectedClientId("");
+            setSelectedSiteId("");
+            setPersonVisited("");
+            setReasonOfVisit("");
+            setVisitDate(new Date().toISOString().split("T")[0]);
+            setStartTime("");
+            setEndTime("");
+            setRemark("");
+            setIsOpen(true);
+          }}
           className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 h-10 px-4 font-semibold text-xs shrink-0 self-start sm:self-auto"
         >
           <PlusCircle className="h-4.5 w-4.5" /> Add General Visit
@@ -254,21 +283,21 @@ export default function GeneralVisit() {
 
       {/* Creation Modal dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="rounded-xl border max-w-md bg-card text-xs">
+        <DialogContent className="rounded-xl border max-w-[500px] bg-card text-xs max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm font-bold flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-blue-600" /> Log General Visit
             </DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4 py-2">
+          <form onSubmit={handleSubmit} className="space-y-3 py-2">
             {/* Client Select */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 Select Client <span className="text-rose-500">*</span>
               </label>
               <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger className="h-10 border-border bg-background text-foreground text-xs rounded-lg">
+                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
                   <SelectValue placeholder="Choose a client..." />
                 </SelectTrigger>
                 <SelectContent className="text-xs">
@@ -282,12 +311,12 @@ export default function GeneralVisit() {
             </div>
 
             {/* Site Select */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 Select Site <span className="text-rose-500">*</span>
               </label>
               <Select value={selectedSiteId} onValueChange={setSelectedSiteId} disabled={!selectedClientId}>
-                <SelectTrigger className="h-10 border-border bg-background text-foreground text-xs rounded-lg">
+                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
                   <SelectValue placeholder={selectedClientId ? "Choose a site..." : "Select client first..."} />
                 </SelectTrigger>
                 <SelectContent className="text-xs">
@@ -300,8 +329,48 @@ export default function GeneralVisit() {
               </Select>
             </div>
 
+            {/* Date Input */}
+            <div className="space-y-1">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                Date <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                type="date"
+                value={visitDate}
+                onChange={(e) => setVisitDate(e.target.value)}
+                className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
+                required
+              />
+            </div>
+
+            {/* Start & End Time */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                  Start Time
+                </label>
+                <Input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                  End Time
+                </label>
+                <Input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
+                />
+              </div>
+            </div>
+
             {/* Person Visited Textarea */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 Person Visited <span className="text-rose-500">*</span>
               </label>
@@ -309,13 +378,13 @@ export default function GeneralVisit() {
                 placeholder="Name or details of the person visited..."
                 value={personVisited}
                 onChange={(e) => setPersonVisited(e.target.value)}
-                className="min-h-[60px] border-border text-xs rounded-lg bg-background"
+                className="min-h-[50px] border-border text-xs rounded-lg bg-background"
                 required
               />
             </div>
 
             {/* Reason of Visit Textarea */}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 Reason of Visit <span className="text-rose-500">*</span>
               </label>
@@ -323,24 +392,37 @@ export default function GeneralVisit() {
                 placeholder="Reason or description of the visit..."
                 value={reasonOfVisit}
                 onChange={(e) => setReasonOfVisit(e.target.value)}
-                className="min-h-[80px] border-border text-xs rounded-lg bg-background"
+                className="min-h-[50px] border-border text-xs rounded-lg bg-background"
                 required
               />
             </div>
 
-            <DialogFooter className="gap-2 pt-2 border-t mt-4">
+            {/* Remark Textarea */}
+            <div className="space-y-1">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">
+                Remark
+              </label>
+              <Textarea
+                placeholder="Write remark or notes..."
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
+                className="min-h-[50px] border-border text-xs rounded-lg bg-background"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 pt-2 border-t mt-3">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setIsOpen(false)}
-                className="h-10 text-xs rounded-lg font-medium"
+                className="h-9 text-xs rounded-lg font-medium"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-blue-600 hover:bg-blue-700 text-white h-10 text-xs font-semibold rounded-lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white h-9 text-xs font-semibold rounded-lg"
               >
                 {submitting ? "Saving..." : "Save Visit"}
               </Button>

@@ -704,7 +704,7 @@ export default function OfficerRoundReportsList() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={bulkExporting}
+                disabled={bulkExporting || clientFilter === "all"}
                 className="h-8 text-xs font-bold gap-1.5 bg-background border-border hover:bg-muted text-foreground"
                 onClick={handleBulkExportPDF}
               >

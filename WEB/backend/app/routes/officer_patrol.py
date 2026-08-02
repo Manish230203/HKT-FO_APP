@@ -458,9 +458,30 @@ def init_general_visits_table(cursor):
             site_name VARCHAR(255),
             person_visited TEXT,
             reason_of_visit TEXT,
+            visit_date VARCHAR(50),
+            remark TEXT,
+            start_time VARCHAR(50),
+            end_time VARCHAR(50),
             created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # To handle existing table without these columns, alter them safely:
+    try:
+        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN visit_date VARCHAR(50)")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN remark TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN start_time VARCHAR(50)")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN end_time VARCHAR(50)")
+    except Exception:
+        pass
 
 @router.get("/general-visits")
 def get_general_visits():
@@ -480,6 +501,10 @@ def get_general_visits():
             r["siteName"] = r["site_name"]
             r["personVisited"] = r["person_visited"]
             r["reasonOfVisit"] = r["reason_of_visit"]
+            r["visitDate"] = r["visit_date"]
+            r["remark"] = r["remark"]
+            r["startTime"] = r["start_time"]
+            r["endTime"] = r["end_time"]
             r["createdOn"] = r["created_on"].strftime("%Y-%m-%d %H:%M:%S") if r["created_on"] else None
         return rows
     finally:
@@ -505,6 +530,10 @@ def save_general_visit(payload: Dict[str, Any]):
             payload.get("siteName"),
             payload.get("personVisited"),
             payload.get("reasonOfVisit"),
+            payload.get("visitDate"),
+            payload.get("remark"),
+            payload.get("startTime"),
+            payload.get("endTime"),
             oid
         )
         
@@ -512,7 +541,8 @@ def save_general_visit(payload: Dict[str, Any]):
             sql = """
                 UPDATE PATROL_OFFICER_GENERAL_VISITS SET
                     client_id = %s, client_name = %s, site_id = %s, site_name = %s,
-                    person_visited = %s, reason_of_visit = %s
+                    person_visited = %s, reason_of_visit = %s, visit_date = %s,
+                    remark = %s, start_time = %s, end_time = %s
                 WHERE oid = %s
             """
             cursor.execute(sql, query_params)
@@ -520,8 +550,9 @@ def save_general_visit(payload: Dict[str, Any]):
             sql = """
                 INSERT INTO PATROL_OFFICER_GENERAL_VISITS (
                     client_id, client_name, site_id, site_name,
-                    person_visited, reason_of_visit, oid
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    person_visited, reason_of_visit, visit_date,
+                    remark, start_time, end_time, oid
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(sql, query_params)
         

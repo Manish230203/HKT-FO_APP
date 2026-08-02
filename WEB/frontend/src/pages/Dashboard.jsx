@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import api from "../services/api";
 
 export default function Dashboard() {
@@ -34,17 +35,20 @@ export default function Dashboard() {
   const [clients, setClients] = useState([]);
   const [branches, setBranches] = useState([]);
   const [sites, setSites] = useState([]);
-  
+
   // Sudden Visit Modal State
   const [isSuddenVisitModalOpen, setIsSuddenVisitModalOpen] = useState(false);
   const [suddenClient, setSuddenClient] = useState("");
   const [suddenBranch, setSuddenBranch] = useState("");
   const [suddenSite, setSuddenSite] = useState("");
   const [suddenVisitType, setSuddenVisitType] = useState("");
-  
+  const [suddenDate, setSuddenDate] = useState("");
+  const [suddenRemark, setSuddenRemark] = useState("");
+
   // Planned visits state
   const [plannedVisits, setPlannedVisits] = useState([]);
-  
+  const [activeTab, setActiveTab] = useState("Planned");
+
   // Filters state
   const [filterClient, setFilterClient] = useState("all");
   const [filterSite, setFilterSite] = useState("all");
@@ -75,16 +79,36 @@ export default function Dashboard() {
 
         // Fetch round reports
         const roundRes = await api.get("/officer-rounds/reports");
-        setRoundReports(roundRes.data || []);
+        const loadedRounds = (roundRes.data || []).map(r => ({
+          ...r,
+          visitDate: new Date().toISOString().split("T")[0]
+        }));
+        setRoundReports(loadedRounds);
 
         // Fetch visit reports
         const visitRes = await api.get("/officer-visits/reports");
-        setVisitReports(visitRes.data || []);
+        const loadedVisits = (visitRes.data || []).map(r => ({
+          ...r,
+          visitDate: new Date().toISOString().split("T")[0]
+        }));
+        setVisitReports(loadedVisits);
 
         // Load planned visits from localStorage, or initialize with mock data
         const storedPlanned = localStorage.getItem("planned_visits");
         if (storedPlanned) {
-          setPlannedVisits(JSON.parse(storedPlanned));
+          let parsedPlanned = JSON.parse(storedPlanned);
+          parsedPlanned = parsedPlanned.map(pv => {
+            if (pv.id === "pv-1" || pv.id === "pv-2") {
+              pv.date = new Date().toISOString().split("T")[0];
+            } else if (pv.id === "pv-3") {
+              pv.date = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+            } else if (pv.id === "pv-4") {
+              pv.date = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+            }
+            return pv;
+          });
+          setPlannedVisits(parsedPlanned);
+          localStorage.setItem("planned_visits", JSON.stringify(parsedPlanned));
         } else {
           const defaultPlanned = [
             {
@@ -159,7 +183,7 @@ export default function Dashboard() {
   };
 
   const handleStartSuddenVisit = () => {
-    if (!suddenClient || !suddenBranch || !suddenSite || !suddenVisitType) {
+    if (!suddenClient || !suddenBranch || !suddenSite || !suddenVisitType || !suddenDate) {
       alert("All fields are mandatory.");
       return;
     }
@@ -169,55 +193,48 @@ export default function Dashboard() {
     if (suddenVisitType === "night_round" || suddenVisitType === "day_round") {
       const shiftVal = suddenVisitType === "night_round" ? "Night" : "Day";
       navigate(
-        `/officer-rounds/create?clientId=${suddenClient}&branchId=${suddenBranch}&siteId=${suddenSite}&shift=${shiftVal}&type=Surprise`
+        `/officer-rounds/create?clientId=${suddenClient}&branchId=${suddenBranch}&siteId=${suddenSite}&shift=${shiftVal}&type=Surprise&date=${suddenDate}&remark=${encodeURIComponent(suddenRemark)}`
       );
     } else if (suddenVisitType === "general_visit") {
       navigate(
-        `/general-visits?open=true&clientId=${suddenClient}&siteId=${suddenSite}`
+        `/general-visits?open=true&clientId=${suddenClient}&siteId=${suddenSite}&date=${suddenDate}&remark=${encodeURIComponent(suddenRemark)}`
       );
     }
   };
 
   // Filter planned visits
   const filteredPlanned = plannedVisits.filter((pv) => {
-    const matchesClient = filterClient === "all" || pv.clientId?.toString() === filterClient;
-    const matchesSite = filterSite === "all" || pv.siteId?.toString() === filterSite;
-    const matchesStatus = filterStatus === "all" || pv.status?.toLowerCase() === filterStatus.toLowerCase();
-    
-    let matchesDate = true;
-    if (dateFilterType === "today") {
-      const todayStr = new Date().toISOString().split("T")[0];
-      matchesDate = pv.date === todayStr;
-    } else if (dateFilterType === "yesterday") {
-      const yesterday = new Date(Date.now() - 86400000);
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
-      matchesDate = pv.date === yesterdayStr;
-    } else if (dateFilterType === "weekly") {
-      const pvDateObj = new Date(pv.date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      pvDateObj.setHours(0, 0, 0, 0);
-      const diffTime = Math.abs(today - pvDateObj);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      matchesDate = diffDays <= 7;
-    } else if (dateFilterType === "custom") {
-      const matchesStart = !filterStartDate || pv.date >= filterStartDate;
-      const matchesEnd = !filterEndDate || pv.date <= filterEndDate;
-      matchesDate = matchesStart && matchesEnd;
+    if (activeTab === "Planned") {
+      return pv.status === "Pending" || pv.status === "Overdue";
+    } else if (activeTab === "In progress") {
+      return pv.status === "In Progress";
+    } else if (activeTab === "Completed") {
+      return pv.status === "Completed";
     }
-    
-    return matchesClient && matchesSite && matchesStatus && matchesDate;
+    return true;
   });
 
-  // KPI Calculations
-  const totalPlannedCount = plannedVisits.length;
-  const pendingPlannedCount = plannedVisits.filter((pv) => pv.status === "Pending").length;
-  const completedPlannedCount = plannedVisits.filter((pv) => pv.status === "Completed").length;
-  
-  // Total unique sites inspected across both Rounds & Visits
-  const uniqueVisitedRoundSites = roundReports.filter((r) => r.status === "Completed" && r.siteId).map((r) => r.siteId);
-  const uniqueVisitedVisitSites = visitReports.filter((r) => r.status === "Completed" && r.siteId).map((r) => r.siteId);
-  const uniqueSitesVisited = new Set([...uniqueVisitedRoundSites, ...uniqueVisitedVisitSites]).size;
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  // KPI Calculations (Today)
+  const todayPlannedCount = plannedVisits.filter((pv) => pv.date === todayStr).length;
+
+  // Sites Visited (Completed round reports & visit reports for today)
+  const todayRoundSites = roundReports
+    .filter((r) => r.status === "Completed" && r.visitDate === todayStr && r.siteId)
+    .map((r) => r.siteId);
+  const todayVisitSites = visitReports
+    .filter((r) => r.status === "Completed" && r.visitDate === todayStr && r.siteId)
+    .map((r) => r.siteId);
+  const todaySitesVisitedCount = new Set([...todayRoundSites, ...todayVisitSites]).size;
+
+  // Pending Visits (Today's planned visits with status "Pending")
+  const todayPendingCount = plannedVisits.filter((pv) => pv.date === todayStr && pv.status === "Pending").length;
+
+  // Reports (Total reports submitted today)
+  const todayRoundReportsCount = roundReports.filter((r) => r.visitDate === todayStr).length;
+  const todayVisitReportsCount = visitReports.filter((r) => r.visitDate === todayStr).length;
+  const todayReportsCount = todayRoundReportsCount + todayVisitReportsCount;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 text-sm">
@@ -234,17 +251,18 @@ export default function Dashboard() {
             setSuddenBranch("");
             setSuddenSite("");
             setSuddenVisitType("");
+            setSuddenDate(new Date().toISOString().split("T")[0]);
+            setSuddenRemark("");
             setIsSuddenVisitModalOpen(true);
           }}
           className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 h-10 px-4 font-semibold text-xs shrink-0 self-start md:self-auto"
         >
-          <PlusCircle className="h-4.5 w-4.5" /> Add Sudden Visit
+          <PlusCircle className="h-4.5 w-4.5" /> Add Visit
         </Button>
       </div>
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Planned Visits */}
         {/* KPI 1: Planned Visits */}
         <Card className="kpi-card kpi-card-blue rounded-[14px] overflow-hidden">
           <CardContent className="p-5 flex items-center justify-between">
@@ -254,7 +272,7 @@ export default function Dashboard() {
                 Planned Visits
               </div>
               <span className="text-3xl font-bold text-foreground block leading-none">
-                {totalPlannedCount}
+                {todayPlannedCount}
               </span>
             </div>
             <div className="h-12 w-12 rounded-[12px] flex items-center justify-center shrink-0 kpi-icon-blue">
@@ -272,7 +290,7 @@ export default function Dashboard() {
                 Sites Visited
               </div>
               <span className="text-3xl font-bold text-foreground block leading-none">
-                {uniqueSitesVisited}
+                {todaySitesVisitedCount}
               </span>
             </div>
             <div className="h-12 w-12 rounded-[12px] flex items-center justify-center shrink-0 kpi-icon-green">
@@ -281,34 +299,34 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* KPI 3: Night Round Reports */}
+        {/* KPI 3: Pending Visits */}
         <Card className="kpi-card kpi-card-purple rounded-[14px] overflow-hidden">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
                 <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
-                Night Round Reports
+                Pending Visits
               </div>
               <span className="text-3xl font-bold text-foreground block leading-none">
-                {roundReports.length}
+                {todayPendingCount}
               </span>
             </div>
             <div className="h-12 w-12 rounded-[12px] flex items-center justify-center shrink-0 kpi-icon-purple">
-              <ShieldCheck className="h-5.5 w-5.5" />
+              <Clock className="h-5.5 w-5.5" />
             </div>
           </CardContent>
         </Card>
 
-        {/* KPI 4: Officer Visit Reports */}
+        {/* KPI 4: Reports */}
         <Card className="kpi-card kpi-card-red rounded-[14px] overflow-hidden">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
                 <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                Officer Visit Reports
+                Reports
               </div>
               <span className="text-3xl font-bold text-foreground block leading-none">
-                {visitReports.length}
+                {todayReportsCount}
               </span>
             </div>
             <div className="h-12 w-12 rounded-[12px] flex items-center justify-center shrink-0 kpi-icon-red">
@@ -326,117 +344,21 @@ export default function Dashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
-          
-          {/* Filters Bar */}
-          <div className="flex flex-wrap items-center gap-3 bg-muted/20 p-3.5 rounded-xl border border-border/60">
-            {/* Client Filter */}
-            <div className="w-full sm:w-auto min-w-[150px]">
-              <Select value={filterClient} onValueChange={setFilterClient}>
-                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs font-normal rounded-lg">
-                  <SelectValue placeholder="All Clients" />
-                </SelectTrigger>
-                <SelectContent className="text-xs">
-                  <SelectItem value="all">All Clients</SelectItem>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            {/* Site Filter */}
-            <div className="w-full sm:w-auto min-w-[150px]">
-              <Select value={filterSite} onValueChange={setFilterSite}>
-                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs font-normal rounded-lg">
-                  <SelectValue placeholder="All Sites" />
-                </SelectTrigger>
-                <SelectContent className="text-xs">
-                  <SelectItem value="all">All Sites</SelectItem>
-                  {sites
-                    .filter((s) => filterClient === "all" || s.client_name === clients.find(c => c.id.toString() === filterClient)?.name)
-                    .map((s) => (
-                      <SelectItem key={s.id} value={s.id.toString()}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="w-full sm:w-auto min-w-[120px]">
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs font-normal rounded-lg">
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent className="text-xs">
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Completed">Completed</SelectItem>
-                  <SelectItem value="Overdue">Overdue</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Date Preset Filter */}
-            <div className="w-full sm:w-auto min-w-[130px]">
-              <Select
-                value={dateFilterType}
-                onValueChange={(val) => {
-                  setDateFilterType(val);
-                  if (val !== "custom") {
-                    setFilterStartDate("");
-                    setFilterEndDate("");
-                  }
-                }}
+          {/* Tabs Bar */}
+          <div className="flex border-b border-border/60 pb-1 mb-4 gap-2">
+            {["Planned", "In progress", "Completed"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${activeTab === tab
+                    ? "bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20"
+                    : "text-muted-foreground hover:text-foreground border border-transparent"
+                  }`}
               >
-                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs font-normal rounded-lg">
-                  <SelectValue placeholder="All Dates" />
-                </SelectTrigger>
-                <SelectContent className="text-xs">
-                  <SelectItem value="all">All Dates</SelectItem>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="yesterday">Yesterday</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Custom Date Input (shown only if Custom Range is selected) */}
-            {dateFilterType === "custom" && (
-              <>
-                <div className="w-full sm:w-auto min-w-[150px] flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase shrink-0">From</span>
-                  <Input
-                    type="date"
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                    className="h-9 border-border bg-background text-foreground text-xs rounded-lg"
-                  />
-                </div>
-                <div className="w-full sm:w-auto min-w-[150px] flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase shrink-0">To</span>
-                  <Input
-                    type="date"
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                    className="h-9 border-border bg-background text-foreground text-xs rounded-lg"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Reset Filters */}
-            <Button
-              variant="ghost"
-              onClick={handleResetFilters}
-              className="text-muted-foreground hover:text-foreground h-9 px-3 text-xs flex items-center gap-1 rounded-lg ml-auto"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Reset
-            </Button>
+                {tab}
+              </button>
+            ))}
           </div>
 
           {/* Planned Table */}
@@ -521,20 +443,20 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Add Sudden Visit Modal */}
+      {/* Add Visit Modal */}
       <Dialog open={isSuddenVisitModalOpen} onOpenChange={setIsSuddenVisitModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-800 text-slate-100">
+        <DialogContent className="sm:max-w-[500px] bg-slate-900 border-slate-800 text-slate-100 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-slate-100">Add Sudden Visit</DialogTitle>
+            <DialogTitle className="text-slate-100">Add Visit</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Client</label>
+          <div className="grid gap-3 py-2">
+            <div className="grid gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Client</label>
               <Select value={suddenClient} onValueChange={(val) => {
                 setSuddenClient(val);
                 setSuddenSite(""); // Reset site when client changes
               }}>
-                <SelectTrigger className="h-10 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
                   <SelectValue placeholder="Select Client" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
@@ -547,10 +469,10 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Branch</label>
+            <div className="grid gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Branch</label>
               <Select value={suddenBranch} onValueChange={setSuddenBranch}>
-                <SelectTrigger className="h-10 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
                   <SelectValue placeholder="Select Branch" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
@@ -563,10 +485,10 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Site</label>
+            <div className="grid gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Site</label>
               <Select value={suddenSite} onValueChange={setSuddenSite}>
-                <SelectTrigger className="h-10 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
                   <SelectValue placeholder="Select Site" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
@@ -581,10 +503,10 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            <div className="grid gap-2">
-              <label className="text-xs font-bold text-slate-400 uppercase">Type of Visit</label>
+            <div className="grid gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Type of Visit</label>
               <Select value={suddenVisitType} onValueChange={setSuddenVisitType}>
-                <SelectTrigger className="h-10 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
                   <SelectValue placeholder="Select Type of Visit" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
@@ -594,20 +516,40 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="grid gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Date</label>
+              <Input
+                type="date"
+                value={suddenDate}
+                onChange={(e) => setSuddenDate(e.target.value)}
+                className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100 [&::-webkit-calendar-picker-indicator]:invert"
+              />
+            </div>
+
+            <div className="grid gap-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Remark</label>
+              <Textarea
+                placeholder="Write visit remark/notes..."
+                value={suddenRemark}
+                onChange={(e) => setSuddenRemark(e.target.value)}
+                className="min-h-[50px] text-xs bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500 rounded-lg"
+              />
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setIsSuddenVisitModalOpen(false)}
-              className="text-xs border-slate-700 hover:bg-slate-800 text-slate-100"
+              className="text-xs border-slate-700 hover:bg-slate-800 text-slate-100 h-9"
             >
               Cancel
             </Button>
             <Button
               type="button"
               onClick={handleStartSuddenVisit}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-9"
             >
               Start Visit
             </Button>

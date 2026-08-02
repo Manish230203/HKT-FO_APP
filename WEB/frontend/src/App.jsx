@@ -21,6 +21,7 @@ import VisitReportPreview from "./pages/officer-visit/VisitReportPreview";
 import VisitTemplateBuilder from "./pages/officer-visit/VisitTemplateBuilder";
 import Dashboard from "./pages/Dashboard";
 import GeneralVisit from "./pages/general-visit/GeneralVisit";
+import MySites from "./pages/MySites";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,6 +76,10 @@ const App = () => {
             <Route
               path="/dashboard"
               element={<Dashboard />}
+            />
+            <Route
+              path="/my-sites"
+              element={<MySites />}
             />
 
             {/* Officer Round Routes */}

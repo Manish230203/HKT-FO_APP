@@ -1632,9 +1632,10 @@ def get_sites_list(
     if role in ["supervisor", "field officer", "main gate supervisor"]:
         if user_site_id:
             sql = text("""
-                SELECT s.oid as id, s.name, s.geofence_data, s.geofence_type, c.name as client_name 
+                SELECT s.oid as id, s.name, s.geofence_data, s.geofence_type, c.name as client_name, b.name as branch_name 
                 FROM SITE s 
                 LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+                LEFT JOIN BRANCH b ON s.BRANCH = b.oid
                 WHERE s.oid = :user_site_id
             """)
             rows = db.execute(sql, {"user_site_id": user_site_id}).mappings().all()
@@ -1643,17 +1644,19 @@ def get_sites_list(
     else:
         if company_id:
             sql = text("""
-                SELECT s.oid as id, s.name, s.BRANCH, s.geofence_data, s.geofence_type, c.name as client_name 
+                SELECT s.oid as id, s.name, s.BRANCH, s.geofence_data, s.geofence_type, c.name as client_name, b.name as branch_name 
                 FROM SITE s 
                 LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid 
+                LEFT JOIN BRANCH b ON s.BRANCH = b.oid
                 WHERE s.CLIENTT = :company_id
             """)
             rows = db.execute(sql, {"company_id": company_id}).mappings().all()
         else:
             sql = text("""
-                SELECT s.oid as id, s.name, s.geofence_data, s.geofence_type, c.name as client_name 
+                SELECT s.oid as id, s.name, s.geofence_data, s.geofence_type, c.name as client_name, b.name as branch_name 
                 FROM SITE s 
                 LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+                LEFT JOIN BRANCH b ON s.BRANCH = b.oid
             """)
             rows = db.execute(sql).mappings().all()
     
