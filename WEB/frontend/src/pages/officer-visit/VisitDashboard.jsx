@@ -349,13 +349,13 @@ export default function VisitDashboard() {
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>
-                  <TableHead className="font-semibold text-slate-700">Planned Date</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Client / Company</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Site Location</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Officer Assigned</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Shift</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Status</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700 pr-6">Action</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Planned Date</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Client / Company</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Site Location</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Officer Assigned</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Shift</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Status</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200 pr-6">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

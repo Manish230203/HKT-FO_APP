@@ -289,10 +289,10 @@ export default function VisitTemplateBuilder() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">
-            Officer Visit Template Builder
+            Officer Day Visit Template Builder
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Build and organize checklist templates for Officer Visit rounds.
+            Build and organize checklist templates for Officer Day Visit rounds.
           </p>
         </div>
 
@@ -324,7 +324,7 @@ export default function VisitTemplateBuilder() {
               className="h-10 w-10 rounded-lg"
               title="Rename active template"
             >
-              <Edit3 className="h-4 w-4 text-slate-500" />
+              <Edit3 className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
             </Button>
 
             <Button
@@ -350,7 +350,7 @@ export default function VisitTemplateBuilder() {
       {templates.length === 0 ? (
         <Card className="border border-dashed border-slate-200 dark:border-slate-800 p-12 text-center rounded-2xl bg-card">
           <div className="max-w-md mx-auto space-y-4">
-            <FileText className="h-10 w-10 text-slate-400 mx-auto" />
+            <FileText className="h-10 w-10 text-slate-400 dark:text-slate-500 mx-auto" />
             <h2 className="text-sm font-bold text-foreground">
               No templates available
             </h2>
@@ -401,13 +401,13 @@ export default function VisitTemplateBuilder() {
                   return (
                     <Card
                       key={section}
-                      className="border border-slate-100 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden bg-card"
+                      className="border border-slate-100 dark:border-slate-900 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden bg-card"
                     >
-                      <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-900/50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-900 dark:border-slate-800">
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => toggleExpandSection(section)}
-                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-500 transition-colors"
+                            className="p-1 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-800 rounded text-slate-500 dark:text-slate-400 dark:text-slate-500 transition-colors"
                           >
                             <Settings
                               className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-95 text-blue-600" : ""}`}
@@ -436,7 +436,7 @@ export default function VisitTemplateBuilder() {
                           <Button
                             variant="ghost"
                             onClick={() => handleOpenRenameSection(section)}
-                            className="h-8 text-[11px] font-semibold text-slate-500 hover:text-slate-700 px-2 rounded-lg"
+                            className="h-8 text-[11px] font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200 px-2 rounded-lg"
                           >
                             Rename
                           </Button>
@@ -462,7 +462,7 @@ export default function VisitTemplateBuilder() {
                               {sectionQs.map((q) => (
                                 <div
                                   key={q.id}
-                                  className="flex items-start justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800/80 bg-background shadow-xs hover:border-slate-200 dark:hover:border-slate-700 transition-all gap-4"
+                                  className="flex items-start justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-900 dark:border-slate-800/80 bg-background shadow-xs hover:border-slate-200 dark:hover:border-slate-700 transition-all gap-4"
                                 >
                                   <div className="flex gap-3">
                                     <div className="mt-0.5">
@@ -486,7 +486,7 @@ export default function VisitTemplateBuilder() {
                                         {q.question}
                                       </p>
                                       <div className="flex flex-wrap items-center gap-1.5">
-                                        <Badge className="text-[9px] uppercase px-1.5 py-0 bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-800 font-semibold">
+                                        <Badge className="text-[9px] uppercase px-1.5 py-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800 font-semibold">
                                           {q.answerType === "yes_no"
                                             ? "Yes / No"
                                             : q.answerType}
@@ -515,7 +515,7 @@ export default function VisitTemplateBuilder() {
                                       variant="ghost"
                                       size="icon"
                                       onClick={() => handleEditQuestion(q)}
-                                      className="h-7 w-7 text-slate-500 hover:text-slate-700"
+                                      className="h-7 w-7 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"
                                       title="Edit Question"
                                     >
                                       <Edit3 className="h-3.5 w-3.5" />
@@ -555,14 +555,14 @@ export default function VisitTemplateBuilder() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold block">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold block">
                 Template Name
               </label>
               <Input
                 placeholder="e.g. Monthly Safety Audit"
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                className="h-10 border border-slate-200 rounded-lg text-xs"
+                className="h-10 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
               />
             </div>
             <DialogFooter className="gap-2">
@@ -597,14 +597,14 @@ export default function VisitTemplateBuilder() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold block">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold block">
                 Template Name
               </label>
               <Input
                 placeholder="e.g. Monthly Safety Audit"
                 value={renameTemplateName}
                 onChange={(e) => setRenameTemplateName(e.target.value)}
-                className="h-10 border border-slate-200 rounded-lg text-xs"
+                className="h-10 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
               />
             </div>
             <DialogFooter className="gap-2">
@@ -636,14 +636,14 @@ export default function VisitTemplateBuilder() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold block">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold block">
                 Section Name
               </label>
               <Input
                 placeholder="e.g. Safety Equipment"
                 value={newSectionName}
                 onChange={(e) => setNewSectionName(e.target.value)}
-                className="h-10 border border-slate-200 rounded-lg text-xs"
+                className="h-10 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
               />
             </div>
             <DialogFooter className="gap-2">
@@ -675,14 +675,14 @@ export default function VisitTemplateBuilder() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold block">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold block">
                 Section Name
               </label>
               <Input
                 placeholder="e.g. Safety Equipment"
                 value={renameSectionName}
                 onChange={(e) => setRenameSectionName(e.target.value)}
-                className="h-10 border border-slate-200 rounded-lg text-xs"
+                className="h-10 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
               />
             </div>
             <DialogFooter className="gap-2">
@@ -716,23 +716,23 @@ export default function VisitTemplateBuilder() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold block">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold block">
                 Question Label / Prompt
               </label>
               <Input
                 placeholder="e.g. Are all gates locked?"
                 value={qText}
                 onChange={(e) => setQText(e.target.value)}
-                className="h-10 border border-slate-200 rounded-lg text-xs"
+                className="h-10 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold block">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold block">
                 Answer Type
               </label>
               <Select value={qType} onValueChange={(val) => setQType(val)}>
-                <SelectTrigger className="h-10 border border-slate-200 rounded-lg text-xs">
+                <SelectTrigger className="h-10 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -754,7 +754,7 @@ export default function VisitTemplateBuilder() {
 
             {qType === "dropdown" && (
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold block">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold block">
                   Options (Comma separated)
                 </label>
                 <Input
@@ -768,7 +768,7 @@ export default function VisitTemplateBuilder() {
                         .filter(Boolean),
                     )
                   }
-                  className="h-10 border border-slate-200 rounded-lg text-xs"
+                  className="h-10 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
                 />
               </div>
             )}
@@ -780,11 +780,11 @@ export default function VisitTemplateBuilder() {
                   id="qRequired"
                   checked={qRequired}
                   onChange={(e) => setQRequired(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600"
+                  className="rounded border-slate-300 dark:border-slate-700 text-blue-600"
                 />
                 <label
                   htmlFor="qRequired"
-                  className="font-semibold text-slate-700 dark:text-slate-300"
+                  className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300"
                 >
                   Answer is Required
                 </label>
@@ -796,12 +796,12 @@ export default function VisitTemplateBuilder() {
                   id="qPhotoReq"
                   checked={qPhotoReq}
                   onChange={(e) => setQPhotoReq(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600"
+                  className="rounded border-slate-300 dark:border-slate-700 text-blue-600"
                 />
 
                 <label
                   htmlFor="qPhotoReq"
-                  className="font-semibold text-slate-700 dark:text-slate-300"
+                  className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300"
                 >
                   Requires Photo
                 </label>
@@ -813,12 +813,12 @@ export default function VisitTemplateBuilder() {
                   id="qGpsReq"
                   checked={qGpsReq}
                   onChange={(e) => setQGpsReq(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600"
+                  className="rounded border-slate-300 dark:border-slate-700 text-blue-600"
                 />
 
                 <label
                   htmlFor="qGpsReq"
-                  className="font-semibold text-slate-700 dark:text-slate-300"
+                  className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300"
                 >
                   Requires GPS
                 </label>
@@ -830,12 +830,12 @@ export default function VisitTemplateBuilder() {
                   id="qRemarksAllowed"
                   checked={qRemarksAllowed}
                   onChange={(e) => setQRemarksAllowed(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600"
+                  className="rounded border-slate-300 dark:border-slate-700 text-blue-600"
                 />
 
                 <label
                   htmlFor="qRemarksAllowed"
-                  className="font-semibold text-slate-700 dark:text-slate-300"
+                  className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300"
                 >
                   Allow Remarks
                 </label>

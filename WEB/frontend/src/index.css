@@ -121,7 +121,7 @@
 
 @layer base {
   html {
-    font-size: 19.5px;
+    font-size: 21.5px;
   }
 
   * {
@@ -403,16 +403,98 @@
 
 /* --- Print overrides --- */
 @media print {
-  /* Hide all toast notifications and toasters during print/PDF generation */
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
+  /* Hide all toast notifications, sidebar, header, navigation, and custom action controls */
   [data-sonner-toaster],
   .toaster,
   [data-radix-toast-viewport],
   .toast,
-  [role="status"] {
+  [role="status"],
+  aside,
+  header,
+  nav,
+  .print-hidden,
+  .print\:hidden {
     display: none !important;
   }
-}
 
+  /* Force layout to print full-width without margins/paddings from sidebar/header */
+  body, html, #root, main, .flex-1, .flex, .min-h-screen, [data-sidebar-wrapper] {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: none !important;
+    display: block !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure sheet container scales to exact printable width on A4 */
+  .mx-auto {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Reduce font sizes and line heights for print optimization to prevent clipping and wrapping */
+  body, table, tr, td, th, span, p, div, label {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+
+  /* Specific heading overrides */
+  h1, .h1 { font-size: 14px !important; }
+  h2, .h2 { font-size: 12px !important; }
+  h3, .h3 { font-size: 11px !important; }
+  h4, .h4 { font-size: 10px !important; }
+
+  /* Ensure tables use fixed layout so they stay inside A4 print bounds and wrap text */
+  table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+
+  th, td {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    padding: 3px 5px !important;
+  }
+
+  /* Tighten spacing for print */
+  .p-10, .p-8, .md\:p-12 {
+    padding: 15px !important;
+  }
+  .mb-8 {
+    margin-bottom: 12px !important;
+  }
+  .mb-6 {
+    margin-bottom: 8px !important;
+  }
+  .mt-16 {
+    margin-top: 20px !important;
+  }
+  .pb-6 {
+    padding-bottom: 10px !important;
+  }
+  .gap-y-6 {
+    gap: 8px !important;
+  }
+}
 /* Fix calendar picker indicator color in light and dark mode */
 input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
@@ -420,4 +502,152 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 .dark input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1) brightness(1);
+}
+
+/* Page break rules for high fidelity PDF layout */
+.break-inside-avoid,
+.page-break-avoid,
+.card,
+tr,
+thead,
+.signature-block,
+.grid-cols-2,
+.grid-cols-3 {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+  break-inside: avoid-page !important;
+}
+
+/* --- High Fidelity Report Design System --- */
+.report-sheet {
+  width: 794px !important;
+  background-color: white !important;
+  color: #0f172a !important;
+  padding: 35px 40px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin: 0 auto;
+  position: relative;
+  box-sizing: border-box;
+}
+
+@media print {
+  .report-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+.report-ribbon {
+  display: inline-block;
+  background-color: #1e3a8a !important;
+  color: white !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  padding: 5px 16px !important;
+  border-radius: 9999px 0 0 9999px !important;
+  margin-bottom: 12px !important;
+}
+
+.report-divider {
+  border-top: 1.5px solid #1e3a8a !important;
+  margin: 16px 0 !important;
+}
+
+.report-info-grid {
+  border: 1px solid #e2e8f0 !important;
+  background-color: #f8fafc !important;
+  border-radius: 8px !important;
+  padding: 16px !important;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px !important;
+}
+
+.report-info-grid > div label {
+  font-size: 8px !important;
+  font-weight: 700 !important;
+  color: #94a3b8 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.report-info-grid > div span {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  display: block;
+}
+
+.report-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  margin-bottom: 20px !important;
+  table-layout: fixed !important;
+}
+
+.report-table th {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 6px 10px !important;
+  text-align: left;
+}
+
+.report-table td {
+  font-size: 10px !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 6px 10px !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.badge-status {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+  display: inline-block;
+  text-align: center;
+}
+
+.badge-status-present {
+  color: #059669 !important;
+}
+
+.badge-status-ok {
+  color: #059669 !important;
+}
+
+.badge-status-not-ok {
+  color: #dc2626 !important;
+}
+
+.report-feedback-box {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 10px 12px !important;
+  font-size: 10px !important;
+  color: #334155 !important;
+  background-color: white !important;
+  min-height: 36px;
+  margin-bottom: 16px !important;
 }

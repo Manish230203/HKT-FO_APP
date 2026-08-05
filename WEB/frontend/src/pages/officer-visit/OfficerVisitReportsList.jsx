@@ -133,7 +133,7 @@ export default function OfficerVisitReportsList() {
   const handleDelete = async (id) => {
     if (
       window.confirm(
-        "Are you sure you want to delete this officer visit report?",
+        "Are you sure you want to delete this officer day visit report?",
       )
     ) {
       try {
@@ -200,6 +200,10 @@ export default function OfficerVisitReportsList() {
   };
 
   const handleBulkExportPDF = async () => {
+    if (clientFilter === "all") {
+      alert("Please select a specific client first to download bulk PDFs.");
+      return;
+    }
     if (selectedVisitIds.length === 0) {
       alert("Please select at least one report to download.");
       return;
@@ -270,7 +274,7 @@ export default function OfficerVisitReportsList() {
             return dateStr;
           }
         };
-        const reportId = `${clientName}-${detail.unit}-OVR-${formatDateToDMY(detail.visitDate)}-${detail.reportNo}`;
+        const reportId = `${clientName}-${detail.unit}-ODV-${formatDateToDMY(detail.visitDate)}`;
         const filename = `${reportId.replace(/\//g, "-")}.pdf`;
 
         const element = reportElements[i];
@@ -315,7 +319,7 @@ export default function OfficerVisitReportsList() {
     }
   };
 
-  const getFormattedReportId = (report) => {
+  const getFormattedReportId = (report, index = 0) => {
     const clientName = report.clientId
       ? clients.find((c) => c.id == report.clientId)?.name ||
         `Client #${report.clientId}`
@@ -335,7 +339,9 @@ export default function OfficerVisitReportsList() {
         return dateStr;
       }
     };
-    return `${clientName}-${report.unit}-OVR-${formatDateToDMY(report.visitDate)}-${report.reportNo}`;
+    const globalIndex = (currentPage - 1) * itemsPerPage + index + 1;
+    const countStr = String(globalIndex).padStart(2, '0');
+    return `${countStr}-${clientName}-${report.unit}-ODV-${formatDateToDMY(report.visitDate)}`;
   };
 
   const handleResetFilters = () => {
@@ -442,7 +448,7 @@ export default function OfficerVisitReportsList() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <ClipboardList className="h-6 w-6 text-blue-600" /> Officer Visit
+            <ClipboardList className="h-6 w-6 text-blue-600" /> Officer Day Visit
             Reports
           </h1>
         </div>
@@ -628,7 +634,7 @@ export default function OfficerVisitReportsList() {
           <Button
             variant="outline"
             size="sm"
-            disabled={bulkExporting || clientFilter === "all"}
+            disabled={bulkExporting || selectedVisitIds.length === 0}
             className="h-8 text-xs font-bold gap-1.5 bg-background border-border hover:bg-muted text-foreground"
             onClick={handleBulkExportPDF}
           >
@@ -671,25 +677,25 @@ export default function OfficerVisitReportsList() {
                       onCheckedChange={(checked) => handleSelectAll(!!checked)}
                     />
                   </TableHead>
-                  <TableHead className="font-semibold text-muted-foreground py-3">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 py-3">
                     Report ID
                   </TableHead>
-                  <TableHead className="font-semibold text-muted-foreground py-3">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 py-3">
                     Site
                   </TableHead>
-                  <TableHead className="font-semibold text-muted-foreground py-3">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 py-3">
                     Officer
                   </TableHead>
-                  <TableHead className="font-semibold text-muted-foreground py-3">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 py-3">
                     Visit Date
                   </TableHead>
-                  <TableHead className="font-semibold text-muted-foreground py-3">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 py-3">
                     Created On
                   </TableHead>
-                  <TableHead className="font-semibold text-muted-foreground py-3">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 py-3">
                     Status
                   </TableHead>
-                  <TableHead className="font-semibold text-muted-foreground py-3 pr-6 text-right">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 py-3 pr-6 text-right">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -705,7 +711,7 @@ export default function OfficerVisitReportsList() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedReports.map((report) => (
+                  paginatedReports.map((report, index) => (
                     <TableRow
                       key={report.id}
                       onClick={() =>
@@ -722,7 +728,7 @@ export default function OfficerVisitReportsList() {
                         />
                       </TableCell>
                       <TableCell className="font-bold text-foreground py-3.5 break-all max-w-[220px]">
-                        {getFormattedReportId(report)}
+                        {getFormattedReportId(report, index)}
                       </TableCell>
                       <TableCell className="font-semibold text-foreground/90 py-3.5">
                         {report.unit}
@@ -847,7 +853,7 @@ export default function OfficerVisitReportsList() {
               return dateStr;
             }
           };
-          const formattedReportId = `${clientName}-${report.unit}-OVR-${formatDateToDMY(report.visitDate)}-${report.reportNo}`;
+          const formattedReportId = `${clientName}-${report.unit}-ODV-${formatDateToDMY(report.visitDate)}`;
 
           const getAnswerColor = (ans) => {
             const norm = (ans || "").toLowerCase().trim();
@@ -869,7 +875,7 @@ export default function OfficerVisitReportsList() {
             ) {
               return "text-rose-600 font-bold";
             }
-            return "text-slate-900 font-bold";
+            return "text-slate-900 dark:text-slate-100 font-bold";
           };
 
           const displayObservations = report.observations || [];
@@ -904,7 +910,7 @@ export default function OfficerVisitReportsList() {
           return (
             <div
               key={report.id}
-              className="bg-white text-slate-800 mx-auto mb-8 border border-slate-200 text-sm"
+              className="bg-white dark:bg-card text-slate-800 dark:text-slate-200 mx-auto mb-8 border border-slate-200 dark:border-slate-800 text-sm"
               style={{
                 pageBreakAfter: "always",
                 width: "800px",
@@ -975,7 +981,7 @@ export default function OfficerVisitReportsList() {
                     </svg>
                   </div>
                   <div>
-                    <h2 className="text-sm font-extrabold tracking-tight text-slate-900 leading-none">
+                    <h2 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-slate-100 leading-none">
                       Unique Delta Force Security Pvt. Ltd.
                     </h2>
                   </div>
@@ -986,7 +992,7 @@ export default function OfficerVisitReportsList() {
                   </h3>
                 </div>
                 <div className="text-right">
-                  <span className="text-[8px] font-bold text-slate-400 uppercase block">
+                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block">
                     Report ID
                   </span>
                   <span className="text-[10px] font-black text-blue-600 tracking-tight block break-words">
@@ -1003,25 +1009,25 @@ export default function OfficerVisitReportsList() {
               </div>
 
               {/* Info Box */}
-              <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50 mb-8 grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-xs text-left page-break-inside-avoid">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-6 bg-slate-50 dark:bg-slate-900/50/50 mb-8 grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-xs text-left page-break-inside-avoid">
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     Client
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {clientName}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     Inspection Date
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {report.visitDate}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     Visit Type
                   </span>
                   <span className="text-blue-600 font-bold text-sm block">
@@ -1029,50 +1035,50 @@ export default function OfficerVisitReportsList() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     Shift
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {report.shift || "Morning"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     Unit / Site
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {report.unit || "N/A"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     Start Time
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {formatTo12Hour(report.startTime)}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     End Time
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {formatTo12Hour(report.endTime)}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1 flex items-center gap-1">
                     <MapPin className="h-3 w-3 text-blue-600" /> GPS Location
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {report.gps || "N/A"}
                   </span>
                 </div>
                 <div className="col-span-2 md:col-span-4">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">
                     Uploaded Photos
                   </span>
-                  <span className="text-slate-900 font-bold text-sm block">
+                  <span className="text-slate-900 dark:text-slate-100 font-bold text-sm block">
                     {allPhotos.length}
                   </span>
                 </div>
@@ -1091,19 +1097,19 @@ export default function OfficerVisitReportsList() {
                       </div>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+                      <table className="w-full text-left border-collapse border border-slate-400 dark:border-slate-600 text-xs">
                         <thead>
-                          <tr className="bg-slate-200 border border-slate-400 text-slate-900 font-bold">
-                            <th className="p-2 border border-slate-400 text-center w-[50px]">
+                          <tr className="bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-bold">
+                            <th className="p-2 border border-slate-400 dark:border-slate-600 text-center w-[50px]">
                               Sr No
                             </th>
-                            <th className="p-2 border border-slate-400">
+                            <th className="p-2 border border-slate-400 dark:border-slate-600">
                               Question
                             </th>
-                            <th className="p-2 border border-slate-400 text-center w-28">
+                            <th className="p-2 border border-slate-400 dark:border-slate-600 text-center w-28">
                               Status
                             </th>
-                            <th className="p-2 border border-slate-400">
+                            <th className="p-2 border border-slate-400 dark:border-slate-600">
                               Remarks / Observations
                             </th>
                           </tr>
@@ -1112,28 +1118,28 @@ export default function OfficerVisitReportsList() {
                           {report.checklist.map((c, idx) => (
                             <tr
                               key={c.id || idx}
-                              className="border border-slate-400"
+                              className="border border-slate-400 dark:border-slate-600"
                             >
-                              <td className="p-2 border border-slate-400 text-center text-slate-800 font-medium">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 text-center text-slate-800 dark:text-slate-200 font-medium">
                                 {idx + 1}
                               </td>
-                              <td className="p-2 border border-slate-400 font-semibold text-slate-900">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 font-semibold text-slate-900 dark:text-slate-100">
                                 {c.question}
                               </td>
-                              <td className="p-2 border border-slate-400 text-center">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 text-center">
                                 <span
                                   className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                     c.status === "Satisfactory"
                                       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                       : c.status === "Unsatisfactory"
                                         ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                        : "bg-slate-100 text-slate-600 border border-slate-200"
+                                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800"
                                   }`}
                                 >
                                   {c.status}
                                 </span>
                               </td>
-                              <td className="p-2 border border-slate-400 text-slate-800">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                                 {c.observation || "-"}
                               </td>
                             </tr>
@@ -1153,28 +1159,28 @@ export default function OfficerVisitReportsList() {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+                    <table className="w-full text-left border-collapse border border-slate-400 dark:border-slate-600 text-xs">
                       <thead>
-                        <tr className="bg-slate-200 border border-slate-400 text-slate-900 font-bold">
-                          <th className="p-2 border border-slate-400 text-center w-[50px]">
+                        <tr className="bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-bold">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600 text-center w-[50px]">
                             Sr No
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Inspection Point
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Observation
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Action Required
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Action Done / Status
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Corrective Measures
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Remarks
                           </th>
                         </tr>
@@ -1183,27 +1189,27 @@ export default function OfficerVisitReportsList() {
                         {displayObservations.map((obs, idx) => (
                           <tr
                             key={obs.id || idx}
-                            className="border border-slate-400"
+                            className="border border-slate-400 dark:border-slate-600"
                           >
-                            <td className="p-2 border border-slate-400 text-center text-slate-800 font-medium">
+                            <td className="p-2 border border-slate-400 dark:border-slate-600 text-center text-slate-800 dark:text-slate-200 font-medium">
                               {idx + 1}
                             </td>
-                            <td className="p-2 border border-slate-400 font-semibold text-slate-900">
+                            <td className="p-2 border border-slate-400 dark:border-slate-600 font-semibold text-slate-900 dark:text-slate-100">
                               {obs.actionPoint}
                             </td>
-                            <td className="p-2 border border-slate-400 text-slate-800">
+                            <td className="p-2 border border-slate-400 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                               {obs.observation || "N/A"}
                             </td>
-                            <td className="p-2 border border-slate-400 text-slate-800">
+                            <td className="p-2 border border-slate-400 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                               {obs.actionRequired || "N/A"}
                             </td>
-                            <td className="p-2 border border-slate-400 text-slate-800">
+                            <td className="p-2 border border-slate-400 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                               {obs.actionDone || "N/A"}
                             </td>
-                            <td className="p-2 border border-slate-400 text-slate-800">
+                            <td className="p-2 border border-slate-400 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                               {obs.correctiveMeasures || "N/A"}
                             </td>
-                            <td className="p-2 border border-slate-400 text-slate-800">
+                            <td className="p-2 border border-slate-400 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                               {obs.remarks || "N/A"}
                             </td>
                           </tr>
@@ -1222,12 +1228,12 @@ export default function OfficerVisitReportsList() {
                       C. Photo Evidence Gallery
                     </div>
                   </div>
-                  <div className="border border-slate-300 rounded-xl p-4 bg-slate-50/50 shadow-inner">
+                  <div className="border border-slate-300 dark:border-slate-700 rounded-xl p-4 bg-slate-50 dark:bg-slate-900/50/50 shadow-inner">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       {allPhotos.map((photo, pIdx) => (
                         <div
                           key={pIdx}
-                          className="aspect-square rounded-lg overflow-hidden border border-slate-300 bg-white flex items-center justify-center shadow-sm"
+                          className="aspect-square rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-white dark:bg-card flex items-center justify-center shadow-sm"
                         >
                           <img
                             src={photo}
@@ -1251,7 +1257,7 @@ export default function OfficerVisitReportsList() {
                           D. Client / Customer Feedback
                         </div>
                       </div>
-                      <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex-1 min-h-[90px] text-xs text-slate-700 italic">
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-white dark:bg-card shadow-sm flex-1 min-h-[90px] text-xs text-slate-700 dark:text-slate-200 italic">
                         "{customerFeedbackText}"
                       </div>
                     </div>
@@ -1263,7 +1269,7 @@ export default function OfficerVisitReportsList() {
                           E. Overall Suggestions
                         </div>
                       </div>
-                      <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm flex-1 min-h-[90px] text-xs text-slate-700">
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-white dark:bg-card shadow-sm flex-1 min-h-[90px] text-xs text-slate-700 dark:text-slate-200">
                         {overallSuggestionsText}
                       </div>
                     </div>
@@ -1275,16 +1281,16 @@ export default function OfficerVisitReportsList() {
               <div className="page-break-inside-avoid">
                 {/* Date & Time block */}
                 <div className="flex flex-col items-end justify-end pt-6 border-t text-right mb-6">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">
                     Date & Time
                   </span>
-                  <span className="text-xs font-black text-slate-900 mt-0.5">
+                  <span className="text-xs font-black text-slate-900 dark:text-slate-100 mt-0.5">
                     {report.visitDate}, {formatTo12Hour(report.endTime)}
                   </span>
                 </div>
 
                 {/* Footer Meta */}
-                <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">
                   <span>
                     Generated by Unique Delta Force Security Pvt. Ltd.
                     Inspection System

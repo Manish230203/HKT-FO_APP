@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ClipboardList,
   PlusCircle,
@@ -13,13 +13,52 @@ import {
   LayoutDashboard,
   BookOpen,
   MapPin,
+  User,
+  LogOut,
 } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useTheme } from "@/hooks/useTheme";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 export function AppLayout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isDark, toggle } = useTheme();
+
+  // Get logged-in user
+  const currentUser = (() => {
+    const storedUser = sessionStorage.getItem("user");
+    if (storedUser) {
+      try {
+        return JSON.parse(storedUser);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  })();
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("user");
+    navigate("/login");
+  };
+
+  const getInitials = () => {
+    if (!currentUser?.name) return "FO";
+    const names = currentUser.name.split(" ");
+    if (names.length >= 2) {
+      return (names[0][0] + names[1][0]).toUpperCase();
+    }
+    return currentUser.name.substring(0, 2).toUpperCase();
+  };
 
   // Set default open state based on current path
   const [roundsOpen, setRoundsOpen] = useState(() =>
@@ -50,7 +89,7 @@ export function AppLayout({ children }) {
   };
 
   const visitsGroup = {
-    title: "Officer Visits",
+    title: "Officer Day Visits",
     icon: ClipboardList,
     isOpen: visitsOpen,
     setIsOpen: setVisitsOpen,
@@ -80,7 +119,7 @@ export function AppLayout({ children }) {
         {/* Header Toggle */}
         <button
           onClick={() => group.setIsOpen(!group.isOpen)}
-          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
             isAnyChildActive
               ? "bg-slate-100 dark:bg-slate-800 text-sky-500 dark:text-sky-400"
               : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -110,7 +149,7 @@ export function AppLayout({ children }) {
                   className={`flex items-center gap-2.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? "bg-sky-500 text-white shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
                   }`}
                 >
                   <ChildIcon className="h-3.5 w-3.5 shrink-0" />
@@ -126,9 +165,9 @@ export function AppLayout({ children }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 print:bg-white print:text-black print:block">
         {/* Sidebar */}
-        <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0">
+        <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0 print:hidden">
           <div className="h-16 flex items-center gap-2 px-6 border-b border-slate-200 dark:border-slate-800">
             <Shield className="h-6 w-6 text-sky-500" />
             <span className="font-bold text-lg tracking-tight">
@@ -138,10 +177,10 @@ export function AppLayout({ children }) {
           <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
             <Link
               to="/"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
                 location.pathname === "/" || location.pathname === "/dashboard"
                   ? "bg-sky-500 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
               }`}
             >
               <LayoutDashboard className="h-4.5 w-4.5" />
@@ -149,10 +188,10 @@ export function AppLayout({ children }) {
             </Link>
             <Link
               to="/general-visits"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
                 location.pathname.startsWith("/general-visits")
                   ? "bg-sky-500 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
               }`}
             >
               <BookOpen className="h-4.5 w-4.5" />
@@ -160,10 +199,10 @@ export function AppLayout({ children }) {
             </Link>
             <Link
               to="/my-sites"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
                 location.pathname.startsWith("/my-sites")
                   ? "bg-sky-500 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
               }`}
             >
               <MapPin className="h-4.5 w-4.5" />
@@ -175,9 +214,9 @@ export function AppLayout({ children }) {
         </aside>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 print:block print:p-0">
           {/* Header */}
-          <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between px-6 md:px-8">
+          <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-card dark:bg-slate-900 flex items-center justify-between px-6 md:px-8 print:hidden">
             <h1 className="text-xl font-semibold tracking-tight text-slate-800 dark:text-slate-200">
               Field Officer Management
             </h1>
@@ -185,7 +224,7 @@ export function AppLayout({ children }) {
               {/* Theme Toggle Button */}
               <button
                 onClick={toggle}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all shadow-sm"
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-800 text-slate-650 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 transition-all shadow-sm"
                 title="Toggle Theme"
               >
                 {isDark ? (
@@ -194,12 +233,52 @@ export function AppLayout({ children }) {
                   <Moon className="h-4 w-4 text-indigo-500" />
                 )}
               </button>
+
+              {/* User Profile Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="h-9 gap-2 px-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all rounded-lg flex items-center group">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-xs font-bold text-white ring-2 ring-slate-200 dark:ring-slate-800 group-hover:ring-sky-500 transition-all">
+                      {getInitials()}
+                    </div>
+                    <span className="hidden sm:inline-block text-xs font-semibold text-slate-700 dark:text-slate-200 max-w-[80px] truncate">
+                      {currentUser?.name ? currentUser.name.split(" ")[0] : "User"}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-card border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1.5 z-50">
+                  <div className="px-3 py-2.5 bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800/50 rounded-lg mb-1">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      {currentUser?.name || "Unknown User"}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5 uppercase tracking-wider">
+                      {currentUser?.role || "Staff"}
+                    </p>
+                  </div>
+
+                  <DropdownMenuSeparator className="my-1 border-slate-200 dark:border-slate-800" />
+
+                  <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 focus:text-sky-500 dark:focus:text-sky-400 focus:bg-sky-500/10 dark:focus:bg-sky-500/10 cursor-pointer transition-all">
+                    <User className="h-4 w-4" /> Profile
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator className="my-1 border-slate-200 dark:border-slate-800" />
+
+                  <DropdownMenuItem
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-600 dark:text-red-400 focus:bg-red-500/10 focus:text-red-650 cursor-pointer transition-all font-medium"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-4 w-4" /> Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </header>
 
           {/* Main page view */}
-          <main className="flex-1 overflow-y-auto p-6 md:p-8">
-            <div className="mx-auto max-w-7xl">{children}</div>
+          <main className="flex-1 overflow-y-auto p-6 md:p-8 print:p-0 print:m-0 print:overflow-visible">
+            <div className="mx-auto max-w-7xl print:max-w-full print:m-0 print:p-0">{children}</div>
           </main>
         </div>
       </div>

@@ -26,7 +26,7 @@ const badgeVariants = cva(
         draft:
           "border-muted-foreground/20 bg-muted text-muted-foreground hover:bg-muted/80 transition-colors",
         interactive:
-          "cursor-pointer transition-all duration-200 border border-slate-300/90 bg-white hover:bg-sky-500 hover:border-sky-500 hover:text-white text-slate-700 font-semibold shadow-sm hover:shadow active:scale-[0.97] dark:bg-slate-900/60 dark:border-sky-500/40 dark:text-sky-400 dark:hover:bg-sky-500/20 dark:hover:border-sky-400 dark:hover:text-sky-300 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_0_15px_rgba(56,189,248,0.3)]",
+          "cursor-pointer transition-all duration-200 border border-slate-300 dark:border-slate-700/90 bg-white dark:bg-card hover:bg-sky-500 hover:border-sky-500 hover:text-white text-slate-700 dark:text-slate-200 font-semibold shadow-sm hover:shadow active:scale-[0.97] dark:bg-slate-900/60 dark:border-sky-500/40 dark:text-sky-400 dark:hover:bg-sky-500/20 dark:hover:border-sky-400 dark:hover:text-sky-300 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_0_15px_rgba(56,189,248,0.3)]",
       },
     },
     defaultVariants: {

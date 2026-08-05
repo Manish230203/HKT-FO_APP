@@ -117,7 +117,7 @@ export default function ObservationLog() {
       return;
     }
     try {
-      const res = await api.get(`/assessments/sites?company_id=${val}`);
+      const res = await api.get(`/assessments/sites?company_id=${val}&all_sites=true`);
       setSites(res.data || []);
     } catch (err) {
       console.error("Failed to load sites for filter:", err);
@@ -134,7 +134,7 @@ export default function ObservationLog() {
       }
       try {
         const res = await api.get(
-          `/assessments/sites?company_id=${formClient}`,
+          `/assessments/sites?company_id=${formClient}&all_sites=true`,
         );
         setSites(res.data || []);
         // If there's an active site, auto-load checkpoints or set default site
@@ -430,7 +430,7 @@ export default function ObservationLog() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-border text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
+                <tr className="bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-800/60 border-b border-border text-slate-500 dark:text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">
                   <th className="p-3 pl-6 w-[50px]">
                     <input
                       type="checkbox"
@@ -479,7 +479,7 @@ export default function ObservationLog() {
                     return (
                       <tr
                         key={o.id}
-                        className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
+                        className="hover:bg-slate-50 dark:bg-slate-900/50/50 dark:hover:bg-slate-800/30 transition-colors"
                       >
                         <td className="p-3 pl-6">
                           <input
@@ -494,16 +494,16 @@ export default function ObservationLog() {
                         <td className="p-3 font-semibold text-slate-900 dark:text-slate-100">
                           {siteName}
                         </td>
-                        <td className="p-3 text-slate-700 dark:text-slate-300">
+                        <td className="p-3 text-slate-700 dark:text-slate-200 dark:text-slate-300">
                           {o.actionPoint}
                         </td>
                         <td
-                          className="p-3 text-slate-600 dark:text-slate-400 max-w-xs truncate"
+                          className="p-3 text-slate-600 dark:text-slate-300 dark:text-slate-400 dark:text-slate-500 max-w-xs truncate"
                           title={o.observation}
                         >
                           {o.observation}
                         </td>
-                        <td className="p-3 text-slate-500 dark:text-slate-400 font-medium">
+                        <td className="p-3 text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">
                           {o.createdOn}
                         </td>
                         <td className="p-3">
@@ -564,7 +564,7 @@ export default function ObservationLog() {
             {/* Target Client & Site selection */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">Client</label>
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">Client</label>
                 <Select value={formClient} onValueChange={setFormClient}>
                   <SelectTrigger className="h-9 border-border rounded-lg bg-background text-sm">
                     <SelectValue placeholder="Choose a client..." />
@@ -581,7 +581,7 @@ export default function ObservationLog() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">Site</label>
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">Site</label>
                 <Select
                   value={formSite}
                   onValueChange={setFormSite}
@@ -611,7 +611,7 @@ export default function ObservationLog() {
             {/* Action Point Selection */}
             <div className="space-y-1.5 border-t pt-3">
               <div className="flex items-center justify-between">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Action Point (Location / Sector) *
                 </label>
                 <button
@@ -666,7 +666,7 @@ export default function ObservationLog() {
 
             {/* Observation Textarea */}
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold">
                 Observation *
               </label>
               <Textarea
@@ -681,7 +681,7 @@ export default function ObservationLog() {
             {/* Action Required & Action Done side by side */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Action Required
                 </label>
                 <Input
@@ -693,7 +693,7 @@ export default function ObservationLog() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Action Done
                 </label>
                 <Input
@@ -707,7 +707,7 @@ export default function ObservationLog() {
 
             {/* Corrective Measures */}
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold">
                 Corrective Measures
               </label>
               <Textarea
@@ -721,7 +721,7 @@ export default function ObservationLog() {
             {/* Remarks & Status */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">Remarks</label>
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">Remarks</label>
                 <Input
                   placeholder="Internal notes..."
                   value={remarks}
@@ -731,14 +731,14 @@ export default function ObservationLog() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold block mb-1">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold block mb-1">
                   Status
                 </label>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setStatus("Pending")}
-                    className={`flex-1 h-9 rounded-lg border flex items-center justify-center gap-1.5 font-bold transition-all ${status === "Pending" ? "bg-rose-50 border-rose-200 text-rose-600 ring-1 ring-rose-200" : "bg-background border-border text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex-1 h-9 rounded-lg border flex items-center justify-center gap-1.5 font-bold transition-all ${status === "Pending" ? "bg-rose-50 border-rose-200 text-rose-600 ring-1 ring-rose-200" : "bg-background border-border text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900/50"}`}
                   >
                     <span className="h-2 w-2 rounded-full bg-rose-600" />{" "}
                     Pending
@@ -746,7 +746,7 @@ export default function ObservationLog() {
                   <button
                     type="button"
                     onClick={() => setStatus("Resolved")}
-                    className={`flex-1 h-9 rounded-lg border flex items-center justify-center gap-1.5 font-bold transition-all ${status === "Resolved" ? "bg-emerald-50 border-emerald-200 text-emerald-600 ring-1 ring-emerald-200" : "bg-background border-border text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex-1 h-9 rounded-lg border flex items-center justify-center gap-1.5 font-bold transition-all ${status === "Resolved" ? "bg-emerald-50 border-emerald-200 text-emerald-600 ring-1 ring-emerald-200" : "bg-background border-border text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900/50"}`}
                   >
                     <span className="h-2 w-2 rounded-full bg-emerald-600" />{" "}
                     Resolved
@@ -757,7 +757,7 @@ export default function ObservationLog() {
 
             {/* Photos (Evidence) */}
             <div className="space-y-2 border-t pt-3">
-              <label className="text-slate-600 font-semibold">
+              <label className="text-slate-600 dark:text-slate-300 font-semibold">
                 Photos (Evidence)
               </label>
               <div className="flex items-center gap-3 flex-wrap">
@@ -772,7 +772,7 @@ export default function ObservationLog() {
                     }}
                   />
 
-                  <div className="h-16 w-16 border-2 border-dashed border-border hover:border-blue-500 rounded-lg flex flex-col items-center justify-center text-[10px] text-slate-400 hover:text-blue-500 transition-colors gap-1">
+                  <div className="h-16 w-16 border-2 border-dashed border-border hover:border-blue-500 rounded-lg flex flex-col items-center justify-center text-[10px] text-slate-400 dark:text-slate-500 hover:text-blue-500 transition-colors gap-1">
                     <Upload className="h-4.5 w-4.5" />
                     <span>Upload File</span>
                   </div>
@@ -848,7 +848,7 @@ export default function ObservationLog() {
               <div className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4 border-b pb-3">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                       Action Point
                     </span>
                     <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
@@ -856,7 +856,7 @@ export default function ObservationLog() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                       Date Logged
                     </span>
                     <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
@@ -866,7 +866,7 @@ export default function ObservationLog() {
                 </div>
 
                 <div className="border-b pb-3">
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                     Observation Finding
                   </span>
                   <p className="text-slate-700 dark:text-slate-200 font-medium mt-1 leading-relaxed whitespace-pre-wrap">
@@ -876,18 +876,18 @@ export default function ObservationLog() {
 
                 <div className="grid grid-cols-2 gap-4 border-b pb-3">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                       Action Required
                     </span>
-                    <span className="font-semibold text-slate-700 dark:text-slate-300 block mt-0.5">
+                    <span className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 block mt-0.5">
                       {selectedObs.actionRequired || "None specified"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                       Action Done
                     </span>
-                    <span className="font-semibold text-slate-700 dark:text-slate-300 block mt-0.5">
+                    <span className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 block mt-0.5">
                       {selectedObs.actionDone || "None specified"}
                     </span>
                   </div>
@@ -895,7 +895,7 @@ export default function ObservationLog() {
 
                 {selectedObs.correctiveMeasures && (
                   <div className="border-b pb-3">
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                       Corrective Measures
                     </span>
                     <p className="text-slate-700 dark:text-slate-200 font-medium mt-1 whitespace-pre-wrap">
@@ -906,7 +906,7 @@ export default function ObservationLog() {
 
                 {selectedObs.remarks && (
                   <div className="border-b pb-3">
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                       Remarks / Notes
                     </span>
                     <p className="text-slate-700 dark:text-slate-200 font-medium mt-1">
@@ -917,7 +917,7 @@ export default function ObservationLog() {
 
                 {selectedObs.photos && selectedObs.photos.length > 0 && (
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-2">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">
                       Evidence Photos
                     </span>
                     <div className="grid grid-cols-3 gap-3">

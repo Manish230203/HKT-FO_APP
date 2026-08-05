@@ -376,7 +376,7 @@ export default function CreateOfficerVisitReport() {
       if (clientId) {
         try {
           const siteRes = await api.get(
-            `/assessments/sites?company_id=${clientId}`,
+            `/assessments/sites?company_id=${clientId}&all_sites=true`,
           );
           setSites(siteRes.data || []);
         } catch (error) {
@@ -458,7 +458,7 @@ export default function CreateOfficerVisitReport() {
     loadGuardsForSite();
   }, [siteId]);
 
-  // Load Officer Visit template questions dynamically
+  // Load Officer Day Visit template questions dynamically
   useEffect(() => {
     const loadVisitTemplate = async () => {
       if (!isEditMode) {
@@ -905,10 +905,10 @@ export default function CreateOfficerVisitReport() {
       {/* Title block */}
       <div className="flex items-center gap-3">
         <Button
-          onClick={() => navigate("/officer-visit/reports")}
+          onClick={() => navigate(-1)}
           variant="outline"
           size="icon"
-          className="h-9 w-9 rounded-lg border-border hover:bg-slate-50"
+          className="h-9 w-9 rounded-lg border-border hover:bg-slate-50 dark:bg-slate-900/50"
         >
           <ArrowLeft className="h-4.5 w-4.5" />
         </Button>
@@ -981,7 +981,7 @@ export default function CreateOfficerVisitReport() {
           <CardContent className="p-6 space-y-4 text-xs">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Client Name <span className="text-red-500">*</span>
                 </label>
                 <Select
@@ -1008,7 +1008,7 @@ export default function CreateOfficerVisitReport() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Target Site <span className="text-red-500">*</span>
                 </label>
                 <Select
@@ -1041,7 +1041,7 @@ export default function CreateOfficerVisitReport() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Inspection Date
                 </label>
                 <Input
@@ -1054,7 +1054,7 @@ export default function CreateOfficerVisitReport() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Visit Type
                 </label>
                 <Select
@@ -1072,7 +1072,7 @@ export default function CreateOfficerVisitReport() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Shift Name
                 </label>
                 <Select value={shift} onValueChange={setShift}>
@@ -1091,19 +1091,19 @@ export default function CreateOfficerVisitReport() {
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Start Time
                 </label>
                 <TimePicker24 value={startTime} onChange={setStartTime} />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">End Time</label>
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">End Time</label>
                 <TimePicker24 value={endTime} onChange={setEndTime} />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Officer Name
                 </label>
                 <Input
@@ -1115,7 +1115,7 @@ export default function CreateOfficerVisitReport() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-600 font-semibold flex items-center gap-1">
+                <label className="text-slate-600 dark:text-slate-300 font-semibold flex items-center gap-1">
                   <MapPin className="h-3.5 w-3.5 text-blue-600" /> GPS
                   Coordinates
                 </label>
@@ -1163,9 +1163,9 @@ export default function CreateOfficerVisitReport() {
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
-                    <TableHead className="font-semibold text-slate-700">Employee ID</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Guard Name</TableHead>
-                    <TableHead className="text-center font-semibold text-slate-700">Status Choice</TableHead>
+                    <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Employee ID</TableHead>
+                    <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Guard Name</TableHead>
+                    <TableHead className="text-center font-semibold text-slate-700 dark:text-slate-200">Status Choice</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1236,7 +1236,7 @@ export default function CreateOfficerVisitReport() {
                       {["OK", "Not OK", "N/A"].map((statusOption) => {
                         const isSelected = pq.status === statusOption;
                         let btnStyle =
-                          "border-border text-muted-foreground hover:bg-slate-50 dark:hover:bg-slate-800";
+                          "border-border text-muted-foreground hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-800";
                         if (isSelected) {
                           if (statusOption === "OK")
                             btnStyle =
@@ -1273,7 +1273,7 @@ export default function CreateOfficerVisitReport() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                         Observation
                       </label>
                       <Input
@@ -1293,7 +1293,7 @@ export default function CreateOfficerVisitReport() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                         Corrective Action
                       </label>
                       <Input
@@ -1325,7 +1325,7 @@ export default function CreateOfficerVisitReport() {
                         }}
                       />
 
-                      <div className="h-8 border border-border rounded-lg bg-background hover:bg-muted/40 px-3 text-xs flex items-center gap-1.5 transition-colors font-medium text-slate-700 dark:text-slate-300">
+                      <div className="h-8 border border-border rounded-lg bg-background hover:bg-muted/40 px-3 text-xs flex items-center gap-1.5 transition-colors font-medium text-slate-700 dark:text-slate-200 dark:text-slate-300">
                         <Upload className="h-3.5 w-3.5" />
                         Add Photo
                       </div>
@@ -1602,9 +1602,9 @@ export default function CreateOfficerVisitReport() {
                 <Table>
                   <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
                     <TableRow>
-                      <TableHead className="font-bold text-slate-400 dark:text-slate-500 text-xs">Employee ID</TableHead>
-                      <TableHead className="font-bold text-slate-400 dark:text-slate-500 text-xs">Guard Name</TableHead>
-                      <TableHead className="font-bold text-slate-400 dark:text-slate-500 text-xs text-center w-28">Status</TableHead>
+                      <TableHead className="font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 text-xs">Employee ID</TableHead>
+                      <TableHead className="font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 text-xs">Guard Name</TableHead>
+                      <TableHead className="font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 text-xs text-center w-28">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1612,10 +1612,10 @@ export default function CreateOfficerVisitReport() {
                       .filter((g) => g.present)
                       .map((g) => (
                         <TableRow key={g.id}>
-                          <TableCell className="font-semibold text-xs text-slate-700 dark:text-slate-300">
+                          <TableCell className="font-semibold text-xs text-slate-700 dark:text-slate-200 dark:text-slate-300">
                             {g.employeeId}
                           </TableCell>
-                          <TableCell className="font-semibold text-xs text-slate-700 dark:text-slate-300">
+                          <TableCell className="font-semibold text-xs text-slate-700 dark:text-slate-200 dark:text-slate-300">
                             {g.name}
                           </TableCell>
                           <TableCell className="text-center">
@@ -1644,13 +1644,13 @@ export default function CreateOfficerVisitReport() {
               <Table>
                 <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
                   <TableRow>
-                    <TableHead className="font-bold text-slate-400 dark:text-slate-500 text-xs">
+                    <TableHead className="font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 text-xs">
                       Question
                     </TableHead>
-                    <TableHead className="font-bold text-slate-400 dark:text-slate-500 text-xs text-center w-28">
+                    <TableHead className="font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 text-xs text-center w-28">
                       Status
                     </TableHead>
-                    <TableHead className="font-bold text-slate-400 dark:text-slate-500 text-xs">
+                    <TableHead className="font-bold text-slate-400 dark:text-slate-500 dark:text-slate-400 text-xs">
                       Remarks / Observations
                     </TableHead>
                   </TableRow>
@@ -1658,7 +1658,7 @@ export default function CreateOfficerVisitReport() {
                 <TableBody>
                   {preDefinedAnswers.map((pq) => (
                     <TableRow key={pq.id}>
-                      <TableCell className="font-semibold text-slate-700 dark:text-slate-300 text-xs">
+                      <TableCell className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 text-xs">
                         {pq.question}
                       </TableCell>
                       <TableCell className="text-center">
@@ -1674,7 +1674,7 @@ export default function CreateOfficerVisitReport() {
                           {pq.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400 text-xs">
+                      <TableCell className="text-slate-600 dark:text-slate-300 dark:text-slate-400 dark:text-slate-500 text-xs">
                         {pq.observation || "-"}
                       </TableCell>
                     </TableRow>
@@ -2001,7 +2001,7 @@ export default function CreateOfficerVisitReport() {
           </DialogHeader>
           <div className="space-y-4 pt-3">
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold">Guard Name</label>
+              <label className="text-slate-600 dark:text-slate-300 font-semibold">Guard Name</label>
               <Input
                 placeholder="Enter guard name..."
                 value={newGuardName}
@@ -2010,7 +2010,7 @@ export default function CreateOfficerVisitReport() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-slate-600 font-semibold">Employee ID</label>
+              <label className="text-slate-600 dark:text-slate-300 font-semibold">Employee ID</label>
               <Input
                 placeholder="Enter employee ID..."
                 value={newGuardEmpId}

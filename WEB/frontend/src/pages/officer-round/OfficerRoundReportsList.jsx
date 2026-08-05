@@ -213,7 +213,7 @@ export default function OfficerRoundReportsList() {
           return dateStr;
         }
       };
-      const formattedReportId = `${clientName}-${reportDetail.unit}-ONR-${formatDateToDMY(reportDetail.visitDate)}-${reportDetail.reportNo}`;
+      const formattedReportId = `${clientName}-${reportDetail.unit}-ONR-${formatDateToDMY(reportDetail.visitDate)}`;
       const filename = `${formattedReportId.replace(/\//g, "-")}.pdf`;
 
       const options = {
@@ -296,6 +296,10 @@ export default function OfficerRoundReportsList() {
   };
 
   const handleBulkExportPDF = async () => {
+    if (clientFilter === "all") {
+      alert("Please select a specific client first to download bulk PDFs.");
+      return;
+    }
     if (selectedRoundIds.length === 0) {
       alert("Please select at least one report to download.");
       return;
@@ -366,7 +370,7 @@ export default function OfficerRoundReportsList() {
             return dateStr;
           }
         };
-        const reportId = `${clientName}-${detail.unit}-ONR-${formatDateToDMY(detail.visitDate)}-${detail.reportNo}`;
+        const reportId = `${clientName}-${detail.unit}-ONR-${formatDateToDMY(detail.visitDate)}`;
         const filename = `${reportId.replace(/\//g, "-")}.pdf`;
 
         const element = reportElements[i];
@@ -520,7 +524,7 @@ export default function OfficerRoundReportsList() {
         );
       default:
         return (
-          <Badge className="bg-slate-500/10 text-slate-500 hover:bg-slate-500/20 border-none font-medium px-2 py-0.5">
+          <Badge className="bg-slate-500/10 text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:bg-slate-500/20 border-none font-medium px-2 py-0.5">
             Draft
           </Badge>
         );
@@ -533,7 +537,7 @@ export default function OfficerRoundReportsList() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Officer Round Reports
+            Officer Night Round Reports
           </h1>
         </div>
         <Button
@@ -704,7 +708,7 @@ export default function OfficerRoundReportsList() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={bulkExporting || clientFilter === "all"}
+                disabled={bulkExporting || selectedRoundIds.length === 0}
                 className="h-8 text-xs font-bold gap-1.5 bg-background border-border hover:bg-muted text-foreground"
                 onClick={handleBulkExportPDF}
               >
@@ -745,19 +749,20 @@ export default function OfficerRoundReportsList() {
                       onCheckedChange={(checked) => handleSelectAll(!!checked)}
                     />
                   </TableHead>
-                  <TableHead className="font-semibold">Report ID</TableHead>
-                  <TableHead className="font-semibold">Site</TableHead>
-                  <TableHead className="font-semibold">Officer</TableHead>
-                  <TableHead className="font-semibold">Visit Date</TableHead>
-                  <TableHead className="font-semibold">Created On</TableHead>
-                  <TableHead className="font-semibold text-right">
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Report ID</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Site</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Officer</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Visit Date</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Created On</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Status</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200 text-right">
                     Actions
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {currentItems.length > 0 ? (
-                  currentItems.map((report) => (
+                  currentItems.map((report, index) => (
                     <TableRow
                       key={report.id}
                       onClick={() =>
@@ -791,7 +796,7 @@ export default function OfficerRoundReportsList() {
                               return dateStr;
                             }
                           };
-                          return `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}-${report.reportNo}`;
+                          return `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
                         })()}
                       >
                         {(() => {
@@ -810,13 +815,24 @@ export default function OfficerRoundReportsList() {
                               return dateStr;
                             }
                           };
-                          return `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}-${report.reportNo}`;
+                          return `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
                         })()}
                       </TableCell>
                       <TableCell>{report.unit}</TableCell>
                       <TableCell>{report.officer}</TableCell>
                       <TableCell>{report.visitDate}</TableCell>
                       <TableCell>{report.createdOn}</TableCell>
+                      <TableCell>
+                        <Badge
+                          className={
+                            report.status === "Completed"
+                              ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20 font-bold px-2 py-0.5 rounded-full"
+                              : "bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500/20 font-bold px-2 py-0.5 rounded-full"
+                          }
+                        >
+                          {report.status || "Draft"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
@@ -929,7 +945,7 @@ export default function OfficerRoundReportsList() {
               return dateStr;
             }
           };
-          const formattedReportId = `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}-${report.reportNo}`;
+          const formattedReportId = `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
 
           const getAnswerColor = (ans) => {
             const norm = (ans || "").toLowerCase().trim();
@@ -951,7 +967,7 @@ export default function OfficerRoundReportsList() {
             ) {
               return "text-rose-600 font-bold";
             }
-            return "text-slate-900 font-bold";
+            return "text-slate-900 dark:text-slate-100 font-bold";
           };
 
           const checklistPhotos = (report.checklist || []).reduce((acc, q) => {
@@ -984,7 +1000,7 @@ export default function OfficerRoundReportsList() {
           return (
             <div
               key={report.id}
-              className="bg-white text-slate-800 mx-auto mb-8 border border-slate-200"
+              className="bg-white dark:bg-card text-slate-800 dark:text-slate-200 mx-auto mb-8 border border-slate-200 dark:border-slate-800"
               style={{
                 pageBreakAfter: "always",
                 width: "800px",
@@ -1055,7 +1071,7 @@ export default function OfficerRoundReportsList() {
                     </svg>
                   </div>
                   <div>
-                    <h2 className="text-sm font-extrabold tracking-tight text-slate-900 leading-none">
+                    <h2 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-slate-100 leading-none">
                       Unique Delta Force Security Pvt. Ltd.
                     </h2>
                   </div>
@@ -1066,7 +1082,7 @@ export default function OfficerRoundReportsList() {
                   </h3>
                 </div>
                 <div className="text-right max-w-[30%] pr-2">
-                  <span className="text-[8px] font-bold text-slate-400 uppercase block">
+                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block">
                     Report ID
                   </span>
                   <span className="text-[10px] font-black text-blue-600 tracking-tight block max-w-[180px] break-all">
@@ -1078,31 +1094,31 @@ export default function OfficerRoundReportsList() {
               {/* General Information Block */}
               <div className="mb-6 page-break-inside-avoid">
                 <RibbonHeader title="General Information" />
-                <div className="border border-slate-200 rounded-lg p-4 bg-white grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 shadow-sm text-xs text-left">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-card grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 shadow-sm text-xs text-left">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Client
                     </span>
-                    <span className="font-bold text-slate-900 block mb-1">
+                    <span className="font-bold text-slate-900 dark:text-slate-100 block mb-1">
                       {clientName}
                     </span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Unit / Site
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {report.unit}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Inspection Date
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {report.visitDate}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Visit Type
                     </span>
                     <span
@@ -1112,53 +1128,53 @@ export default function OfficerRoundReportsList() {
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Shift
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {report.shift || "Morning"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Start Time
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {formatTo12Hour(report.startTime)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       End Time
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {formatTo12Hour(report.endTime)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Officer Name
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {report.officer}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-0.5">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block flex items-center gap-0.5">
                       <MapPin className="h-3 w-3 text-blue-600" /> GPS Location
                     </span>
                     <span
-                      className="font-bold text-slate-900 truncate block"
+                      className="font-bold text-slate-900 dark:text-slate-100 truncate block"
                       title={report.gps}
                     >
                       {report.gps || "N/A"}
                     </span>
                   </div>
                   <div className="col-span-4">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                       Uploaded Photos
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {allPhotos.length}
                     </span>
                   </div>
@@ -1174,19 +1190,19 @@ export default function OfficerRoundReportsList() {
                     </div>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+                    <table className="w-full text-left border-collapse border border-slate-400 dark:border-slate-600 text-xs">
                       <thead>
-                        <tr className="bg-slate-200 border border-slate-400 text-slate-900 font-bold">
-                          <th className="p-2 border border-slate-400 text-center w-[50px]">
+                        <tr className="bg-slate-200 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-bold">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600 text-center w-[50px]">
                             Sr No
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Guard Name
                           </th>
-                          <th className="p-2 border border-slate-400">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600">
                             Employee ID / ID
                           </th>
-                          <th className="p-2 border border-slate-400 text-center w-28">
+                          <th className="p-2 border border-slate-400 dark:border-slate-600 text-center w-28">
                             Status
                           </th>
                         </tr>
@@ -1195,17 +1211,17 @@ export default function OfficerRoundReportsList() {
                         {report.guards
                           .filter((g) => g.present)
                           .map((guard, idx) => (
-                            <tr key={guard.id || idx} className="border border-slate-400">
-                              <td className="p-2 border border-slate-400 text-center text-slate-800 font-medium">
+                            <tr key={guard.id || idx} className="border border-slate-400 dark:border-slate-600">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 text-center text-slate-800 dark:text-slate-200 font-medium">
                                 {idx + 1}
                               </td>
-                              <td className="p-2 border border-slate-400 font-semibold text-slate-900">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 font-semibold text-slate-900 dark:text-slate-100">
                                 {guard.name}
                               </td>
-                              <td className="p-2 border border-slate-400 text-slate-800">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 text-slate-800 dark:text-slate-200">
                                 {guard.employeeId}
                               </td>
-                              <td className="p-2 border border-slate-400 text-center">
+                              <td className="p-2 border border-slate-400 dark:border-slate-600 text-center">
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                   Present
                                 </span>
@@ -1221,10 +1237,10 @@ export default function OfficerRoundReportsList() {
               {/* Inspection Checklist Table */}
               <div className="mb-6 page-break-inside-avoid">
                 <RibbonHeader title="2. Inspection Checklist" />
-                <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm text-xs">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-white dark:bg-card shadow-sm text-xs">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 border-b text-left text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <tr className="bg-slate-50 dark:bg-slate-900/50 border-b text-left text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider text-[10px]">
                         <th className="p-3 pl-4 w-12">#</th>
                         <th className="p-3">Inspection Item</th>
                         <th className="p-3 w-32">Answer</th>
@@ -1236,12 +1252,12 @@ export default function OfficerRoundReportsList() {
                         report.checklist.map((q, idx) => (
                           <tr
                             key={q.id}
-                            className="border-b last:border-0 hover:bg-slate-50/50"
+                            className="border-b last:border-0 hover:bg-slate-50 dark:bg-slate-900/50/50"
                           >
-                            <td className="p-3 pl-4 font-semibold text-slate-400">
+                            <td className="p-3 pl-4 font-semibold text-slate-400 dark:text-slate-500">
                               {idx + 1}
                             </td>
-                            <td className="p-3 font-semibold text-slate-900">
+                            <td className="p-3 font-semibold text-slate-900 dark:text-slate-100">
                               {q.question}
                             </td>
                             <td className="p-3">
@@ -1249,7 +1265,7 @@ export default function OfficerRoundReportsList() {
                                 {q.answer || "N/A"}
                               </span>
                             </td>
-                            <td className="p-3 pr-4 text-slate-500 italic font-medium">
+                            <td className="p-3 pr-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 italic font-medium">
                               {q.remarks || "All good"}
                             </td>
                           </tr>
@@ -1273,12 +1289,12 @@ export default function OfficerRoundReportsList() {
               {allPhotos.length > 0 && (
                 <div className="mb-6 page-break-inside-avoid">
                   <RibbonHeader title="3. Photo Evidence" />
-                  <div className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm">
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-card shadow-sm">
                     <div className="grid grid-cols-4 gap-4">
                       {allPhotos.map((photo, pIdx) => (
                         <div
                           key={pIdx}
-                          className="aspect-square rounded-md overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center"
+                          className="aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-center"
                         >
                           <img
                             src={photo}
@@ -1296,14 +1312,14 @@ export default function OfficerRoundReportsList() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 page-break-inside-avoid">
                 <div className="flex flex-col">
                   <RibbonHeader title="4. Short Lecture" />
-                  <div className="border border-slate-200 rounded-lg p-4 bg-white flex-1 shadow-sm text-xs text-slate-600 whitespace-pre-line min-h-[100px] text-left">
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-card flex-1 shadow-sm text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line min-h-[100px] text-left">
                     {report.lectureDetails ||
                       "Briefed staff about safety protocols, emergency response procedures and incident reporting."}
                   </div>
                 </div>
                 <div className="flex flex-col">
                   <RibbonHeader title="5. Random Checking" />
-                  <div className="border border-slate-200 rounded-lg p-4 bg-white flex-1 shadow-sm text-xs text-slate-600 whitespace-pre-line min-h-[100px] text-left">
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-card flex-1 shadow-sm text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line min-h-[100px] text-left">
                     {report.randomChecking ||
                       "ID cards and attendance checked. No irregularities found."}
                   </div>
@@ -1313,7 +1329,7 @@ export default function OfficerRoundReportsList() {
               {/* Suggestions Panel */}
               <div className="mb-8 page-break-inside-avoid">
                 <RibbonHeader title="6. Suggestions" />
-                <div className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm text-xs text-slate-600 text-left">
+                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-card shadow-sm text-xs text-slate-600 dark:text-slate-300 text-left">
                   {report.suggestions ? (
                     <ul className="list-disc pl-5 space-y-1.5">
                       {report.suggestions
@@ -1337,16 +1353,16 @@ export default function OfficerRoundReportsList() {
               <div className="page-break-inside-avoid">
                 {/* Date and Time Footer Block */}
                 <div className="flex flex-col items-end justify-end pt-6 border-t text-right mb-6">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">
+                  <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">
                     Date & Time
                   </span>
-                  <span className="text-xs font-black text-slate-900 mt-0.5">
+                  <span className="text-xs font-black text-slate-900 dark:text-slate-100 mt-0.5">
                     {report.visitDate}, {formatTo12Hour(report.endTime)}
                   </span>
                 </div>
 
                 {/* Footer Meta */}
-                <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">
                   <span>
                     Generated by Unique Delta Force Security Pvt. Ltd.
                     Inspection System

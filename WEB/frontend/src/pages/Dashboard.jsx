@@ -179,7 +179,7 @@ export default function Dashboard() {
   };
 
   const handleStartVisit = (pv) => {
-    navigate(`/officer-visits/create?clientId=${pv.clientId}&siteId=${pv.siteId}&plannedId=${pv.id}`);
+    navigate(`/select-visit-type?clientId=${pv.clientId}&siteId=${pv.siteId}&plannedId=${pv.id}&date=${pv.date}`);
   };
 
   const handleStartSuddenVisit = () => {
@@ -366,13 +366,13 @@ export default function Dashboard() {
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>
-                  <TableHead className="font-semibold text-slate-700">Planned Date</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Client / Company</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Site Location</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Officer Assigned</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Shift</TableHead>
-                  <TableHead className="font-semibold text-slate-700">Status</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-700 pr-6">Action</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Planned Date</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Client / Company</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Site Location</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Officer Assigned</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Shift</TableHead>
+                  <TableHead className="font-semibold text-slate-700 dark:text-slate-200">Status</TableHead>
+                  <TableHead className="text-right font-semibold text-slate-700 dark:text-slate-200 pr-6">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -445,23 +445,23 @@ export default function Dashboard() {
 
       {/* Add Visit Modal */}
       <Dialog open={isSuddenVisitModalOpen} onOpenChange={setIsSuddenVisitModalOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-slate-900 border-slate-800 text-slate-100 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[500px] bg-card border-border text-foreground max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-slate-100">Add Visit</DialogTitle>
+            <DialogTitle className="text-foreground">Add Visit</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="grid gap-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Client</label>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Client</label>
               <Select value={suddenClient} onValueChange={(val) => {
                 setSuddenClient(val);
                 setSuddenSite(""); // Reset site when client changes
               }}>
-                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-background border-input text-foreground">
                   <SelectValue placeholder="Select Client" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
+                <SelectContent className="bg-background border-input text-foreground text-xs">
                   {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()} className="focus:bg-slate-700 focus:text-slate-100">
+                    <SelectItem key={c.id} value={c.id.toString()} className="focus:bg-accent focus:text-accent-foreground">
                       {c.name}
                     </SelectItem>
                   ))}
@@ -470,14 +470,14 @@ export default function Dashboard() {
             </div>
 
             <div className="grid gap-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Branch</label>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Branch</label>
               <Select value={suddenBranch} onValueChange={setSuddenBranch}>
-                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-background border-input text-foreground">
                   <SelectValue placeholder="Select Branch" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
+                <SelectContent className="bg-background border-input text-foreground text-xs">
                   {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id.toString()} className="focus:bg-slate-700 focus:text-slate-100">
+                    <SelectItem key={b.id} value={b.id.toString()} className="focus:bg-accent focus:text-accent-foreground">
                       {b.name}
                     </SelectItem>
                   ))}
@@ -486,16 +486,16 @@ export default function Dashboard() {
             </div>
 
             <div className="grid gap-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Site</label>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Site</label>
               <Select value={suddenSite} onValueChange={setSuddenSite}>
-                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-background border-input text-foreground">
                   <SelectValue placeholder="Select Site" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
+                <SelectContent className="bg-background border-input text-foreground text-xs">
                   {sites
                     .filter((s) => !suddenClient || s.client_name === clients.find((c) => c.id.toString() === suddenClient)?.name)
                     .map((s) => (
-                      <SelectItem key={s.id} value={s.id.toString()} className="focus:bg-slate-700 focus:text-slate-100">
+                      <SelectItem key={s.id} value={s.id.toString()} className="focus:bg-accent focus:text-accent-foreground">
                         {s.name}
                       </SelectItem>
                     ))}
@@ -504,36 +504,36 @@ export default function Dashboard() {
             </div>
 
             <div className="grid gap-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Type of Visit</label>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Type of Visit</label>
               <Select value={suddenVisitType} onValueChange={setSuddenVisitType}>
-                <SelectTrigger className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100">
+                <SelectTrigger className="h-9 text-xs bg-background border-input text-foreground">
                   <SelectValue placeholder="Select Type of Visit" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100 text-xs">
-                  <SelectItem value="night_round" className="focus:bg-slate-700 focus:text-slate-100">Night Round</SelectItem>
-                  <SelectItem value="day_round" className="focus:bg-slate-700 focus:text-slate-100">Day Round</SelectItem>
-                  <SelectItem value="general_visit" className="focus:bg-slate-700 focus:text-slate-100">General Visit</SelectItem>
+                <SelectContent className="bg-background border-input text-foreground text-xs">
+                  <SelectItem value="night_round" className="focus:bg-accent focus:text-accent-foreground">Night Round</SelectItem>
+                  <SelectItem value="day_round" className="focus:bg-accent focus:text-accent-foreground">Day Round</SelectItem>
+                  <SelectItem value="general_visit" className="focus:bg-accent focus:text-accent-foreground">General Visit</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Date</label>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Date</label>
               <Input
                 type="date"
                 value={suddenDate}
                 onChange={(e) => setSuddenDate(e.target.value)}
-                className="h-9 text-xs bg-slate-800 border-slate-700 text-slate-100 [&::-webkit-calendar-picker-indicator]:invert"
+                className="h-9 text-xs bg-background border-input text-foreground [&::-webkit-calendar-picker-indicator]:invert"
               />
             </div>
 
             <div className="grid gap-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Remark</label>
+              <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Remark</label>
               <Textarea
                 placeholder="Write visit remark/notes..."
                 value={suddenRemark}
                 onChange={(e) => setSuddenRemark(e.target.value)}
-                className="min-h-[50px] text-xs bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500 rounded-lg"
+                className="min-h-[50px] text-xs bg-background border-input text-foreground placeholder:text-slate-500 dark:text-slate-400 dark:text-slate-500 rounded-lg"
               />
             </div>
           </div>
@@ -542,7 +542,7 @@ export default function Dashboard() {
               type="button"
               variant="outline"
               onClick={() => setIsSuddenVisitModalOpen(false)}
-              className="text-xs border-slate-700 hover:bg-slate-800 text-slate-100 h-9"
+              className="text-xs border-border hover:bg-muted text-foreground h-9"
             >
               Cancel
             </Button>

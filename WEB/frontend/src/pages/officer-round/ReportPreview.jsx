@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Printer, Download, MapPin } from "lucide-react";
+import { ArrowLeft, Printer, Download, MapPin, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getStoredReports } from "./mockData";
 import api from "../../services/api";
+import html2pdf from "html2pdf.js";
+import { toast } from "sonner";
 
 const formatTo12Hour = (timeStr) => {
   if (!timeStr) return "N/A";
@@ -27,7 +29,9 @@ export default function ReportPreview() {
   const navigate = useNavigate();
   const reportRef = useRef(null);
   const [report, setReport] = useState(null);
+  const [reportsList, setReportsList] = useState([]);
   const [clients, setClients] = useState([]);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -47,6 +51,14 @@ export default function ReportPreview() {
         }
       }
     };
+    const fetchAllReports = async () => {
+      try {
+        const res = await api.get('/officer-rounds/reports');
+        setReportsList(res.data || []);
+      } catch (err) {
+        console.error("Failed to fetch reports list:", err);
+      }
+    };
     const fetchClients = async () => {
       try {
         const res = await api.get("/assessments/clients");
@@ -56,6 +68,7 @@ export default function ReportPreview() {
       }
     };
     fetchReport();
+    fetchAllReports();
     fetchClients();
   }, [id]);
 
@@ -64,6 +77,74 @@ export default function ReportPreview() {
     document.title = formattedReportId;
     window.print();
     document.title = originalTitle;
+  };
+
+  const handleDownloadPDF = async () => {
+    if (isDownloading) return;
+    const element = reportRef.current;
+    if (!element) {
+      toast.error("Report content not found.");
+      return;
+    }
+    
+    setIsDownloading(true);
+    const toastId = toast.loading("Generating high-resolution PDF...");
+    try {
+      // Wait for all images to fully load
+      const images = Array.from(element.querySelectorAll("img"));
+      await Promise.all(
+        images.map(
+          (img) =>
+            new Promise((resolve) => {
+              if (img.complete) resolve();
+              else {
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+              }
+            })
+        )
+      );
+
+      // Brief pause for stability
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const options = {
+        margin: 0,
+        filename: `${formattedReportId.replace(/\//g, "-")}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          logging: false,
+          letterRendering: true,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] }
+      };
+
+      const pdfBlob = await html2pdf().set(options).from(element).outputPdf("blob");
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      
+      // 1. Open preview in a new tab
+      window.open(pdfUrl, "_blank");
+      
+      // 2. Trigger automatic local download
+      const downloadLink = document.createElement("a");
+      downloadLink.href = pdfUrl;
+      downloadLink.download = `${formattedReportId.replace(/\//g, "-")}.pdf`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      
+      toast.success("PDF preview opened & download started!", { id: toastId });
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      toast.error("Failed to generate PDF. Please try again.", { id: toastId });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   if (!report) {
@@ -98,7 +179,14 @@ export default function ReportPreview() {
     }
   };
 
-  const formattedReportId = `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}-${report.reportNo}`;
+  const reportIndex = (() => {
+    if (reportsList.length === 0 || !report) return '01';
+    const sorted = [...reportsList].sort((a, b) => new Date(b.visitDate) - new Date(a.visitDate));
+    const idx = sorted.findIndex(r => r.id === report.id);
+    return idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+  })();
+
+  const formattedReportId = `${reportIndex}-${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
 
   const getAnswerColor = (ans) => {
     const norm = (ans || "").toLowerCase().trim();
@@ -116,7 +204,7 @@ export default function ReportPreview() {
     if (norm === "not available" || norm === "no" || norm === "expired") {
       return "text-rose-600 font-bold";
     }
-    return "text-slate-900 font-bold";
+    return "text-slate-900  font-bold";
   };
 
   const checklistPhotos = (report.checklist || []).reduce((acc, q) => {
@@ -140,7 +228,7 @@ export default function ReportPreview() {
   );
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12 print:p-0 print:m-0 print:max-w-full">
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -171,17 +259,16 @@ export default function ReportPreview() {
 
         <div className="flex gap-2">
           <Button
-            onClick={handlePrint}
-            className="border-primary text-primary hover:bg-primary/5 flex items-center gap-2"
-            variant="outline"
+            onClick={handleDownloadPDF}
+            disabled={isDownloading}
+            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 rounded-full px-5 h-9 text-xs font-semibold animate-in fade-in"
           >
-            <Printer className="h-4.5 w-4.5" /> Print Report
-          </Button>
-          <Button
-            onClick={handlePrint}
-            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 rounded-full px-5"
-          >
-            <Download className="h-4.5 w-4.5" /> Download PDF
+            {isDownloading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Download PDF
           </Button>
         </div>
       </div>
@@ -189,7 +276,7 @@ export default function ReportPreview() {
       {/* A4 Sheet Container */}
       <div
         ref={reportRef}
-        className="bg-white text-slate-800 rounded-[14px] border shadow-md p-8 md:p-12 mx-auto w-full print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:bg-white"
+        className="report-sheet"
       >
         {/* PDF Header */}
         <div className="flex justify-between items-center border-b-2 border-[#1e3a8a] pb-6 mb-6 gap-4">
@@ -245,7 +332,7 @@ export default function ReportPreview() {
               </svg>
             </div>
             <div>
-              <h2 className="text-sm font-extrabold tracking-tight text-slate-900 leading-none">
+              <h2 className="text-sm font-extrabold tracking-tight text-slate-900  leading-none">
                 Unique Delta Force Security Pvt. Ltd.
               </h2>
             </div>
@@ -257,11 +344,11 @@ export default function ReportPreview() {
             </h3>
           </div>
 
-          <div className="text-right max-w-[30%] shrink-0 pr-2">
-            <span className="text-[8px] font-bold text-slate-400 uppercase block">
+          <div className="text-right max-w-[45%] shrink-0 pr-2">
+            <span className="text-[8px] font-bold text-slate-400  uppercase block">
               Report ID
             </span>
-            <span className="text-[10px] font-black text-blue-600 tracking-tight block break-all">
+            <span className="text-[10px] font-black text-blue-600 tracking-tight block whitespace-nowrap">
               {formattedReportId}
             </span>
           </div>
@@ -269,75 +356,66 @@ export default function ReportPreview() {
 
         {/* General Information Block */}
         <div className="mb-6">
-          <RibbonHeader title="General Information" />
-          <div className="border border-slate-200 rounded-lg p-4 bg-white grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 shadow-sm text-xs">
+          <div className="report-divider"></div>
+          <div className="report-ribbon">General Information</div>
+          <div className="report-info-grid">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Client
-              </span>
-              <span className="font-bold text-slate-900 block mb-1">
+              <label>Client
+              </label>
+            <span>
                 {clientName}
               </span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Unit / Site
-              </span>
-              <span className="font-bold text-slate-900">{report.unit}</span>
+              <label>Unit / Site
+              </label>
+              <span>{report.unit}</span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Inspection Date
-              </span>
-              <span className="font-bold text-slate-900">
+              <label>Inspection Date
+              </label>
+              <span>
                 {report.visitDate}
               </span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Visit Type
-              </span>
-              <span
-                className={`font-bold ${report.visitType === "Surprise" ? "text-rose-600" : "text-blue-600"}`}
-              >
+              <label>Visit Type
+              </label>
+              <span className={report.visitType === "Surprise" ? "text-rose-600" : "text-blue-600"}>
                 {report.visitType}
               </span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Shift
-              </span>
-              <span className="font-bold text-slate-900">
+              <label>Shift
+              </label>
+              <span>
                 {report.shift || "Morning"}
               </span>
             </div>
 
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Start Time
-              </span>
-              <span className="font-bold text-slate-900">
+              <label>Start Time
+              </label>
+              <span>
                 {formatTo12Hour(report.startTime)}
               </span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                End Time
-              </span>
-              <span className="font-bold text-slate-900">
+              <label>End Time
+              </label>
+              <span>
                 {formatTo12Hour(report.endTime)}
               </span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Officer Name
-              </span>
-              <span className="font-bold text-slate-900">{report.officer}</span>
+              <label>Officer Name
+              </label>
+              <span>{report.officer}</span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-0.5">
+              <span className="text-[10px] font-bold text-slate-400  uppercase tracking-wider block flex items-center gap-0.5">
                 <MapPin className="h-3 w-3 text-blue-600" /> GPS Location
               </span>
               <span
-                className="font-bold text-slate-900 truncate block"
+                className="font-bold text-slate-900  truncate block"
                 title={report.gps}
               >
                 {report.gps || "N/A"}
@@ -345,10 +423,9 @@ export default function ReportPreview() {
             </div>
 
             <div className="col-span-4">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Uploaded Photos
-              </span>
-              <span className="font-bold text-slate-900">
+              <label>Uploaded Photos
+              </label>
+              <span>
                 {allPhotos.length}
               </span>
             </div>
@@ -358,25 +435,22 @@ export default function ReportPreview() {
         {/* Guards Present Section */}
         {report.guards && report.guards.filter((g) => g.present).length > 0 && (
           <div className="mb-8">
-            <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-              <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-                Guards Present on Duty
-              </div>
-            </div>
+            <div className="report-divider"></div>
+        <div className="report-ribbon">Guards Present on Duty</div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+              <table className="report-table">
                 <thead>
-                  <tr className="bg-slate-200 border border-slate-400 text-slate-900 font-bold">
-                    <th className="p-2 border border-slate-400 text-center w-[50px]">
+                  <tr className="bg-slate-200  border border-slate-400 dark:border-slate-600 text-slate-900  font-bold">
+                    <th className="text-center w-[50px]">
                       Sr No
                     </th>
-                    <th className="p-2 border border-slate-400">
+                    <th className="">
                       Guard Name
                     </th>
-                    <th className="p-2 border border-slate-400">
+                    <th className="">
                       Employee ID / ID
                     </th>
-                    <th className="p-2 border border-slate-400 text-center w-28">
+                    <th className="text-center w-28">
                       Status
                     </th>
                   </tr>
@@ -385,18 +459,18 @@ export default function ReportPreview() {
                   {report.guards
                     .filter((g) => g.present)
                     .map((guard, idx) => (
-                      <tr key={guard.id || idx} className="border border-slate-400">
-                        <td className="p-2 border border-slate-400 text-center text-slate-800 font-medium">
+                      <tr key={guard.id || idx} className="border border-slate-400 dark:border-slate-600">
+                        <td className="text-center text-slate-800  font-medium">
                           {idx + 1}
                         </td>
-                        <td className="p-2 border border-slate-400 font-semibold text-slate-900">
+                        <td className="font-semibold text-slate-900 ">
                           {guard.name}
                         </td>
-                        <td className="p-2 border border-slate-400 text-slate-800">
+                        <td className="text-slate-800 ">
                           {guard.employeeId}
                         </td>
-                        <td className="p-2 border border-slate-400 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <td className="text-center">
+                          <span className="badge-status badge-status-present">
                             Present
                           </span>
                         </td>
@@ -410,11 +484,11 @@ export default function ReportPreview() {
 
         {/* Inspection Checklist Table */}
         <div className="mb-6">
-          <RibbonHeader title="2. Inspection Checklist" />
-          <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm text-xs">
+          <div className="report-ribbon">2. Inspection Checklist</div>
+          <div className="border border-slate-200  rounded-lg overflow-hidden bg-white  shadow-sm text-xs">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-slate-50 border-b text-left text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                <tr className="bg-slate-50  border-b text-left text-slate-600  font-bold uppercase tracking-wider text-[10px]">
                   <th className="p-3 pl-4 w-12">#</th>
                   <th className="p-3">Inspection Item</th>
                   <th className="p-3 w-32">Answer</th>
@@ -441,12 +515,12 @@ export default function ReportPreview() {
                     .map((q, idx) => (
                       <tr
                         key={q.id}
-                        className="border-b last:border-0 hover:bg-slate-50/50"
+                        className="border-b last:border-0 hover:bg-slate-50 /50"
                       >
-                        <td className="p-3 pl-4 font-semibold text-slate-400">
+                        <td className="p-3 pl-4 font-semibold text-slate-400 ">
                           {idx + 1}
                         </td>
-                        <td className="p-3 font-semibold text-slate-900">
+                        <td className="p-3 font-semibold text-slate-900 ">
                           {q.question}
                         </td>
                         <td className="p-3">
@@ -454,7 +528,7 @@ export default function ReportPreview() {
                             {q.answer || "N/A"}
                           </span>
                         </td>
-                        <td className="p-3 pr-4 text-slate-500 italic font-medium">
+                        <td className="p-3 pr-4 text-slate-500   italic font-medium">
                           {q.remarks || ""}
                         </td>
                       </tr>
@@ -477,13 +551,13 @@ export default function ReportPreview() {
         {/* Photo Evidence Section */}
         {allPhotos.length > 0 && (
           <div className="mb-6">
-            <RibbonHeader title="3. Photo Evidence" />
-            <div className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm">
+            <div className="report-ribbon">3. Photo Evidence</div>
+            <div className="border border-slate-200  rounded-lg p-4 bg-white  shadow-sm">
               <div className="grid grid-cols-4 gap-4">
                 {allPhotos.map((photo, pIdx) => (
                   <div
                     key={pIdx}
-                    className="aspect-square rounded-md overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center"
+                    className="aspect-square rounded-md overflow-hidden border border-slate-200  bg-slate-50  flex items-center justify-center"
                   >
                     <img
                       src={photo}
@@ -500,15 +574,15 @@ export default function ReportPreview() {
         {/* Short Lecture & Random Checking side-by-side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="flex flex-col">
-            <RibbonHeader title="4. Short Lecture" />
-            <div className="border border-slate-200 rounded-lg p-4 bg-white flex-1 shadow-sm text-xs text-slate-600 whitespace-pre-line min-h-[100px]">
+            <div className="report-ribbon">4. Short Lecture</div>
+            <div className="border border-slate-200  rounded-lg p-4 bg-white  flex-1 shadow-sm text-xs text-slate-600  whitespace-pre-line min-h-[100px]">
               {report.lectureDetails || "N/A"}
             </div>
           </div>
 
           <div className="flex flex-col">
-            <RibbonHeader title="5. Random Checking" />
-            <div className="border border-slate-200 rounded-lg p-4 bg-white flex-1 shadow-sm text-xs text-slate-600 whitespace-pre-line min-h-[100px]">
+            <div className="report-ribbon">5. Random Checking</div>
+            <div className="border border-slate-200  rounded-lg p-4 bg-white  flex-1 shadow-sm text-xs text-slate-600  whitespace-pre-line min-h-[100px]">
               {report.randomChecking || "N/A"}
             </div>
           </div>
@@ -516,8 +590,8 @@ export default function ReportPreview() {
 
         {/* Suggestions Panel */}
         <div className="mb-8">
-          <RibbonHeader title="6. Suggestions" />
-          <div className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm text-xs text-slate-600">
+          <div className="report-ribbon">6. Suggestions</div>
+          <div className="border border-slate-200  rounded-lg p-4 bg-white  shadow-sm text-xs text-slate-600 ">
             {report.suggestions ? (
               <ul className="list-disc pl-5 space-y-1.5">
                 {report.suggestions
@@ -528,23 +602,23 @@ export default function ReportPreview() {
                   ))}
               </ul>
             ) : (
-              <p className="text-slate-500 italic">No suggestions recorded.</p>
+              <p className="text-slate-500   italic">No suggestions recorded.</p>
             )}
           </div>
         </div>
 
         {/* Date and Time Footer Block */}
         <div className="flex flex-col items-end justify-end pt-6 border-t text-right mb-6">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">
+          <span className="text-[9px] font-bold text-slate-400  uppercase tracking-widest block">
             Date & Time
           </span>
-          <span className="text-xs font-black text-slate-900 mt-0.5">
+          <span className="text-xs font-black text-slate-900  mt-0.5">
             {report.visitDate}, {formatTo12Hour(report.endTime)}
           </span>
         </div>
 
         {/* Footer Meta */}
-        <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+        <div className="pt-4 border-t border-slate-200  flex justify-between items-center text-[9px] text-slate-400  font-bold uppercase tracking-widest">
           <span>
             Generated by Unique Delta Force Security Pvt. Ltd. Inspection System
           </span>

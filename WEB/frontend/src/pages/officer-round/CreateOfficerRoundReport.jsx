@@ -15,6 +15,7 @@ import {
   HelpCircle,
   Paperclip,
   Clock,
+  ArrowLeft,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -314,7 +315,7 @@ export default function CreateOfficerRoundReport() {
       if (clientId) {
         try {
           const siteRes = await api.get(
-            `/assessments/sites?company_id=${clientId}`,
+            `/assessments/sites?company_id=${clientId}&all_sites=true`,
           );
           setSites(siteRes.data || []);
         } catch (error) {
@@ -729,18 +730,28 @@ export default function CreateOfficerRoundReport() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          {editId
-            ? "Edit Officer Round Report"
-            : "Create Officer Night Round Report"}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Fill out safety round, guards status, and compliance checkpoints below
-        </p>
+      <div className="flex items-center gap-3">
+        <Button
+          onClick={() => navigate(-1)}
+          variant="outline"
+          size="icon"
+          className="h-9 w-9 rounded-lg border-border hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-800"
+        >
+          <ArrowLeft className="h-4.5 w-4.5" />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            {editId
+              ? "Edit Officer Night Round Report"
+              : "Create Officer Night Round Report"}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Fill out safety round, guards status, and compliance checkpoints below
+          </p>
+        </div>
       </div>
       {/* Stepper Header */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl py-4 px-6 shadow-sm flex items-center justify-center overflow-x-auto w-full">
+      <div className="bg-white dark:bg-card dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl py-4 px-6 shadow-sm flex items-center justify-center overflow-x-auto w-full">
         <div className="flex items-center gap-6 w-full max-w-4xl justify-between relative min-w-[650px] py-1">
           {/* Background line */}
           <div className="absolute top-4 left-[38px] right-[38px] h-0.5 bg-slate-200 dark:bg-slate-800 z-0" />
@@ -772,13 +783,13 @@ export default function CreateOfficerRoundReport() {
                   className={`h-8 w-8 rounded-full flex items-center justify-center border-2 transition-all text-xs font-semibold ${
                     isActive || isDone
                       ? "bg-emerald-500 border-emerald-500 text-white"
-                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500"
+                      : "bg-white dark:bg-card dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   {isDone ? <Check className="h-4 w-4" /> : stepNumber}
                 </div>
                 <span
-                  className={`text-xs ${isActive ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-500 dark:text-slate-400 font-normal"}`}
+                  className={`text-xs ${isActive ? "text-blue-600 dark:text-blue-400 font-bold" : "text-slate-500 dark:text-slate-400 dark:text-slate-500 font-normal"}`}
                 >
                   {stepName}
                 </span>
@@ -1046,7 +1057,7 @@ export default function CreateOfficerRoundReport() {
 
                 {/* Template Selector Dropdown */}
                 {templates.length > 0 && (
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/60 px-3 py-1 rounded-full border">
+                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900/60 px-3 py-1 rounded-full border">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       Template:
                     </span>
@@ -1221,7 +1232,7 @@ export default function CreateOfficerRoundReport() {
                                       }}
                                     />
 
-                                    <div className="h-8 border border-border rounded-lg bg-background hover:bg-muted/40 px-3 text-xs flex items-center gap-1.5 transition-colors font-medium text-slate-700 dark:text-slate-300">
+                                    <div className="h-8 border border-border rounded-lg bg-background hover:bg-muted/40 px-3 text-xs flex items-center gap-1.5 transition-colors font-medium text-slate-700 dark:text-slate-200 dark:text-slate-300">
                                       <Upload className="h-3.5 w-3.5" />
                                       Add Photo
                                     </div>
@@ -1457,7 +1468,7 @@ export default function CreateOfficerRoundReport() {
                 </div>
 
                 <div className="space-y-1.5 flex-1 flex flex-col">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 uppercase tracking-wider">
                     Detailed Recommendations
                   </label>
                   <div className="border border-border rounded-lg overflow-hidden bg-muted/10 flex flex-col flex-1 min-h-[250px]">
@@ -1468,7 +1479,7 @@ export default function CreateOfficerRoundReport() {
                       className="flex-1 w-full p-4 bg-transparent text-sm focus:outline-none resize-none text-slate-800 dark:text-slate-200"
                     />
 
-                    <div className="border-t bg-slate-50 dark:bg-slate-900/35 p-2 flex gap-1.5 items-center">
+                    <div className="border-t bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900/35 p-2 flex gap-1.5 items-center">
                       <button
                         type="button"
                         className="p-1 hover:bg-muted rounded text-xs font-bold w-6 h-6 flex items-center justify-center"
@@ -1515,7 +1526,7 @@ export default function CreateOfficerRoundReport() {
                 </div>
 
                 <div className="space-y-1.5 flex-1 flex flex-col">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 uppercase tracking-wider">
                     Inspector's Observations
                   </label>
                   <div className="border border-border rounded-lg overflow-hidden bg-muted/10 flex flex-col flex-1 min-h-[250px]">
@@ -1527,7 +1538,7 @@ export default function CreateOfficerRoundReport() {
                       className="flex-1 w-full p-4 bg-transparent text-sm focus:outline-none resize-none text-slate-800 dark:text-slate-200"
                     />
 
-                    <div className="border-t bg-slate-50 dark:bg-slate-900/35 p-2.5 flex justify-end items-center">
+                    <div className="border-t bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900/35 p-2.5 flex justify-end items-center">
                       <span className="text-[10px] text-muted-foreground">
                         Character Count: {overallRemarks.length}/1000
                       </span>
@@ -1749,7 +1760,7 @@ export default function CreateOfficerRoundReport() {
           variant="outline"
           onClick={() => setCurrentStep((prev) => Math.max(prev - 1, 1))}
           disabled={currentStep === 1}
-          className="h-10 text-sm font-normal gap-1.5 rounded-xl text-slate-700 dark:text-slate-300"
+          className="h-10 text-sm font-normal gap-1.5 rounded-xl text-slate-700 dark:text-slate-200 dark:text-slate-300"
         >
           <ChevronLeft className="h-4.5 w-4.5" /> Back
         </Button>
@@ -1758,7 +1769,7 @@ export default function CreateOfficerRoundReport() {
           <Button
             variant="outline"
             onClick={() => handleSaveReport("Draft")}
-            className="h-10 font-normal text-sm rounded-xl text-slate-700 dark:text-slate-300"
+            className="h-10 font-normal text-sm rounded-xl text-slate-700 dark:text-slate-200 dark:text-slate-300"
           >
             Save Draft
           </Button>
@@ -1834,7 +1845,7 @@ export default function CreateOfficerRoundReport() {
             </Button>
             <Button
               onClick={handleAddTemporaryGuard}
-              className="bg-primary text-white hover:bg-primary/90"
+              className="bg-blue-600 text-white hover:bg-blue-700 h-9 text-xs"
             >
               Add Guard
             </Button>
@@ -1942,7 +1953,7 @@ export default function CreateOfficerRoundReport() {
                                   qOptions.filter((_, idx) => idx !== oIdx),
                                 );
                               }}
-                              className="text-slate-400 hover:text-red-500 transition-colors"
+                              className="text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -1975,7 +1986,7 @@ export default function CreateOfficerRoundReport() {
                       className="rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 h-4.5 w-4.5"
                     />
 
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 dark:text-slate-300">
                       Required Question
                     </span>
                   </label>
@@ -1988,7 +1999,7 @@ export default function CreateOfficerRoundReport() {
                       className="rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 h-4.5 w-4.5"
                     />
 
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 dark:text-slate-300">
                       Enable Photo Upload
                     </span>
                   </label>
@@ -2001,7 +2012,7 @@ export default function CreateOfficerRoundReport() {
                       className="rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 h-4.5 w-4.5"
                     />
 
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 dark:text-slate-300">
                       Capture Location
                     </span>
                   </label>
@@ -2010,7 +2021,7 @@ export default function CreateOfficerRoundReport() {
 
               {/* Right Column - Preview */}
               <div className="md:col-span-2 flex flex-col">
-                <div className="bg-slate-50 dark:bg-slate-900/35 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex-1 flex flex-col gap-4 min-h-[300px]">
+                <div className="bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900/35 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex-1 flex flex-col gap-4 min-h-[300px]">
                   <span className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-widest block">
                     Preview
                   </span>
@@ -2026,7 +2037,7 @@ export default function CreateOfficerRoundReport() {
                         {qOptions.map((opt, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"
+                            className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 dark:text-slate-300"
                           >
                             <div
                               className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 ${idx === 0 ? "border-blue-600" : "border-slate-300 dark:border-slate-700"}`}
@@ -2067,7 +2078,7 @@ export default function CreateOfficerRoundReport() {
                       <span className="text-[10px] font-semibold text-muted-foreground">
                         Remarks
                       </span>
-                      <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 bg-background text-xs text-slate-400">
+                      <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 bg-background text-xs text-slate-400 dark:text-slate-500">
                         Enter remarks...
                       </div>
                     </div>
@@ -2075,8 +2086,8 @@ export default function CreateOfficerRoundReport() {
 
                   {/* Simulated Upload Box */}
                   {qPhotoReq && (
-                    <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-4 flex flex-col items-center justify-center bg-background/50 text-slate-500 text-[11px] gap-1.5 mt-2">
-                      <Upload className="h-5 w-5 text-slate-400" />
+                    <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-4 flex flex-col items-center justify-center bg-background/50 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-[11px] gap-1.5 mt-2">
+                      <Upload className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                       <span>Upload Photo (Optional)</span>
                     </div>
                   )}
@@ -2085,11 +2096,11 @@ export default function CreateOfficerRoundReport() {
             </div>
           </div>
 
-          <DialogFooter className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 gap-2 flex items-center justify-end bg-slate-50/50 dark:bg-slate-900/20">
+          <DialogFooter className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 gap-2 flex items-center justify-end bg-slate-50 dark:bg-slate-900/50/50 dark:bg-slate-900/20">
             <Button
               variant="outline"
               onClick={() => setIsAddQuestionOpen(false)}
-              className="rounded-xl h-10 px-5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+              className="rounded-xl h-10 px-5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 dark:text-slate-300"
             >
               Cancel
             </Button>

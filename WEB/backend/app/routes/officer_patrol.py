@@ -198,7 +198,7 @@ def get_visit_reports():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_VISIT_REPORTS")
+        cursor.execute("SELECT * FROM PATROL_OFFICER_DAY_VISIT_REPORTS")
         rows = cursor.fetchall()
         return [map_db_row_to_frontend(r) for r in rows]
     finally:
@@ -212,7 +212,7 @@ def get_visit_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_VISIT_REPORTS WHERE oid = %s", (id,))
+        cursor.execute("SELECT * FROM PATROL_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
         r = cursor.fetchone()
         if not r:
             raise HTTPException(status_code=404, detail="Report not found")
@@ -229,7 +229,7 @@ def save_visit_report(payload: Dict[str, Any]):
     cursor = conn.cursor(dictionary=True)
     try:
         oid = payload.get("id")
-        cursor.execute("SELECT oid FROM PATROL_OFFICER_VISIT_REPORTS WHERE oid = %s", (oid,))
+        cursor.execute("SELECT oid FROM PATROL_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
 
         query_params = (
@@ -260,7 +260,7 @@ def save_visit_report(payload: Dict[str, Any]):
 
         if exists:
             sql = """
-                UPDATE PATROL_OFFICER_VISIT_REPORTS SET
+                UPDATE PATROL_OFFICER_DAY_VISIT_REPORTS SET
                     report_no = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
                     visit_type = %s, officer = %s, shift = %s, start_time = %s, end_time = %s,
                     gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
@@ -271,7 +271,7 @@ def save_visit_report(payload: Dict[str, Any]):
             cursor.execute(sql, query_params)
         else:
             sql = """
-                INSERT INTO PATROL_OFFICER_VISIT_REPORTS (
+                INSERT INTO PATROL_OFFICER_DAY_VISIT_REPORTS (
                     report_no, unit, client_id, site_id, visit_date,
                     visit_type, officer, shift, start_time, end_time,
                     gps, photos, guards, checklist, observations,
@@ -294,7 +294,7 @@ def delete_visit_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM PATROL_OFFICER_VISIT_REPORTS WHERE oid = %s", (id,))
+        cursor.execute("DELETE FROM PATROL_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
         conn.commit()
         return {"success": True, "message": "Report deleted successfully"}
     finally:
@@ -390,7 +390,7 @@ def get_visit_templates():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_VISIT_TEMPLATES")
+        cursor.execute("SELECT * FROM PATROL_OFFICER_DAY_VISIT_TEMPLATES")
         rows = cursor.fetchall()
         for r in rows:
             r["id"] = r["oid"]
@@ -409,7 +409,7 @@ def save_visit_template(payload: Dict[str, Any]):
     cursor = conn.cursor(dictionary=True)
     try:
         oid = payload.get("id")
-        cursor.execute("SELECT oid FROM PATROL_OFFICER_VISIT_TEMPLATES WHERE oid = %s", (oid,))
+        cursor.execute("SELECT oid FROM PATROL_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
 
         query_params = (
@@ -420,10 +420,10 @@ def save_visit_template(payload: Dict[str, Any]):
         )
 
         if exists:
-            sql = "UPDATE PATROL_OFFICER_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
+            sql = "UPDATE PATROL_OFFICER_DAY_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
             cursor.execute(sql, query_params)
         else:
-            sql = "INSERT INTO PATROL_OFFICER_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
+            sql = "INSERT INTO PATROL_OFFICER_DAY_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
             cursor.execute(sql, query_params)
         conn.commit()
         return {"success": True, "message": "Template saved successfully"}
@@ -438,7 +438,7 @@ def delete_visit_template(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM PATROL_OFFICER_VISIT_TEMPLATES WHERE oid = %s", (id,))
+        cursor.execute("DELETE FROM PATROL_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (id,))
         conn.commit()
         return {"success": True, "message": "Template deleted successfully"}
     finally:

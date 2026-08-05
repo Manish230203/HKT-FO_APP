@@ -1623,13 +1623,14 @@ def get_companies_list(db: Session = Depends(get_patrol_db)):
 @router.get("/assessments/sites")
 def get_sites_list(
     company_id: int = None, 
+    all_sites: Optional[bool] = Query(None),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_patrol_db)
 ):
     role = current_user.get("role", "").lower()
     user_site_id = current_user.get("site_id")
     
-    if role in ["supervisor", "field officer", "main gate supervisor"]:
+    if role in ["supervisor", "field officer", "main gate supervisor"] and not all_sites:
         if user_site_id:
             sql = text("""
                 SELECT s.oid as id, s.name, s.geofence_data, s.geofence_type, c.name as client_name, b.name as branch_name 
@@ -1775,7 +1776,9 @@ def get_admin_checkpoints(
     user_site_id = current_user.get("site_id")
     
     if role in ["supervisor", "field officer", "main gate supervisor"]:
-        if user_site_id:
+        if site_id is not None:
+            query = query.filter(Checkpoint.site_id == site_id)
+        elif user_site_id:
             query = query.filter(Checkpoint.site_id == user_site_id)
         else:
             return []
@@ -2567,5 +2570,64 @@ def get_guards_by_site(site_id: Optional[int] = Query(None), db: Session = Depen
         params["site_id"] = site_id
     rows = db.execute(text(query), params).mappings().all()
     return [{"id": f"g_{r['oid']}", "name": r["name"], "employeeId": r["emp_code"], "present": True} for r in rows]
+
+@router.post("/auth/login")
+def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
+    identifier = data.get("identifier")
+    password = data.get("password")
+    
+    try:
+        sql = text("""
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, ua.password_hash
+            FROM EMPLOYEE e
+            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            LEFT JOIN USER_ACCOUNT ua ON ua.EMPLOYEE = e.oid
+            WHERE e.mobile = :id OR e.emp_code = :id OR ua.username = :id
+            LIMIT 1
+        """)
+        user = db.execute(sql, {"id": identifier}).mappings().first()
+    except Exception:
+        sql = text("""
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, 'password123' as password_hash
+            FROM EMPLOYEE e
+            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            WHERE e.mobile = :id OR e.emp_code = :id
+            LIMIT 1
+        """)
+        user = db.execute(sql, {"id": identifier}).mappings().first()
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="NO USER FOUND")
+        
+    user_data = {
+        "id": user["oid"],
+        "name": user["name"],
+        "role": user["role_name"] or "Staff",
+        "employee_id": user["emp_code"],
+        "site_id": user["site_id"]
+    }
+    
+    import base64
+    import json
+    token = base64.b64encode(json.dumps(user_data).encode()).decode()
+    
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": user_data
+    }
+
+@router.get("/auth/me")
+def get_current_admin(authorization: Optional[str] = Header(None)):
+    import base64
+    import json
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            token = authorization.split(" ")[1]
+            return json.loads(base64.b64decode(token.encode()).decode())
+        except Exception:
+            raise HTTPException(status_code=401, detail="INVALID TOKEN")
+    raise HTTPException(status_code=401, detail="NOT AUTHENTICATED")
+
 
 

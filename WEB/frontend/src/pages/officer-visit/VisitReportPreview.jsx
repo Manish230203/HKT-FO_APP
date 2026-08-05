@@ -1,16 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Printer, MapPin } from "lucide-react";
+import { ArrowLeft, Printer, MapPin, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import api from "../../services/api";
 import { getStoredVisitReports } from "../officer-round/mockData";
+import html2pdf from "html2pdf.js";
+import { toast } from "sonner";
 
 export default function VisitReportPreview() {
   const { id } = useParams();
   const navigate = useNavigate();
   const reportRef = useRef(null);
   const [report, setReport] = useState(null);
+  const [reportsList, setReportsList] = useState([]);
   const [clients, setClients] = useState([]);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -25,7 +29,17 @@ export default function VisitReportPreview() {
         const match = getStoredVisitReports().find((r) => r.id === id);
         if (match) {
           setReport(match);
+        } else {
+          console.error("Report not found in localStorage either.");
         }
+      }
+    };
+    const fetchAllReports = async () => {
+      try {
+        const res = await api.get('/officer-visits/reports');
+        setReportsList(res.data || []);
+      } catch (err) {
+        console.error("Failed to fetch reports list:", err);
       }
     };
     const fetchClients = async () => {
@@ -37,6 +51,7 @@ export default function VisitReportPreview() {
       }
     };
     fetchReport();
+    fetchAllReports();
     fetchClients();
   }, [id]);
 
@@ -77,8 +92,15 @@ export default function VisitReportPreview() {
     }
   };
 
+  const reportIndex = (() => {
+    if (reportsList.length === 0 || !report) return '01';
+    const sorted = [...reportsList].sort((a, b) => new Date(b.visitDate) - new Date(a.visitDate));
+    const idx = sorted.findIndex(r => r.id === report.id);
+    return idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+  })();
+
   const formattedReportId = report
-    ? `${clientName}-${report.unit}-OVR-${formatDateToDMY(report.visitDate)}-${report.reportNo}`
+    ? `${reportIndex}-${clientName}-${report.unit}-ODV-${formatDateToDMY(report.visitDate)}`
     : "report";
 
   const handlePrint = () => {
@@ -86,6 +108,74 @@ export default function VisitReportPreview() {
     document.title = formattedReportId;
     window.print();
     document.title = originalTitle;
+  };
+
+  const handleDownloadPDF = async () => {
+    if (isDownloading) return;
+    const element = reportRef.current;
+    if (!element) {
+      toast.error("Report content not found.");
+      return;
+    }
+    
+    setIsDownloading(true);
+    const toastId = toast.loading("Generating high-resolution PDF...");
+    try {
+      // Wait for all images to fully load
+      const images = Array.from(element.querySelectorAll("img"));
+      await Promise.all(
+        images.map(
+          (img) =>
+            new Promise((resolve) => {
+              if (img.complete) resolve();
+              else {
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+              }
+            })
+        )
+      );
+
+      // Brief pause for stability
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const options = {
+        margin: 0,
+        filename: `${formattedReportId.replace(/\//g, "-")}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          logging: false,
+          letterRendering: true,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] }
+      };
+
+      const pdfBlob = await html2pdf().set(options).from(element).outputPdf("blob");
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      
+      // 1. Open preview in a new tab
+      window.open(pdfUrl, "_blank");
+      
+      // 2. Trigger automatic local download
+      const downloadLink = document.createElement("a");
+      downloadLink.href = pdfUrl;
+      downloadLink.download = `${formattedReportId.replace(/\//g, "-")}.pdf`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      
+      toast.success("PDF preview opened & download started!", { id: toastId });
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      toast.error("Failed to generate PDF. Please try again.", { id: toastId });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   if (!report) {
@@ -118,7 +208,7 @@ export default function VisitReportPreview() {
     if (norm === "not available" || norm === "no" || norm === "expired") {
       return "text-rose-600 font-bold";
     }
-    return "text-slate-900 font-bold";
+    return "text-slate-900  font-bold";
   };
 
   const displayObservations = report.observations || [];
@@ -177,18 +267,26 @@ export default function VisitReportPreview() {
         >
           <ArrowLeft className="h-4.5 w-4.5" /> Back to Reports
         </Button>
-        <Button
-          onClick={handlePrint}
-          className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 shadow-sm text-xs font-semibold"
-        >
-          <Printer className="h-4.5 w-4.5" /> Print Report
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleDownloadPDF}
+            disabled={isDownloading}
+            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 rounded-full px-5 h-9 text-xs font-semibold animate-in fade-in"
+          >
+            {isDownloading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Download PDF
+          </Button>
+        </div>
       </div>
 
       {/* Main Report Document Container */}
       <div
         ref={reportRef}
-        className="bg-white border border-slate-300 rounded-lg p-10 shadow-md print:shadow-none print:border-none print:p-0 text-sm text-black"
+        className="report-sheet"
       >
         {/* PDF Header */}
         <div className="flex justify-between items-center border-b-2 border-[#1e3a8a] pb-6 mb-6 gap-4">
@@ -244,7 +342,7 @@ export default function VisitReportPreview() {
               </svg>
             </div>
             <div>
-              <h2 className="text-sm font-extrabold tracking-tight text-slate-900 leading-none">
+              <h2 className="text-sm font-extrabold tracking-tight text-slate-900  leading-none">
                 Unique Delta Force Security Pvt. Ltd.
               </h2>
             </div>
@@ -252,100 +350,89 @@ export default function VisitReportPreview() {
 
           <div className="text-center max-w-[40%]">
             <h3 className="text-xs font-black text-[#1e3a8a] uppercase tracking-wider border-b-2 border-[#1e3a8a] pb-1">
-              FIELD OFFICER VISIT REPORT
+              FIELD OFFICER DAY VISIT REPORT
             </h3>
           </div>
 
-          <div className="text-right max-w-[30%] shrink-0 pr-2">
-            <span className="text-[8px] font-bold text-slate-400 uppercase block">
+          <div className="text-right max-w-[45%] shrink-0 pr-2">
+            <span className="text-[8px] font-bold text-slate-400  uppercase block">
               Report ID
             </span>
-            <span className="text-[10px] font-black text-blue-600 tracking-tight block break-all">
+            <span className="text-[10px] font-black text-blue-600 tracking-tight block whitespace-nowrap">
               {formattedReportId}
             </span>
           </div>
         </div>
 
         {/* Header line */}
-        <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-          <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-            General Information
-          </div>
-        </div>
+        <div className="report-divider"></div>
+        <div className="report-ribbon">General Information</div>
 
         {/* Info Box */}
-        <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50 mb-8 grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-xs">
+        <div className="report-info-grid">
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Client
-            </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <label>Client
+            </label>
+            <span>
               {clientName}
             </span>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Inspection Date
-            </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <label>Inspection Date
+            </label>
+            <span>
               {report.visitDate}
             </span>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Visit Type
-            </span>
-            <span className="text-blue-600 font-bold text-sm block">
+            <label>Visit Type
+            </label>
+            <span className="text-blue-600">
               {report.visitType || "Scheduled"}
             </span>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Shift
-            </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <label>Shift
+            </label>
+            <span>
               {report.shift || "Morning"}
             </span>
           </div>
 
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Unit / Site
-            </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <label>Unit / Site
+            </label>
+            <span>
               {report.unit || "N/A"}
             </span>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Start Time
-            </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <label>Start Time
+            </label>
+            <span>
               {formatTo12Hour(report.startTime)}
             </span>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              End Time
-            </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <label>End Time
+            </label>
+            <span>
               {formatTo12Hour(report.endTime)}
             </span>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
+            <span className="text-[9px] font-bold text-slate-400  uppercase tracking-wider block mb-1 flex items-center gap-1">
               <MapPin className="h-3 w-3 text-blue-600" /> GPS Location
             </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <span className="text-slate-900  font-bold text-sm block">
               {report.gps || "N/A"}
             </span>
           </div>
 
           <div className="col-span-2 md:col-span-4">
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-              Uploaded Photos
-            </span>
-            <span className="text-slate-900 font-bold text-sm block">
+            <label>Uploaded Photos
+            </label>
+            <span>
               {allPhotos.length}
             </span>
           </div>
@@ -354,25 +441,22 @@ export default function VisitReportPreview() {
         {/* Guards Present Section */}
         {report.guards && report.guards.filter((g) => g.present).length > 0 && (
           <div className="mb-8">
-            <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-              <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-                Guards Present on Duty
-              </div>
-            </div>
+            <div className="report-divider"></div>
+        <div className="report-ribbon">Guards Present on Duty</div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+              <table className="report-table">
                 <thead>
-                  <tr className="bg-slate-200 border border-slate-400 text-slate-900 font-bold">
-                    <th className="p-2 border border-slate-400 text-center w-[50px]">
+                  <tr className="bg-slate-200  border border-slate-400 dark:border-slate-600 text-slate-900  font-bold">
+                    <th className="text-center w-[50px]">
                       Sr No
                     </th>
-                    <th className="p-2 border border-slate-400">
+                    <th className="">
                       Guard Name
                     </th>
-                    <th className="p-2 border border-slate-400">
+                    <th className="">
                       Employee ID / ID
                     </th>
-                    <th className="p-2 border border-slate-400 text-center w-28">
+                    <th className="text-center w-28">
                       Status
                     </th>
                   </tr>
@@ -381,18 +465,18 @@ export default function VisitReportPreview() {
                   {report.guards
                     .filter((g) => g.present)
                     .map((guard, idx) => (
-                      <tr key={guard.id || idx} className="border border-slate-400">
-                        <td className="p-2 border border-slate-400 text-center text-slate-800 font-medium">
+                      <tr key={guard.id || idx} className="border border-slate-400 dark:border-slate-600">
+                        <td className="text-center text-slate-800  font-medium">
                           {idx + 1}
                         </td>
-                        <td className="p-2 border border-slate-400 font-semibold text-slate-900">
+                        <td className="font-semibold text-slate-900 ">
                           {guard.name}
                         </td>
-                        <td className="p-2 border border-slate-400 text-slate-800">
+                        <td className="text-slate-800 ">
                           {guard.employeeId}
                         </td>
-                        <td className="p-2 border border-slate-400 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <td className="text-center">
+                          <span className="badge-status badge-status-present">
                             Present
                           </span>
                         </td>
@@ -411,28 +495,25 @@ export default function VisitReportPreview() {
             (c) => c.id && c.id.toString().startsWith("pq_") && c.status && c.status.trim() !== ""
           ) && (
             <div className="mb-8">
-              <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-                <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-                  A. Pre-defined Checklist Answers
-                </div>
-              </div>
+              <div className="report-divider"></div>
+        <div className="report-ribbon">A. Pre-defined Checklist Answers</div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+                <table className="report-table">
                   <thead>
-                    <tr className="bg-slate-200 border border-slate-400 text-slate-900 font-bold">
-                      <th className="p-2 border border-slate-400 text-center w-[50px]">
+                    <tr className="bg-slate-200  border border-slate-400 dark:border-slate-600 text-slate-900  font-bold">
+                      <th className="text-center w-[50px]">
                         Sr No
                       </th>
-                      <th className="p-2 border border-slate-400">
+                      <th className="">
                         Inspection Point
                       </th>
-                      <th className="p-2 border border-slate-400">
+                      <th className="">
                         Observation
                       </th>
-                      <th className="p-2 border border-slate-400 text-center w-28">
+                      <th className="text-center w-28">
                         Status (OK/Not OK)
                       </th>
-                      <th className="p-2 border border-slate-400">
+                      <th className="">
                         Corrective Action
                       </th>
                     </tr>
@@ -446,30 +527,24 @@ export default function VisitReportPreview() {
                           c.status.trim() !== ""
                       )
                       .map((c, idx) => (
-                        <tr key={c.id || idx} className="border border-slate-400">
-                          <td className="p-2 border border-slate-400 text-center text-slate-800 font-medium">
+                        <tr key={c.id || idx} className="border border-slate-400 dark:border-slate-600">
+                          <td className="text-center text-slate-800  font-medium">
                             {idx + 1}
                           </td>
-                          <td className="p-2 border border-slate-400 font-semibold text-slate-900">
+                          <td className="font-semibold text-slate-900 ">
                             {c.question} {c.required && <span className="text-rose-500 font-bold">*</span>}
                           </td>
-                          <td className="p-2 border border-slate-400 text-slate-800">
+                          <td className="text-slate-800 ">
                             {c.observation || "-"}
                           </td>
-                          <td className="p-2 border border-slate-400 text-center">
+                          <td className="text-center">
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                c.status === "OK"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : c.status === "Not OK"
-                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                    : "bg-slate-100 text-slate-600 border border-slate-200"
-                              }`}
+                              className={`badge-status ${c.status === "OK" ? "badge-status-ok" : c.status === "Not OK" ? "badge-status-not-ok" : "text-slate-600"}`}
                             >
                               {c.status || "N/A"}
                             </span>
                           </td>
-                          <td className="p-2 border border-slate-400 text-slate-800">
+                          <td className="text-slate-800 ">
                             {c.correctiveAction || "-"}
                           </td>
                         </tr>
@@ -480,66 +555,63 @@ export default function VisitReportPreview() {
             </div>
           )}
 
-        <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-          <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-            B. On-Spot Custom Observations
-          </div>
-        </div>
+        <div className="report-divider"></div>
+        <div className="report-ribbon">B. On-Spot Custom Observations</div>
 
         {/* Action Points Table */}
         <div className="overflow-x-auto mb-6">
-          <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+          <table className="report-table">
             <thead>
-              <tr className="bg-slate-200 border border-slate-400 text-slate-900 font-bold">
-                <th className="p-2 border border-slate-400 text-center w-[50px]">
+              <tr className="bg-slate-200  border border-slate-400 dark:border-slate-600 text-slate-900  font-bold">
+                <th className="text-center w-[50px]">
                   Sr No
                 </th>
-                <th className="p-2 border border-slate-400">
+                <th className="">
                   Inspection Point
                 </th>
-                <th className="p-2 border border-slate-400">Observation</th>
-                <th className="p-2 border border-slate-400">Action Required</th>
-                <th className="p-2 border border-slate-400">
+                <th className="">Observation</th>
+                <th className="">Action Required</th>
+                <th className="">
                   Action Done / Status
                 </th>
-                <th className="p-2 border border-slate-400">
+                <th className="">
                   Corrective Measures
                 </th>
-                <th className="p-2 border border-slate-400">Remarks</th>
+                <th className="">Remarks</th>
               </tr>
             </thead>
             <tbody>
               {displayObservations && displayObservations.length > 0 ? (
                 displayObservations.map((obs, idx) => (
-                  <tr key={obs.id || idx} className="border border-slate-400">
-                    <td className="p-2 border border-slate-400 text-center text-slate-800 font-medium">
+                  <tr key={obs.id || idx} className="border border-slate-400 dark:border-slate-600">
+                    <td className="text-center text-slate-800  font-medium">
                       {idx + 1}
                     </td>
-                    <td className="p-2 border border-slate-400 font-semibold text-slate-900">
+                    <td className="font-semibold text-slate-900 ">
                       {obs.actionPoint}
                     </td>
-                    <td className="p-2 border border-slate-400 text-slate-800">
+                    <td className="text-slate-800 ">
                       {obs.observation || "N/A"}
                     </td>
-                    <td className="p-2 border border-slate-400 text-slate-800">
+                    <td className="text-slate-800 ">
                       {obs.actionRequired || "N/A"}
                     </td>
-                    <td className="p-2 border border-slate-400 text-slate-800">
+                    <td className="text-slate-800 ">
                       {obs.actionDone || "N/A"}
                     </td>
-                    <td className="p-2 border border-slate-400 text-slate-800">
+                    <td className="text-slate-800 ">
                       {obs.correctiveMeasures || "N/A"}
                     </td>
-                    <td className="p-2 border border-slate-400 text-slate-800">
+                    <td className="text-slate-800 ">
                       {obs.remarks || "N/A"}
                     </td>
                   </tr>
                 ))
               ) : (
-                <tr className="border border-slate-400">
+                <tr className="border border-slate-400 dark:border-slate-600">
                   <td
                     colSpan={7}
-                    className="p-4 text-center text-slate-500 italic"
+                    className="p-4 text-center text-slate-500   italic"
                   >
                     No action points/observations recorded.
                   </td>
@@ -552,12 +624,9 @@ export default function VisitReportPreview() {
         {/* Customer Feedback */}
         {customerFeedbackText && (
           <div className="mb-6">
-            <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-              <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-                Customer Feedback
-              </div>
-            </div>
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-xs whitespace-pre-wrap font-medium">
+            <div className="report-divider"></div>
+        <div className="report-ribbon">Customer Feedback</div>
+            <div className="report-feedback-box whitespace-pre-wrap font-medium">
               {customerFeedbackText}
             </div>
           </div>
@@ -566,12 +635,9 @@ export default function VisitReportPreview() {
         {/* Overall Suggestions */}
         {overallSuggestionsText && (
           <div className="mb-6">
-            <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-              <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-                Overall Suggestions
-              </div>
-            </div>
-            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-xs whitespace-pre-wrap font-medium">
+            <div className="report-divider"></div>
+        <div className="report-ribbon">Overall Suggestions</div>
+            <div className="report-feedback-box whitespace-pre-wrap font-medium">
               {overallSuggestionsText}
             </div>
           </div>
@@ -581,26 +647,23 @@ export default function VisitReportPreview() {
         {report.overallRemarks &&
         !report.overallRemarks.startsWith("Compiled report") ? (
           <div className="mb-6 text-sm">
-            <span className="font-bold text-black">
+            <span className="font-bold text-black ">
               Technical Snag's/Observations:
             </span>
-            <span className="text-slate-800 ml-2">{report.overallRemarks}</span>
+            <span className="text-slate-800  ml-2">{report.overallRemarks}</span>
           </div>
         ) : null}
 
         {/* Site Visit Photos */}
         {allPhotos.length > 0 && (
           <div className="mb-6">
-            <div className="border-t-[3px] border-blue-900 pt-4 mb-4">
-              <div className="inline-block bg-[#1E3A8A] text-white text-[10px] font-bold px-4 py-1.5 uppercase tracking-wider rounded-r-md mb-4">
-                Site Visit Photos
-              </div>
-            </div>
+            <div className="report-divider"></div>
+        <div className="report-ribbon">Site Visit Photos</div>
             <div className="grid grid-cols-2 gap-4">
               {allPhotos.map((photo, pIdx) => (
                 <div
                   key={pIdx}
-                  className="rounded-lg overflow-hidden border border-slate-300 bg-slate-50 aspect-video flex items-center justify-center"
+                  className="rounded-lg overflow-hidden border border-slate-300  bg-slate-50  aspect-video flex items-center justify-center"
                 >
                   <img
                     src={photo}
@@ -613,7 +676,7 @@ export default function VisitReportPreview() {
           </div>
         )}
         {/* Footer Meta */}
-        <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-6">
+        <div className="pt-4 border-t border-slate-200  flex justify-between items-center text-[9px] text-slate-400  font-bold uppercase tracking-widest mt-6">
           <span>
             Generated by Unique Delta Force Security Pvt. Ltd. Inspection System
           </span>

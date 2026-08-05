@@ -487,7 +487,7 @@ export const getStoredVisitTemplates = () => {
     const initial = [
       {
         id: "temp-default-visit",
-        name: "Officer Visit Template",
+        name: "Officer Day Visit Template",
         sections: ["General"],
         questions: PRE_DEFINED_QUESTIONS_MOCK,
       },
