@@ -68,6 +68,8 @@ export default function GeneralVisit() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [remark, setRemark] = useState("");
+  const [officer, setOfficer] = useState("");
+  const [visitType, setVisitType] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Selection and Bulk Actions State
@@ -146,6 +148,16 @@ export default function GeneralVisit() {
     if (!openState) {
       setIsOpen(false);
       setEditId(null);
+      setSelectedClientId("");
+      setSelectedSiteId("");
+      setPersonVisited("");
+      setReasonOfVisit("");
+      setVisitDate(new Date().toISOString().split("T")[0]);
+      setStartTime("");
+      setEndTime("");
+      setRemark("");
+      setOfficer("");
+      setVisitType("");
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get("open") === "true") {
         navigate(-1);
@@ -168,7 +180,11 @@ export default function GeneralVisit() {
         return dateStr;
       }
     };
-    const countStr = String(index + 1).padStart(2, '0');
+    const siteVisits = visits
+      .filter((visit) => visit.siteId === v.siteId)
+      .sort((a, b) => (a.created_on || a.createdOn || 0) - (b.created_on || b.createdOn || 0));
+    const siteIndex = siteVisits.findIndex((visit) => visit.id === v.id);
+    const countStr = String(siteIndex !== -1 ? siteIndex + 1 : 1).padStart(2, '0');
     return `${countStr}-${v.clientName || 'N/A'}-${v.siteName || 'N/A'}-OGV-${formatDateToDMY(v.visitDate || v.createdOn)}`;
   };
 
@@ -197,6 +213,8 @@ export default function GeneralVisit() {
         startTime,
         endTime,
         remark: remark.trim(),
+        officer: officer.trim(),
+        visitType: visitType,
         created_on: Date.now(),
       };
 
@@ -211,6 +229,8 @@ export default function GeneralVisit() {
       setStartTime("");
       setEndTime("");
       setRemark("");
+      setOfficer("");
+      setVisitType("");
       setIsOpen(false);
       setEditId(null);
 
@@ -241,6 +261,8 @@ export default function GeneralVisit() {
     setStartTime(v.startTime || "");
     setEndTime(v.endTime || "");
     setRemark(v.remark || "");
+    setOfficer(v.officer || "");
+    setVisitType(v.visitType || "");
     setIsOpen(true);
   };
 
@@ -796,6 +818,36 @@ export default function GeneralVisit() {
                 className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
                 required
               />
+            </div>
+
+            {/* Officer Name & Visit Type */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
+                  Officer Name
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Officer name..."
+                  value={officer}
+                  onChange={(e) => setOfficer(e.target.value)}
+                  className="h-9 border-border bg-background text-foreground text-xs rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
+                  Visit Type
+                </label>
+                <Select value={visitType} onValueChange={setVisitType}>
+                  <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
+                    <SelectValue placeholder="Select type..." />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs">
+                    <SelectItem value="Scheduled">Scheduled</SelectItem>
+                    <SelectItem value="Sudden">Sudden</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Start & End Time */}

@@ -57,7 +57,7 @@ export default function VisitReportPreview() {
 
   const clientName = report?.clientId
     ? clients.find((c) => c.id == report.clientId)?.name ||
-      `Client #${report.clientId}`
+    `Client #${report.clientId}`
     : "N/A";
 
   let customerFeedbackText = "";
@@ -94,8 +94,10 @@ export default function VisitReportPreview() {
 
   const reportIndex = (() => {
     if (reportsList.length === 0 || !report) return '01';
-    const sorted = [...reportsList].sort((a, b) => new Date(b.visitDate) - new Date(a.visitDate));
-    const idx = sorted.findIndex(r => r.id === report.id);
+    const siteVisits = reportsList
+      .filter((r) => r.siteId === report.siteId)
+      .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+    const idx = siteVisits.findIndex(r => r.id === report.id);
     return idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
   })();
 
@@ -117,11 +119,11 @@ export default function VisitReportPreview() {
       toast.error("Report content not found.");
       return;
     }
-    
+
     setIsDownloading(true);
     const toastId = toast.loading("Generating high-resolution PDF...");
     try {
-      // Wait for all images to fully load
+      // 1. Wait for all images to fully load
       const images = Array.from(element.querySelectorAll("img"));
       await Promise.all(
         images.map(
@@ -136,47 +138,51 @@ export default function VisitReportPreview() {
         )
       );
 
-      // Brief pause for stability
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // 2. Wait for fonts to load
+      if (document.fonts) {
+        await document.fonts.ready;
+      }
 
       const options = {
         margin: 0,
-        filename: `${formattedReportId.replace(/\//g, "-")}.pdf`,
+        filename: `${formattedReportId}.pdf`.replace(/\//g, "-"),
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
           logging: false,
+          width: 794,
+          windowWidth: 794,
           letterRendering: true,
           scrollX: 0,
           scrollY: 0
         },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
         pagebreak: { mode: ["avoid-all", "css", "legacy"] }
       };
 
       const pdfBlob = await html2pdf().set(options).from(element).outputPdf("blob");
       const pdfUrl = URL.createObjectURL(pdfBlob);
-      
+
       // 1. Open preview in a new tab
       window.open(pdfUrl, "_blank");
-      
+
       // 2. Trigger automatic local download
       const downloadLink = document.createElement("a");
       downloadLink.href = pdfUrl;
-      downloadLink.download = `${formattedReportId.replace(/\//g, "-")}.pdf`;
+      downloadLink.download = `${formattedReportId}.pdf`.replace(/\//g, "-");
       document.body.appendChild(downloadLink);
       downloadLink.click();
       document.body.removeChild(downloadLink);
-      
-      toast.success("PDF preview opened & download started!", { id: toastId });
+
+      toast.success("PDF generated! Preview opened & download started.", { id: toastId });
     } catch (err) {
       console.error("PDF generation failed:", err);
       toast.error("Failed to generate PDF. Please try again.", { id: toastId });
     } finally {
       setIsDownloading(false);
     }
-  };
+  };;
 
   if (!report) {
     return (
@@ -288,161 +294,102 @@ export default function VisitReportPreview() {
         ref={reportRef}
         className="report-sheet"
       >
-        {/* PDF Header */}
-        <div className="flex justify-between items-center border-b-2 border-[#1e3a8a] pb-6 mb-6 gap-4">
-          <div className="flex items-center gap-3">
+        {/* PDF Header matching screenshot layout */}
+        <div className="border-b-2 border-[#1e3a8a] pb-4 mb-4">
+          <div className="flex items-center gap-3 mb-4">
             <div className="shrink-0">
               <svg
-                width="70"
-                height="30"
+                width="60"
+                height="26"
                 viewBox="0 0 100 40"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <path
-                  d="M 5 12 L 35 12 L 30 17 L 35 22 L 5 22 Z"
-                  fill="#1A1A1A"
-                />
-                <path
-                  d="M 5 22 L 35 22 L 32 26 L 35 30 L 5 30 Z"
-                  fill="#E53E3E"
-                />
+                <path d="M 5 12 L 35 12 L 30 17 L 35 22 L 5 22 Z" fill="#1A1A1A" />
+                <path d="M 5 22 L 35 22 L 32 26 L 35 30 L 5 30 Z" fill="#E53E3E" />
                 <circle cx="10" cy="17" r="1.5" fill="white" />
                 <circle cx="20" cy="17" r="1.5" fill="white" />
                 <circle cx="30" cy="17" r="1.5" fill="white" />
-
-                <path
-                  d="M 95 12 L 65 12 L 70 17 L 65 22 L 95 22 Z"
-                  fill="#1A1A1A"
-                />
-                <path
-                  d="M 95 22 L 65 22 L 68 26 L 65 30 L 95 30 Z"
-                  fill="#E53E3E"
-                />
+                <path d="M 95 12 L 65 12 L 70 17 L 65 22 L 95 22 Z" fill="#1A1A1A" />
+                <path d="M 95 22 L 65 22 L 68 26 L 65 30 L 95 30 Z" fill="#E53E3E" />
                 <circle cx="90" cy="17" r="1.5" fill="white" />
                 <circle cx="80" cy="17" r="1.5" fill="white" />
                 <circle cx="70" cy="17" r="1.5" fill="white" />
-
-                <polygon
-                  points="50,2 54,16 68,16 57,25 61,38 50,30 39,38 43,25 32,16 46,16"
-                  fill="#00D2FF"
-                />
+                <polygon points="50,2 54,16 68,16 57,25 61,38 50,30 39,38 43,25 32,16 46,16" fill="#00D2FF" />
                 <circle cx="50" cy="21" r="7" fill="#00A3C4" />
-                <text
-                  x="50"
-                  y="25"
-                  fontFamily="sans-serif"
-                  fontWeight="900"
-                  fontSize="11"
-                  fill="white"
-                  textAnchor="middle"
-                >
-                  U
-                </text>
+                <text x="50" y="25" fontFamily="sans-serif" fontWeight="900" fontSize="11" fill="white" textAnchor="middle">U</text>
               </svg>
             </div>
             <div>
-              <h2 className="text-sm font-extrabold tracking-tight text-slate-900  leading-none">
+              <h2 className="text-sm font-black tracking-tight text-slate-900 leading-none">
                 Unique Delta Force Security Pvt. Ltd.
               </h2>
             </div>
           </div>
-
-          <div className="text-center max-w-[40%]">
-            <h3 className="text-xs font-black text-[#1e3a8a] uppercase tracking-wider border-b-2 border-[#1e3a8a] pb-1">
-              FIELD OFFICER DAY VISIT REPORT
-            </h3>
-          </div>
-
-          <div className="text-right max-w-[45%] shrink-0 pr-2">
-            <span className="text-[8px] font-bold text-slate-400  uppercase block">
-              Report ID
-            </span>
-            <span className="text-[10px] font-black text-blue-600 tracking-tight block whitespace-nowrap">
-              {formattedReportId}
-            </span>
+          <div className="flex justify-between items-end">
+            <div className="flex flex-col">
+              <h1 className="text-sm font-black text-[#1e3a8a] leading-tight uppercase tracking-tight w-fit border-b-2 border-[#1e3a8a] pb-1.5">
+                FIELD OFFICER DAY VISIT REPORT
+              </h1>
+              <span className="text-[10px] font-bold text-slate-800 mt-1 uppercase report-meta-text">
+                REPORT ID : {formattedReportId}
+              </span>
+            </div>
+            <div className="text-right text-[10px] font-bold text-slate-800 leading-normal uppercase report-meta-text">
+              DATE : {report ? report.visitDate || report.createdOn : ""} {report && report.startTime && report.startTime !== "N/A" ? formatTo12Hour(report.startTime) : ""} {report && report.endTime && report.endTime !== "N/A" ? formatTo12Hour(report.endTime) : ""}
+            </div>
           </div>
         </div>
 
-        {/* Header line */}
-        <div className="report-divider"></div>
-        <div className="report-ribbon">General Information</div>
+        {/* General Information Block */}
+        <div className="mb-6">
+          <div className="report-ribbon">General Information</div>
+          <div className="report-info-grid">
+            <div>
+              <label>Client Name</label>
+              <span>{clientName}</span>
+            </div>
+            <div>
+              <label>Site Name</label>
+              <span>{report ? report.unit || "N/A" : "N/A"}</span>
+            </div>
+            <div>
+              <label>Shift</label>
+              <span>{report ? report.shift || "N/A" : "N/A"}</span>
+            </div>
+            <div>
+              <label>Visit Type</label>
+              <span>Day Visit</span>
+            </div>
 
-        {/* Info Box */}
-        <div className="report-info-grid">
-          <div>
-            <label>Client
-            </label>
-            <span>
-              {clientName}
-            </span>
-          </div>
-          <div>
-            <label>Inspection Date
-            </label>
-            <span>
-              {report.visitDate}
-            </span>
-          </div>
-          <div>
-            <label>Visit Type
-            </label>
-            <span className="text-blue-600">
-              {report.visitType || "Scheduled"}
-            </span>
-          </div>
-          <div>
-            <label>Shift
-            </label>
-            <span>
-              {report.shift || "Morning"}
-            </span>
-          </div>
+            <div>
+              <label>Officer Name</label>
+              <span>{report ? report.officer || "N/A" : "N/A"}</span>
+            </div>
+            <div>
+              <label>Start Time</label>
+              <span>{report && report.startTime ? formatTo12Hour(report.startTime) : "N/A"}</span>
+            </div>
+            <div>
+              <label>End Time</label>
+              <span>{report && report.endTime ? formatTo12Hour(report.endTime) : "N/A"}</span>
+            </div>
+            <div>
+              <label>GPS Location</label>
+              <span>{report ? report.gps || "N/A" : "N/A"}</span>
+            </div>
 
-          <div>
-            <label>Unit / Site
-            </label>
-            <span>
-              {report.unit || "N/A"}
-            </span>
-          </div>
-          <div>
-            <label>Start Time
-            </label>
-            <span>
-              {formatTo12Hour(report.startTime)}
-            </span>
-          </div>
-          <div>
-            <label>End Time
-            </label>
-            <span>
-              {formatTo12Hour(report.endTime)}
-            </span>
-          </div>
-          <div>
-            <span className="text-[9px] font-bold text-slate-400  uppercase tracking-wider block mb-1 flex items-center gap-1">
-              <MapPin className="h-3 w-3 text-blue-600" /> GPS Location
-            </span>
-            <span className="text-slate-900  font-bold text-sm block">
-              {report.gps || "N/A"}
-            </span>
-          </div>
-
-          <div className="col-span-2 md:col-span-4">
-            <label>Uploaded Photos
-            </label>
-            <span>
-              {allPhotos.length}
-            </span>
+            <div className="col-span-4">
+              <label>Photo Evidence</label>
+              <span>{report ? allPhotos.length : 0}</span>
+            </div>
           </div>
         </div>
 
         {/* Guards Present Section */}
         {report.guards && report.guards.filter((g) => g.present).length > 0 && (
           <div className="mb-8">
-            <div className="report-divider"></div>
-        <div className="report-ribbon">Guards Present on Duty</div>
+            <div className="report-ribbon">Guards Present on Duty</div>
             <div className="overflow-x-auto">
               <table className="report-table">
                 <thead>
@@ -494,9 +441,8 @@ export default function VisitReportPreview() {
           report.checklist.some(
             (c) => c.id && c.id.toString().startsWith("pq_") && c.status && c.status.trim() !== ""
           ) && (
-            <div className="mb-8">
-              <div className="report-divider"></div>
-        <div className="report-ribbon">A. Pre-defined Checklist Answers</div>
+            <div className="mb-8 mt-6">
+              <div className="report-ribbon">A. Pre-defined Checklist Answers</div>
               <div className="overflow-x-auto">
                 <table className="report-table">
                   <thead>
@@ -532,7 +478,7 @@ export default function VisitReportPreview() {
                             {idx + 1}
                           </td>
                           <td className="font-semibold text-slate-900 ">
-                            {c.question} {c.required && <span className="text-rose-500 font-bold">*</span>}
+                            {c.question}
                           </td>
                           <td className="text-slate-800 ">
                             {c.observation || "-"}
@@ -555,8 +501,7 @@ export default function VisitReportPreview() {
             </div>
           )}
 
-        <div className="report-divider"></div>
-        <div className="report-ribbon">B. On-Spot Custom Observations</div>
+        <div className="report-ribbon mt-6">B. On-Spot Custom Observations</div>
 
         {/* Action Points Table */}
         <div className="overflow-x-auto mb-6">
@@ -624,8 +569,7 @@ export default function VisitReportPreview() {
         {/* Customer Feedback */}
         {customerFeedbackText && (
           <div className="mb-6">
-            <div className="report-divider"></div>
-        <div className="report-ribbon">Customer Feedback</div>
+            <div className="report-ribbon">Customer Feedback</div>
             <div className="report-feedback-box whitespace-pre-wrap font-medium">
               {customerFeedbackText}
             </div>
@@ -635,8 +579,7 @@ export default function VisitReportPreview() {
         {/* Overall Suggestions */}
         {overallSuggestionsText && (
           <div className="mb-6">
-            <div className="report-divider"></div>
-        <div className="report-ribbon">Overall Suggestions</div>
+            <div className="report-ribbon">Overall Suggestions</div>
             <div className="report-feedback-box whitespace-pre-wrap font-medium">
               {overallSuggestionsText}
             </div>
@@ -645,7 +588,7 @@ export default function VisitReportPreview() {
 
         {/* Technical Snags/Observations */}
         {report.overallRemarks &&
-        !report.overallRemarks.startsWith("Compiled report") ? (
+          !report.overallRemarks.startsWith("Compiled report") ? (
           <div className="mb-6 text-sm">
             <span className="font-bold text-black ">
               Technical Snag's/Observations:
@@ -657,8 +600,7 @@ export default function VisitReportPreview() {
         {/* Site Visit Photos */}
         {allPhotos.length > 0 && (
           <div className="mb-6">
-            <div className="report-divider"></div>
-        <div className="report-ribbon">Site Visit Photos</div>
+            <div className="report-ribbon">Site Visit Photos</div>
             <div className="grid grid-cols-2 gap-4">
               {allPhotos.map((photo, pIdx) => (
                 <div
@@ -678,9 +620,8 @@ export default function VisitReportPreview() {
         {/* Footer Meta */}
         <div className="pt-4 border-t border-slate-200  flex justify-between items-center text-[9px] text-slate-400  font-bold uppercase tracking-widest mt-6">
           <span>
-            Generated by Unique Delta Force Security Pvt. Ltd. Inspection System
+            System Generated Report For Unique Delta Force Security Pvt. Ltd.
           </span>
-          <span>Page 1 of 1</span>
         </div>
       </div>
     </div>

@@ -7,55 +7,73 @@
 @layer base {
   :root {
     /* --- Colors --- */
-    --background: 210 40% 98%;          /* #F8FAFC */
-    --foreground: 222 47% 11%;          /* #0F172A (Text Primary) */
+    --background: 210 40% 98%;
+    /* #F8FAFC */
+    --foreground: 222 47% 11%;
+    /* #0F172A (Text Primary) */
 
-    --card: 0 0% 100%;                  /* #FFFFFF */
+    --card: 0 0% 100%;
+    /* #FFFFFF */
     --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 215 25% 17%;             /* #1E293B - Primary */
+    --primary: 215 25% 17%;
+    /* #1E293B - Primary */
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 199 89% 48%;            /* #0EA5E9 - Accent Blue (Primary Action) */
+    --secondary: 199 89% 48%;
+    /* #0EA5E9 - Accent Blue (Primary Action) */
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 210 40% 96.1%;             /* #F1F5F9 */
-    --muted-foreground: 215 16% 47%;    /* #64748B - Text Secondary */
+    --muted: 210 40% 96.1%;
+    /* #F1F5F9 */
+    --muted-foreground: 215 16% 47%;
+    /* #64748B - Text Secondary */
 
-    --accent: 199 89% 38%;              /* #0A80B7 - Accent Blue (darker) */
+    --accent: 199 89% 38%;
+    /* #0A80B7 - Accent Blue (darker) */
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 51%;           /* #DC2626 - Danger Red */
+    --destructive: 0 72% 51%;
+    /* #DC2626 - Danger Red */
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214 32% 91%;              /* #E2E8F0 - Border */
+    --border: 214 32% 91%;
+    /* #E2E8F0 - Border */
     --input: 214 32% 91%;
-    --ring: 199 89% 48%;                /* #0EA5E9 - Accent Blue Focus ring */
+    --ring: 199 89% 48%;
+    /* #0EA5E9 - Accent Blue Focus ring */
 
     /* --- Border Radius --- */
-    --radius: 1rem;                     /* 16px Premium Radius */
+    --radius: 1rem;
+    /* 16px Premium Radius */
 
     /* --- Sidebar Specific --- */
     --sidebar-background: 210 40% 98%;
     --sidebar-foreground: 222 47% 11%;
     --sidebar-primary: 215 25% 17%;
     --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 199 89% 48%;       /* #0EA5E9 - Accent Blue */
+    --sidebar-accent: 199 89% 48%;
+    /* #0EA5E9 - Accent Blue */
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 199 89% 48%;        /* #0EA5E9 - Accent Blue */
+    --sidebar-ring: 199 89% 48%;
+    /* #0EA5E9 - Accent Blue */
 
     /* --- Status Colors (Global System) --- */
-    --status-active: 162 94% 30%;       /* #059669 - Success Green */
+    --status-active: 162 94% 30%;
+    /* #059669 - Success Green */
     --status-active-foreground: 0 0% 100%;
-    --status-warning: 32 95% 44%;       /* #D97706 - Warning Amber */
+    --status-warning: 32 95% 44%;
+    /* #D97706 - Warning Amber */
     --status-warning-foreground: 0 0% 100%;
-    --status-critical: 0 72% 51%;      /* #DC2626 - Danger Red */
+    --status-critical: 0 72% 51%;
+    /* #DC2626 - Danger Red */
     --status-critical-foreground: 0 0% 100%;
-    --status-info: 239 84% 67%;         /* #6366F1 - Info Indigo */
+    --status-info: 239 84% 67%;
+    /* #6366F1 - Info Indigo */
     --status-info-foreground: 0 0% 100%;
 
     --surface-elevated: 0 0% 100%;
@@ -66,52 +84,69 @@
 
   .dark {
     /* --- Colors --- */
-    --background: 224 48% 8%;           /* #0B1020 */
-    --foreground: 210 40% 96%;          /* #F1F5F9 - Text Primary */
+    --background: 224 48% 8%;
+    /* #0B1020 */
+    --foreground: 210 40% 96%;
+    /* #F1F5F9 - Text Primary */
 
-    --card: 223 36% 11%;                /* #121826 (Card surface) */
+    --card: 223 36% 11%;
+    /* #121826 (Card surface) */
     --card-foreground: 210 40% 96%;
 
     --popover: 223 36% 11%;
     --popover-foreground: 210 40% 96%;
 
-    --primary: 210 40% 91%;             /* #E2E8F0 - Slate 200 Primary */
+    --primary: 210 40% 91%;
+    /* #E2E8F0 - Slate 200 Primary */
     --primary-foreground: 224 48% 8%;
 
-    --secondary: 214 95% 60%;            /* #3B8DF8 - Accent Blue */
+    --secondary: 214 95% 60%;
+    /* #3B8DF8 - Accent Blue */
     --secondary-foreground: 0 0% 100%;
 
     --muted: 217 25% 16%;
-    --muted-foreground: 215 25% 65%;    /* #94A3B8 - Text Secondary */
+    --muted-foreground: 215 25% 65%;
+    /* #94A3B8 - Text Secondary */
 
-    --accent: 214 95% 60%;              /* #3B8DF8 - Accent Blue */
+    --accent: 214 95% 60%;
+    /* #3B8DF8 - Accent Blue */
     --accent-foreground: 224 48% 8%;
 
-    --destructive: 350 89% 60%;           /* #F43F5E - Danger Red */
+    --destructive: 350 89% 60%;
+    /* #F43F5E - Danger Red */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 28% 17%;              /* #1F2937 - Border */
+    --border: 215 28% 17%;
+    /* #1F2937 - Border */
     --input: 215 28% 17%;
-    --ring: 214 95% 60%;                /* #3B8DF8 - Accent Blue Focus ring */
+    --ring: 214 95% 60%;
+    /* #3B8DF8 - Accent Blue Focus ring */
 
     /* --- Sidebar Specific --- */
-    --sidebar-background: 224 48% 8%;   /* #0B1020 */
+    --sidebar-background: 224 48% 8%;
+    /* #0B1020 */
     --sidebar-foreground: 210 40% 96%;
     --sidebar-primary: 210 40% 91%;
     --sidebar-primary-foreground: 224 48% 8%;
-    --sidebar-accent: 214 95% 60%;       /* #3B8DF8 - Accent Blue */
+    --sidebar-accent: 214 95% 60%;
+    /* #3B8DF8 - Accent Blue */
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 215 28% 17%;
-    --sidebar-ring: 214 95% 60%;        /* #3B8DF8 - Accent Blue */
+    --sidebar-ring: 214 95% 60%;
+    /* #3B8DF8 - Accent Blue */
 
     /* --- Status Colors (Global System) --- */
-    --status-active: 142 72% 45%;       /* #22C55E - Success Green */
+    --status-active: 142 72% 45%;
+    /* #22C55E - Success Green */
     --status-active-foreground: 0 0% 100%;
-    --status-warning: 38 92% 50%;       /* #F59E0B - Warning Amber */
+    --status-warning: 38 92% 50%;
+    /* #F59E0B - Warning Amber */
     --status-warning-foreground: 0 0% 100%;
-    --status-critical: 350 89% 60%;      /* #F43F5E - Danger Red */
+    --status-critical: 350 89% 60%;
+    /* #F43F5E - Danger Red */
     --status-critical-foreground: 0 0% 100%;
-    --status-info: 235 89% 74%;         /* #818CF8 - Info Indigo */
+    --status-info: 235 89% 74%;
+    /* #818CF8 - Info Indigo */
     --status-info-foreground: 0 0% 100%;
 
     --surface-elevated: 217 38% 11%;
@@ -132,39 +167,51 @@
     @apply bg-background text-foreground antialiased;
   }
 
-  h1, .h1 {
+  h1,
+  .h1 {
     @apply text-foreground font-bold tracking-tight mb-4 block;
-    font-size: 2.25rem; /* 36px */
+    font-size: 2.25rem;
+    /* 36px */
     line-height: 2.5rem;
   }
 
-  h2, .h2 {
+  h2,
+  .h2 {
     @apply text-foreground font-semibold tracking-tight mb-3 block;
-    font-size: 1.5rem; /* 24px */
+    font-size: 1.5rem;
+    /* 24px */
     line-height: 2rem;
   }
 
-  h3, .h3 {
+  h3,
+  .h3 {
     @apply text-foreground font-semibold tracking-tight mb-2.5 block;
-    font-size: 1.25rem; /* 20px */
+    font-size: 1.25rem;
+    /* 20px */
     line-height: 1.75rem;
   }
 
-  h4, .h4 {
+  h4,
+  .h4 {
     @apply text-foreground font-medium tracking-tight mb-2 block;
-    font-size: 1.125rem; /* 18px */
+    font-size: 1.125rem;
+    /* 18px */
     line-height: 1.5rem;
   }
 
-  h5, .h5 {
+  h5,
+  .h5 {
     @apply text-foreground font-medium mb-1.5 block;
-    font-size: 0.95rem; /* 15px */
+    font-size: 0.95rem;
+    /* 15px */
     line-height: 1.35rem;
   }
 
-  h6, .h6 {
+  h6,
+  .h6 {
     @apply text-foreground font-medium mb-1 block;
-    font-size: 0.875rem; /* 14px */
+    font-size: 0.875rem;
+    /* 14px */
     line-height: 1.25rem;
   }
 }
@@ -178,21 +225,27 @@
   .text-status-active {
     color: hsl(var(--status-active));
   }
+
   .text-status-warning {
     color: hsl(var(--status-warning));
   }
+
   .text-status-critical {
     color: hsl(var(--status-critical));
   }
+
   .bg-status-active {
     background-color: hsl(var(--status-active));
   }
+
   .bg-status-warning {
     background-color: hsl(var(--status-warning));
   }
+
   .bg-status-critical {
     background-color: hsl(var(--status-critical));
   }
+
   .bg-status-info {
     background-color: hsl(var(--status-info));
   }
@@ -200,13 +253,15 @@
   .bg-surface-elevated {
     background-color: hsl(var(--surface-elevated));
   }
+
   .bg-surface-sunken {
     background-color: hsl(var(--surface-sunken));
   }
 
   /* Glassmorphism card utilities */
   .glass-card {
-    background: rgba(18, 24, 38, 0.85); /* Dark background matching #121826 surface */
+    background: rgba(18, 24, 38, 0.85);
+    /* Dark background matching #121826 surface */
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -225,12 +280,15 @@
   .glow-primary {
     box-shadow: 0 0 15px hsl(var(--primary) / 0.15);
   }
+
   .glow-secondary {
     box-shadow: 0 0 15px hsl(var(--secondary) / 0.15);
   }
+
   .glow-success {
     box-shadow: 0 0 15px hsl(var(--status-active) / 0.15);
   }
+
   .glow-critical {
     box-shadow: 0 0 15px hsl(var(--status-critical) / 0.15);
   }
@@ -240,12 +298,15 @@
     width: 6px;
     height: 6px;
   }
+
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-muted-foreground/20 rounded-full;
   }
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-muted-foreground/40;
   }
@@ -255,6 +316,7 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border-left-width: 4px !important;
   }
+
   .kpi-card:hover {
     transform: translateY(-2px);
   }
@@ -265,9 +327,11 @@
     border-color: rgba(14, 165, 233, 0.35) !important;
     border-left-color: rgb(14, 165, 233) !important;
   }
+
   .kpi-card-blue:hover {
     background-color: rgba(14, 165, 233, 0.06) !important;
   }
+
   .kpi-icon-blue {
     background-color: rgba(14, 165, 233, 0.12) !important;
     color: rgb(14, 165, 233) !important;
@@ -279,9 +343,11 @@
     border-color: rgba(5, 150, 105, 0.35) !important;
     border-left-color: rgb(5, 150, 105) !important;
   }
+
   .kpi-card-green:hover {
     background-color: rgba(5, 150, 105, 0.06) !important;
   }
+
   .kpi-icon-green {
     background-color: rgba(5, 150, 105, 0.12) !important;
     color: rgb(5, 150, 105) !important;
@@ -293,9 +359,11 @@
     border-color: rgba(99, 102, 241, 0.35) !important;
     border-left-color: rgb(99, 102, 241) !important;
   }
+
   .kpi-card-purple:hover {
     background-color: rgba(99, 102, 241, 0.06) !important;
   }
+
   .kpi-icon-purple {
     background-color: rgba(99, 102, 241, 0.12) !important;
     color: rgb(99, 102, 241) !important;
@@ -307,9 +375,11 @@
     border-color: rgba(217, 119, 6, 0.35) !important;
     border-left-color: rgb(217, 119, 6) !important;
   }
+
   .kpi-card-amber:hover {
     background-color: rgba(217, 119, 6, 0.06) !important;
   }
+
   .kpi-icon-amber {
     background-color: rgba(217, 119, 6, 0.12) !important;
     color: rgb(217, 119, 6) !important;
@@ -321,9 +391,11 @@
     border-color: rgba(220, 38, 38, 0.35) !important;
     border-left-color: rgb(220, 38, 38) !important;
   }
+
   .kpi-card-red:hover {
     background-color: rgba(220, 38, 38, 0.06) !important;
   }
+
   .kpi-icon-red {
     background-color: rgba(220, 38, 38, 0.12) !important;
     color: rgb(220, 38, 38) !important;
@@ -336,9 +408,11 @@
     border-left-color: rgb(59, 141, 248) !important;
     box-shadow: 0 0 30px rgba(59, 141, 248, 0.08) !important;
   }
+
   .dark .kpi-card-blue:hover {
     background: linear-gradient(135deg, rgba(59, 141, 248, 0.12), rgba(59, 141, 248, 0.04)) !important;
   }
+
   .dark .kpi-icon-blue {
     background-color: rgba(59, 141, 248, 0.15) !important;
     color: rgb(59, 141, 248) !important;
@@ -350,9 +424,11 @@
     border-left-color: rgb(34, 197, 94) !important;
     box-shadow: 0 0 30px rgba(34, 197, 94, 0.08) !important;
   }
+
   .dark .kpi-card-green:hover {
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04)) !important;
   }
+
   .dark .kpi-icon-green {
     background-color: rgba(34, 197, 94, 0.15) !important;
     color: rgb(34, 197, 94) !important;
@@ -364,9 +440,11 @@
     border-left-color: rgb(129, 140, 248) !important;
     box-shadow: 0 0 30px rgba(129, 140, 248, 0.08) !important;
   }
+
   .dark .kpi-card-purple:hover {
     background: linear-gradient(135deg, rgba(129, 140, 248, 0.12), rgba(129, 140, 248, 0.04)) !important;
   }
+
   .dark .kpi-icon-purple {
     background-color: rgba(129, 140, 248, 0.15) !important;
     color: rgb(129, 140, 248) !important;
@@ -378,9 +456,11 @@
     border-left-color: rgb(245, 158, 11) !important;
     box-shadow: 0 0 30px rgba(245, 158, 11, 0.08) !important;
   }
+
   .dark .kpi-card-amber:hover {
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04)) !important;
   }
+
   .dark .kpi-icon-amber {
     background-color: rgba(245, 158, 11, 0.15) !important;
     color: rgb(245, 158, 11) !important;
@@ -392,9 +472,11 @@
     border-left-color: rgb(244, 63, 94) !important;
     box-shadow: 0 0 30px rgba(244, 63, 94, 0.08) !important;
   }
+
   .dark .kpi-card-red:hover {
     background: linear-gradient(135deg, rgba(244, 63, 94, 0.12), rgba(244, 63, 94, 0.04)) !important;
   }
+
   .dark .kpi-icon-red {
     background-color: rgba(244, 63, 94, 0.15) !important;
     color: rgb(244, 63, 94) !important;
@@ -405,7 +487,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm 10mm;
+    margin: 34mm 10mm 20mm 10mm;
   }
 
   /* Hide all toast notifications, sidebar, header, navigation, and custom action controls */
@@ -423,7 +505,14 @@
   }
 
   /* Force layout to print full-width without margins/paddings from sidebar/header */
-  body, html, #root, main, .flex-1, .flex, .min-h-screen, [data-sidebar-wrapper] {
+  body,
+  html,
+  #root,
+  main,
+  .flex-1,
+  .flex,
+  .min-h-screen,
+  [data-sidebar-wrapper] {
     background: white !important;
     background-color: white !important;
     color: black !important;
@@ -451,16 +540,39 @@
   }
 
   /* Reduce font sizes and line heights for print optimization to prevent clipping and wrapping */
-  body, table, tr, td, th, span, p, div, label {
-    font-size: 10px !important;
+  body,
+  table,
+  tr,
+  td,
+  th,
+  span,
+  p,
+  div,
+  label {
+    font-size: 15px !important;
     line-height: 1.25 !important;
   }
 
   /* Specific heading overrides */
-  h1, .h1 { font-size: 14px !important; }
-  h2, .h2 { font-size: 12px !important; }
-  h3, .h3 { font-size: 11px !important; }
-  h4, .h4 { font-size: 10px !important; }
+  h1,
+  .h1 {
+    font-size: 20px !important;
+  }
+
+  h2,
+  .h2 {
+    font-size: 18px !important;
+  }
+
+  h3,
+  .h3 {
+    font-size: 16px !important;
+  }
+
+  h4,
+  .h4 {
+    font-size: 10px !important;
+  }
 
   /* Ensure tables use fixed layout so they stay inside A4 print bounds and wrap text */
   table {
@@ -469,37 +581,54 @@
     border-collapse: collapse !important;
   }
 
-  th, td {
+  th,
+  td {
     word-wrap: break-word !important;
     overflow-wrap: break-word !important;
-    padding: 3px 5px !important;
+    padding: 4px 8px !important;
+    text-align: left !important;
+    vertical-align: top !important;
+  }
+
+  .report-meta-text {
+    font-size: 12px !important;
+    color: #475569 !important;
   }
 
   /* Tighten spacing for print */
-  .p-10, .p-8, .md\:p-12 {
+  .p-10,
+  .p-8,
+  .md\:p-12 {
     padding: 15px !important;
   }
+
   .mb-8 {
     margin-bottom: 12px !important;
   }
+
   .mb-6 {
     margin-bottom: 8px !important;
   }
+
   .mt-16 {
     margin-top: 20px !important;
   }
+
   .pb-6 {
     padding-bottom: 10px !important;
   }
+
   .gap-y-6 {
     gap: 8px !important;
   }
 }
+
 /* Fix calendar picker indicator color in light and dark mode */
 input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
   filter: invert(0.5);
 }
+
 .dark input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1) brightness(1);
 }
@@ -523,10 +652,10 @@ thead,
   width: 794px !important;
   background-color: white !important;
   color: #0f172a !important;
-  padding: 35px 40px !important;
+  padding: 25px 30px !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 0px;
   margin: 0 auto;
   position: relative;
   box-sizing: border-box;
@@ -545,35 +674,37 @@ thead,
 }
 
 .report-ribbon {
-  display: inline-block;
-  background-color: #1e3a8a !important;
-  color: white !important;
-  font-size: 10px !important;
+  display: inline-block !important;
+  align-self: flex-start !important;
+  width: fit-content !important;
+  background-color: transparent !important;
+  background: none !important;
+  color: #1e3a8a !important;
   font-weight: 800 !important;
   letter-spacing: 0.05em !important;
   text-transform: uppercase !important;
-  padding: 5px 16px !important;
-  border-radius: 9999px 0 0 9999px !important;
-  margin-bottom: 12px !important;
+  padding: 0 0 6px 0 !important;
+  margin-bottom: 8px !important;
+  border-bottom: 2px solid #1e3a8a !important;
 }
 
 .report-divider {
   border-top: 1.5px solid #1e3a8a !important;
-  margin: 16px 0 !important;
+  margin: 12px 0 !important;
 }
 
 .report-info-grid {
   border: 1px solid #e2e8f0 !important;
   background-color: #f8fafc !important;
-  border-radius: 8px !important;
-  padding: 16px !important;
+  border-radius: 0 !important;
+  padding: 12px !important;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 20px !important;
+  gap: 12px;
+  margin-bottom: 12px !important;
 }
 
-.report-info-grid > div label {
+.report-info-grid>div label {
   font-size: 8px !important;
   font-weight: 700 !important;
   color: #94a3b8 !important;
@@ -583,7 +714,7 @@ thead,
   margin-bottom: 4px;
 }
 
-.report-info-grid > div span {
+.report-info-grid>div span {
   font-size: 12px !important;
   font-weight: 700 !important;
   color: #0f172a !important;
@@ -593,32 +724,35 @@ thead,
 .report-table {
   width: 100% !important;
   border-collapse: collapse !important;
-  margin-bottom: 20px !important;
+  margin-bottom: 12px !important;
   table-layout: fixed !important;
 }
 
 .report-table th {
   background-color: #f1f5f9 !important;
   color: #334155 !important;
-  font-size: 10px !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: uppercase !important;
   border: 1px solid #cbd5e1 !important;
-  padding: 6px 10px !important;
-  text-align: left;
+  padding: 5px 10px !important;
+  text-align: left !important;
+  vertical-align: middle !important;
 }
 
 .report-table td {
-  font-size: 10px !important;
+  font-size: 13px !important;
   color: #334155 !important;
   border: 1px solid #cbd5e1 !important;
-  padding: 6px 10px !important;
+  padding: 5px 10px !important;
   word-wrap: break-word !important;
   overflow-wrap: break-word !important;
+  text-align: left !important;
+  vertical-align: middle !important;
 }
 
 .badge-status {
-  font-size: 10px !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
   padding: 0 !important;
   border-radius: 0 !important;
@@ -643,11 +777,61 @@ thead,
 
 .report-feedback-box {
   border: 1px solid #cbd5e1 !important;
-  border-radius: 6px !important;
+  border-radius: 0 !important;
   padding: 10px 12px !important;
-  font-size: 10px !important;
+  font-size: 11px !important;
   color: #334155 !important;
   background-color: white !important;
   min-height: 36px;
-  margin-bottom: 16px !important;
+  margin-bottom: 12px !important;
+}
+
+/* Unify all font sizes inside the report sheet */
+.report-sheet {
+  font-size: 15px !important;
+}
+.report-sheet,
+.report-sheet * {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* Specific overrides for titles/headings to keep visual hierarchy */
+.report-sheet h1,
+.report-sheet .h1 {
+  font-size: 20px !important;
+}
+
+.report-sheet h2,
+.report-sheet .h2 {
+  font-size: 18px !important;
+}
+
+/* Bullet list fixes */
+.report-sheet ul {
+  list-style: none !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  display: block !important;
+}
+
+.report-sheet li {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
+  margin-bottom: 6px !important;
+  text-align: left !important;
+}
+
+.report-sheet li::before {
+  content: "•" !important;
+  color: #1e3a8a !important;
+  font-weight: bold !important;
+  flex-shrink: 0 !important;
+  line-height: inherit !important;
+  margin-top: -1px !important;
+}
+
+.report-meta-text {
+  font-size: 12px !important;
+  color: #475569 !important;
 }

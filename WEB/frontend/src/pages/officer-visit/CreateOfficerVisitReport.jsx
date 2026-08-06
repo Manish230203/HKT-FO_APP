@@ -1039,7 +1039,7 @@ export default function CreateOfficerVisitReport() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Inspection Date
@@ -1051,24 +1051,6 @@ export default function CreateOfficerVisitReport() {
                   onChange={(e) => setVisitDate(e.target.value)}
                   className="h-10 border-border rounded-lg text-sm"
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-slate-600 dark:text-slate-300 font-semibold">
-                  Visit Type
-                </label>
-                <Select
-                  value={visitType}
-                  onValueChange={(v) => setVisitType(v)}
-                >
-                  <SelectTrigger className="h-10 border border-border rounded-lg bg-background text-foreground text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Scheduled">Scheduled Visit</SelectItem>
-                    <SelectItem value="Surprise">Surprise Round</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="space-y-1.5">

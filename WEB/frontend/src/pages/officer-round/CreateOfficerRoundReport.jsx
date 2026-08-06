@@ -897,26 +897,6 @@ export default function CreateOfficerRoundReport() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-muted-foreground">
-                  Visit Type <span className="text-red-500">*</span>
-                </label>
-                <Select
-                  value={visitType}
-                  onValueChange={(val) => setVisitType(val)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Scheduled">Scheduled Visit</SelectItem>
-                    <SelectItem value="Surprise">
-                      Surprise Inspection
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-muted-foreground">
                   Officer Name <span className="text-red-500">*</span>
                 </label>
                 <Input

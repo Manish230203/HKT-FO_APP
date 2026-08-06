@@ -796,7 +796,12 @@ export default function OfficerRoundReportsList() {
                               return dateStr;
                             }
                           };
-                          return `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
+                          const siteVisits = reports
+                            .filter((r) => r.siteId === report.siteId)
+                            .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+                          const idx = siteVisits.findIndex(r => r.id === report.id);
+                          const reportIndex = idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+                          return `${reportIndex}-${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
                         })()}
                       >
                         {(() => {
@@ -815,7 +820,12 @@ export default function OfficerRoundReportsList() {
                               return dateStr;
                             }
                           };
-                          return `${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
+                          const siteVisits = reports
+                            .filter((r) => r.siteId === report.siteId)
+                            .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+                          const idx = siteVisits.findIndex(r => r.id === report.id);
+                          const reportIndex = idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+                          return `${reportIndex}-${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
                         })()}
                       </TableCell>
                       <TableCell>{report.unit}</TableCell>

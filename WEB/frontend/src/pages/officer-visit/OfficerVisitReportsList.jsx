@@ -339,8 +339,11 @@ export default function OfficerVisitReportsList() {
         return dateStr;
       }
     };
-    const globalIndex = (currentPage - 1) * itemsPerPage + index + 1;
-    const countStr = String(globalIndex).padStart(2, '0');
+    const siteVisits = reports
+      .filter((r) => r.siteId === report.siteId)
+      .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+    const idx = siteVisits.findIndex(r => r.id === report.id);
+    const countStr = String(idx !== -1 ? idx + 1 : 1).padStart(2, '0');
     return `${countStr}-${clientName}-${report.unit}-ODV-${formatDateToDMY(report.visitDate)}`;
   };
 
