@@ -9,20 +9,23 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
 
-import OfficerRoundReportsList from "./pages/officer-round/OfficerRoundReportsList";
-import CreateOfficerRoundReport from "./pages/officer-round/CreateOfficerRoundReport";
-import ObservationDetails from "./pages/officer-round/ObservationDetails";
-import ReportPreview from "./pages/officer-round/ReportPreview";
-import TemplateBuilder from "./pages/officer-round/TemplateBuilder";
+import NightVisitReportsList from "./pages/night-visit/NightVisitReportsList";
+import CreateNightVisitReport from "./pages/night-visit/CreateNightVisitReport";
+import ObservationDetails from "./pages/night-visit/ObservationDetails";
+import NightVisitReportPreview from "./pages/night-visit/NightVisitReportPreview";
+import NightVisitTemplateBuilder from "./pages/night-visit/NightVisitTemplateBuilder";
 
-import OfficerVisitReportsList from "./pages/officer-visit/OfficerVisitReportsList";
-import CreateOfficerVisitReport from "./pages/officer-visit/CreateOfficerVisitReport";
-import VisitReportPreview from "./pages/officer-visit/VisitReportPreview";
-import VisitTemplateBuilder from "./pages/officer-visit/VisitTemplateBuilder";
+import DayVisitReportsList from "./pages/day-visit/DayVisitReportsList";
+import CreateDayVisitReport from "./pages/day-visit/CreateDayVisitReport";
+import DayVisitReportPreview from "./pages/day-visit/DayVisitReportPreview";
+import DayVisitTemplateBuilder from "./pages/day-visit/DayVisitTemplateBuilder";
 import Dashboard from "./pages/Dashboard";
 import GeneralVisit from "./pages/general-visit/GeneralVisit";
 import GeneralVisitPreview from "./pages/general-visit/GeneralVisitPreview";
 import MySites from "./pages/MySites";
+
+import GuardAttendance from "./pages/attendance/GuardAttendance";
+import RegularizationHistory from "./pages/attendance/RegularizationHistory";
 
 import Login from "./pages/Login";
 import api from "./services/api";
@@ -129,6 +132,25 @@ const LoginRoute = ({ children }) => {
   return <>{children}</>;
 };
 
+const AdminRoute = ({ children }) => {
+  const userRaw = sessionStorage.getItem("user");
+  let isAdmin = false;
+  if (userRaw) {
+    try {
+      const user = JSON.parse(userRaw);
+      isAdmin = user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "it admin";
+    } catch (e) {
+      isAdmin = false;
+    }
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 const App = () => {
   const [alertState, setAlertState] = useState({ isOpen: false, title: "Alert", message: "" });
 
@@ -200,11 +222,11 @@ const App = () => {
                       {/* Officer Night Round Routes */}
                       <Route
                         path="/officer-rounds"
-                        element={<OfficerRoundReportsList />}
+                        element={<NightVisitReportsList />}
                       />
                       <Route
                         path="/officer-rounds/create"
-                        element={<CreateOfficerRoundReport />}
+                        element={<CreateNightVisitReport />}
                       />
                       <Route
                         path="/officer-rounds/observation/:id"
@@ -212,25 +234,29 @@ const App = () => {
                       />
                       <Route
                         path="/officer-rounds/preview/:id"
-                        element={<ReportPreview />}
+                        element={<NightVisitReportPreview />}
                       />
                       <Route
                         path="/officer-rounds/template-builder"
-                        element={<TemplateBuilder />}
+                        element={
+                          <AdminRoute>
+                            <NightVisitTemplateBuilder />
+                          </AdminRoute>
+                        }
                       />
 
                       {/* Officer Day Visit Routes */}
                       <Route
                         path="/officer-visits"
-                        element={<OfficerVisitReportsList />}
+                        element={<DayVisitReportsList />}
                       />
                       <Route
                         path="/officer-visits/reports"
-                        element={<OfficerVisitReportsList />}
+                        element={<DayVisitReportsList />}
                       />
                       <Route
                         path="/officer-visit/reports"
-                        element={<OfficerVisitReportsList />}
+                        element={<DayVisitReportsList />}
                       />
                       <Route
                         path="/officer-visit"
@@ -244,37 +270,55 @@ const App = () => {
                         path="/general-visits/preview/:id"
                         element={<GeneralVisitPreview />}
                       />
+
+                      {/* Attendance Routes */}
+                      <Route
+                        path="/attendance/guard-attendance"
+                        element={<GuardAttendance />}
+                      />
+                      <Route
+                        path="/attendance/regularize-history"
+                        element={<RegularizationHistory />}
+                      />
                       <Route
                         path="/officer-visits/create"
-                        element={<CreateOfficerVisitReport />}
+                        element={<CreateDayVisitReport />}
                       />
                       <Route
                         path="/officer-visit/create"
-                        element={<CreateOfficerVisitReport />}
+                        element={<CreateDayVisitReport />}
                       />
                       <Route
                         path="/officer-visits/edit/:id"
-                        element={<CreateOfficerVisitReport />}
+                        element={<CreateDayVisitReport />}
                       />
                       <Route
                         path="/officer-visit/edit/:id"
-                        element={<CreateOfficerVisitReport />}
+                        element={<CreateDayVisitReport />}
                       />
                       <Route
                         path="/officer-visits/preview/:id"
-                        element={<VisitReportPreview />}
+                        element={<DayVisitReportPreview />}
                       />
                       <Route
                         path="/officer-visit/preview/:id"
-                        element={<VisitReportPreview />}
+                        element={<DayVisitReportPreview />}
                       />
                       <Route
                         path="/officer-visits/template-builder"
-                        element={<VisitTemplateBuilder />}
+                        element={
+                          <AdminRoute>
+                            <DayVisitTemplateBuilder />
+                          </AdminRoute>
+                        }
                       />
                       <Route
                         path="/officer-visit/template-builder"
-                        element={<VisitTemplateBuilder />}
+                        element={
+                          <AdminRoute>
+                            <DayVisitTemplateBuilder />
+                          </AdminRoute>
+                        }
                       />
 
                       {/* Fallback */}

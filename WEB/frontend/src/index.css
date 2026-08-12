@@ -156,7 +156,7 @@
 
 @layer base {
   html {
-    font-size: 21.5px;
+    font-size: 18px;
   }
 
   * {
@@ -649,7 +649,8 @@ thead,
 
 /* --- High Fidelity Report Design System --- */
 .report-sheet {
-  width: 794px !important;
+  width: 100% !important;
+  max-width: 100% !important;
   background-color: white !important;
   color: #0f172a !important;
   padding: 25px 30px !important;
@@ -679,17 +680,17 @@ thead,
   width: fit-content !important;
   background-color: transparent !important;
   background: none !important;
-  color: #1e3a8a !important;
+  color: #1a3277 !important;
   font-weight: 800 !important;
   letter-spacing: 0.05em !important;
   text-transform: uppercase !important;
   padding: 0 0 6px 0 !important;
   margin-bottom: 8px !important;
-  border-bottom: 2px solid #1e3a8a !important;
+  border-bottom: 2px solid #1a3277 !important;
 }
 
 .report-divider {
-  border-top: 1.5px solid #1e3a8a !important;
+  border-top: 1.5px solid #1a3277 !important;
   margin: 12px 0 !important;
 }
 
@@ -705,7 +706,7 @@ thead,
 }
 
 .report-info-grid>div label {
-  font-size: 8px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
   color: #94a3b8 !important;
   text-transform: uppercase !important;
@@ -715,7 +716,7 @@ thead,
 }
 
 .report-info-grid>div span {
-  font-size: 12px !important;
+  font-size: 14px !important;
   font-weight: 700 !important;
   color: #0f172a !important;
   display: block;
@@ -731,7 +732,7 @@ thead,
 .report-table th {
   background-color: #f1f5f9 !important;
   color: #334155 !important;
-  font-size: 13px !important;
+  font-size: 14px !important;
   font-weight: 700 !important;
   text-transform: uppercase !important;
   border: 1px solid #cbd5e1 !important;
@@ -741,7 +742,7 @@ thead,
 }
 
 .report-table td {
-  font-size: 13px !important;
+  font-size: 14px !important;
   color: #334155 !important;
   border: 1px solid #cbd5e1 !important;
   padding: 5px 10px !important;
@@ -779,7 +780,7 @@ thead,
   border: 1px solid #cbd5e1 !important;
   border-radius: 0 !important;
   padding: 10px 12px !important;
-  font-size: 11px !important;
+  font-size: 14px !important;
   color: #334155 !important;
   background-color: white !important;
   min-height: 36px;
@@ -788,8 +789,9 @@ thead,
 
 /* Unify all font sizes inside the report sheet */
 .report-sheet {
-  font-size: 15px !important;
+  font-size: 14px !important;
 }
+
 .report-sheet,
 .report-sheet * {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
@@ -798,12 +800,12 @@ thead,
 /* Specific overrides for titles/headings to keep visual hierarchy */
 .report-sheet h1,
 .report-sheet .h1 {
-  font-size: 20px !important;
+  font-size: 24px !important;
 }
 
 .report-sheet h2,
 .report-sheet .h2 {
-  font-size: 18px !important;
+  font-size: 20px !important;
 }
 
 /* Bullet list fixes */
@@ -824,7 +826,7 @@ thead,
 
 .report-sheet li::before {
   content: "•" !important;
-  color: #1e3a8a !important;
+  color: #1a3277 !important;
   font-weight: bold !important;
   flex-shrink: 0 !important;
   line-height: inherit !important;
@@ -834,4 +836,31 @@ thead,
 .report-meta-text {
   font-size: 12px !important;
   color: #475569 !important;
+}
+
+/* Make default text size highly readable for main content and forms, while preserving layout-safe utility classes */
+body:not(.report-template-content),
+body:not(.report-template-content) p,
+body:not(.report-template-content) input,
+body:not(.report-template-content) select,
+body:not(.report-template-content) textarea,
+body:not(.report-template-content) label {
+  font-size: 1rem !important;
+  /* Uniform 16px font size for content & forms */
+}
+
+/* PDF/Print Layout fixes to match Web exactly */
+.report-template-content {
+  font-size: 14px !important;
+}
+
+.report-template-content *:not(h1):not(.h1):not(h2):not(.h2):not(h3):not(.h3):not(h4):not(.h4) {
+  font-size: 14px !important;
+}
+
+.report-template-content tr,
+.report-template-content .pdf-avoid-card,
+.report-template-content .pdf-section-title {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
 }

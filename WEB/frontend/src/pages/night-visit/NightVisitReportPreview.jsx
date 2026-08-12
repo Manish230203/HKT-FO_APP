@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getStoredReports } from "./mockData";
 import api from "../../services/api";
 import html2pdf from "html2pdf.js";
 import { toast } from "sonner";
 
-export function GeneralVisitReportTemplate({ report, hideTitle = false, hideLogo = false, hideHeader = false }) {
+export function NightVisitReportTemplate({ report, hideTitle = false, hideLogo = false, hideHeader = false }) {
   const clientName = report?.clientName || "N/A";
-  const siteName = report?.siteName || "N/A";
+  const unit = report?.unit || "N/A";
   const visitDate = report?.visitDate || report?.createdOn || "";
   const photosList = Array.isArray(report?.photos) ? report.photos : [];
   const photoCount = photosList.length;
@@ -25,20 +26,27 @@ export function GeneralVisitReportTemplate({ report, hideTitle = false, hideLogo
     } catch (e) { return dateStr; }
   };
 
-  const formatTo12Hour = (time24) => {
-    if (!time24 || time24 === "N/A") return "N/A";
-    try {
-      const [hoursStr, minutesStr] = time24.split(":");
-      const hours = parseInt(hoursStr, 10);
-      const minutes = parseInt(minutesStr, 10);
-      if (isNaN(hours) || isNaN(minutes)) return time24;
-      const ampm = hours >= 12 ? "PM" : "AM";
-      const hours12 = hours % 12 || 12;
-      return `${hours12.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")} ${ampm}`;
-    } catch (e) { return time24; }
+  const reportIdStr = report?.formattedReportId || `${report?.reportIndex || "03"}-${clientName}-${unit}-ONR-${formatDateToDMY(visitDate)}`;
+
+  const parseArray = (data, fallback) => {
+    if (Array.isArray(data)) return data;
+    if (typeof data === "string" && data.trim()) {
+      try { const parsed = JSON.parse(data); if (Array.isArray(parsed)) return parsed; } catch (e) { }
+    }
+    return fallback;
   };
 
-  const reportIdStr = report?.formattedReportId || `${report?.reportIndex || "01"}-${clientName}-${siteName}-OGV-${formatDateToDMY(visitDate)}`;
+  const guardsList = parseArray(report?.guards, []);
+  const rawChecklist = parseArray(report?.checklist, []);
+  const checklistItems = rawChecklist.filter((q) => {
+    const ansStr = (q.answer || q.status || "").toString().trim();
+    const remStr = (q.remarks || q.observation || "").toString().trim();
+    return ansStr !== "" || remStr !== "";
+  });
+
+  const lectureText = report?.lectureDetails || report?.lecture_details || "No short lecture details recorded.";
+  const randomCheckText = report?.randomChecking || report?.random_checking || "No random checking recorded.";
+  const suggestionsText = report?.suggestions || "No officer suggestions recorded.";
 
   return (
     <div className="report-template-content bg-white text-slate-900 mb-0 p-2">
@@ -64,10 +72,10 @@ export function GeneralVisitReportTemplate({ report, hideTitle = false, hideLogo
           )}
           <div className="flex justify-between items-start gap-4">
             <div className="flex flex-col min-w-0 shrink max-w-[65%]">
-              {!hideTitle && <h1 className="text-sm font-black text-[#1e3a8a] leading-tight uppercase tracking-tight w-fit">FIELD OFFICER GENERAL VISIT REPORT</h1>}
+              {!hideTitle && <h1 className="text-sm font-black text-[#1e3a8a] leading-tight uppercase tracking-tight w-fit">FIELD OFFICER NIGHT VISIT REPORT</h1>}
               <span className="text-[10px] font-bold text-slate-800 mt-1 uppercase font-mono break-all">REPORT ID : {reportIdStr}</span>
             </div>
-            <div className="text-right text-[10px] font-bold text-slate-800 leading-normal uppercase font-mono shrink-0 whitespace-nowrap">DATE : {formatDateToDMY(visitDate)} {formatTo12Hour(report?.startTime)} - {formatTo12Hour(report?.endTime)}</div>
+            <div className="text-right text-[10px] font-bold text-slate-800 leading-normal uppercase font-mono shrink-0 whitespace-nowrap">DATE : {formatDateToDMY(visitDate)} {report?.startTime || "—"} - {report?.endTime || "—"}</div>
           </div>
         </div>
       )}
@@ -76,31 +84,82 @@ export function GeneralVisitReportTemplate({ report, hideTitle = false, hideLogo
         <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">General Information</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border border-t-0 border-slate-200 bg-slate-50/70 rounded-b-lg">
           <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Client Name</label><span className="text-[13px] font-extrabold text-slate-900 break-words">{clientName}</span></div>
-          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Site Name</label><span className="text-[13px] font-extrabold text-slate-900 break-words">{siteName}</span></div>
-          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Visit Date</label><span className="text-[13px] font-extrabold text-slate-900">{formatDateToDMY(visitDate)}</span></div>
-          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Visit Type</label><span className="text-[13px] font-extrabold text-slate-900">General Visit</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Site Name</label><span className="text-[13px] font-extrabold text-slate-900 break-words">{unit}</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Shift</label><span className="text-[13px] font-extrabold text-slate-900">{report?.shift || "Night Shift"}</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Visit Type</label><span className="text-[13px] font-extrabold text-slate-900">Night Visit</span></div>
           <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Officer Name</label><span className="text-[13px] font-extrabold text-slate-900 break-words">{report?.officer || "—"}</span></div>
-          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Start Time</label><span className="text-[13px] font-extrabold text-slate-900">{formatTo12Hour(report?.startTime || "—")}</span></div>
-          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">End Time</label><span className="text-[13px] font-extrabold text-slate-900">{formatTo12Hour(report?.endTime || "—")}</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Start Time</label><span className="text-[13px] font-extrabold text-slate-900">{report?.startTime || "—"}</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">End Time</label><span className="text-[13px] font-extrabold text-slate-900">{report?.endTime || "—"}</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">GPS Location</label><span className="text-[13px] font-extrabold text-slate-900 break-all">{report?.gps || "—"}</span></div>
           <div className="col-span-2 md:col-span-4"><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Photo Evidence</label><span className="text-[13px] font-extrabold text-slate-900">{photoCount} {photoCount === 1 ? "Photo" : "Photos"}</span></div>
         </div>
       </div>
 
-      <div className="mb-6 pdf-avoid-card">
-        <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">Visit Parameters & Scope</div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 border border-t-0 border-slate-200 bg-slate-50/70 rounded-b-lg">
-          <div className="col-span-1"><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Person Visited</label><span className="text-[13px] font-extrabold text-slate-900 break-words">{report?.personVisited || "N/A"}</span></div>
-          <div className="col-span-3"><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Reason of Visit</label><span className="text-xs font-semibold text-slate-900 whitespace-pre-line break-words">{report?.reasonOfVisit || "Routine Inspection"}</span></div>
+      <div className="mb-6">
+        <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">Guards Present on Duty</div>
+        <div className="border border-t-0 border-slate-200 rounded-b-lg">
+          {guardsList.length > 0 ? (
+            <div className="w-full text-xs text-left">
+              <div className="bg-slate-200 border-b border-slate-300 text-slate-900 font-bold grid grid-cols-12 gap-2 p-2">
+                <div className="col-span-1 text-center">Sr No</div>
+                <div className="col-span-6">Guard Name</div>
+                <div className="col-span-3">Employee ID</div>
+                <div className="col-span-2 text-center">Status</div>
+              </div>
+              <div className="divide-y divide-slate-200">
+                {guardsList.map((g, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2 py-3 px-2 items-center pdf-avoid-card">
+                    <div className="col-span-1 text-center font-medium text-slate-600">{idx + 1}</div>
+                    <div className="col-span-6 font-semibold text-slate-900 break-words">{g.name}</div>
+                    <div className="col-span-3 text-slate-700 break-words">{g.employeeId}</div>
+                    <div className="col-span-2 text-center">
+                      <span className={`font-bold ${g.present !== false ? "text-emerald-600" : "text-red-600"}`}>
+                        {g.present !== false ? "Present" : "Absent"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (<div className="p-4 text-xs text-slate-500 italic">No guards listed for this visit.</div>)}
+        </div>
+      </div>
+
+      <div className="mb-6 pdf-avoid-card pdf-page-break pt-6">
+        <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">2. Inspection Checklist</div>
+        <div className="border border-t-0 border-slate-200 rounded-b-lg">
+          {checklistItems.length > 0 ? (
+            <div className="w-full text-xs text-left">
+              <div className="bg-slate-200 border-b border-slate-300 text-slate-900 font-bold grid grid-cols-12 gap-2 p-2">
+                <div className="col-span-1 text-center">SR. NO.</div>
+                <div className="col-span-5">Inspection Item</div>
+                <div className="col-span-2">Answer</div>
+                <div className="col-span-4">Remarks</div>
+              </div>
+              <div className="divide-y divide-slate-200">
+                {checklistItems.map((q, idx) => {
+                  const ans = (q.answer || q.status || "-").toString().trim();
+                  const clean = ans.toUpperCase();
+                  const isPositive = ["YES", "OK", "GOOD", "DONE", "PRESENT", "COMPLETED", "SERVICEABLE", "ADEQUATE", "SATISFACTORY"].includes(clean);
+                  const isNegative = ["NO", "NOT OK", "BAD", "NOT DONE", "ABSENT", "MISSED", "UNSERVICEABLE", "INADEQUATE"].includes(clean);
+                  const colorClass = isPositive ? "text-emerald-600" : isNegative ? "text-red-600" : "text-slate-900";
+                  return (
+                    <div key={idx} className="grid grid-cols-12 gap-2 py-3 px-2 items-center pdf-avoid-card">
+                      <div className="col-span-1 text-center font-medium text-slate-600">{idx + 1}</div>
+                      <div className="col-span-5 font-semibold text-slate-900 break-words">{q.question}</div>
+                      <div className={`col-span-2 font-bold ${colorClass}`}>{ans}</div>
+                      <div className="col-span-4 text-slate-700 break-words">{q.remarks || q.observation || "-"}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (<div className="p-4 text-xs text-slate-500 italic">No checklist items were answered for this visit.</div>)}
         </div>
       </div>
 
       <div className="mb-6 pdf-avoid-card">
-        <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">Remarks & Inspector Notes</div>
-        <div className="flex flex-col justify-center border border-t-0 border-slate-200 rounded-b-lg p-3 bg-slate-50 text-xs text-slate-700 min-h-[80px] whitespace-pre-line shadow-sm break-words">{(report?.remark || "No remarks recorded.").trim()}</div>
-      </div>
-
-      <div className="pdf-avoid-card">
-        <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">Photo Evidence</div>
+        <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">3. Photo Evidence</div>
         <div className="border border-t-0 border-slate-200 rounded-b-lg p-4 bg-slate-50 shadow-sm">
           {photoCount > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -115,11 +174,27 @@ export function GeneralVisitReportTemplate({ report, hideTitle = false, hideLogo
           )}
         </div>
       </div>
+
+      <div className="space-y-6 mb-6">
+        <div className="pdf-avoid-card">
+          <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">4. Short Lecture</div>
+          <div className="flex flex-col justify-center border border-t-0 border-slate-200 rounded-b-lg p-3 bg-slate-50 text-xs text-slate-700 min-h-[80px] break-words whitespace-pre-wrap">{lectureText.trim()}</div>
+        </div>
+        <div className="pdf-avoid-card">
+          <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">5. Random Checking</div>
+          <div className="flex flex-col justify-center border border-t-0 border-slate-200 rounded-b-lg p-3 bg-slate-50 text-xs text-slate-700 min-h-[80px] break-words whitespace-pre-wrap">{randomCheckText.trim()}</div>
+        </div>
+      </div>
+
+      <div className="pdf-avoid-card">
+        <div className="bg-[#1e3a8a] text-white text-[11px] font-extrabold uppercase tracking-wider px-4 py-2 rounded-t-lg border-l-4 border-indigo-400 pdf-section-title">6. Officer Suggestions</div>
+        <div className="flex flex-col justify-center border border-t-0 border-slate-200 rounded-b-lg p-3 bg-slate-50 text-xs text-slate-700 font-medium min-h-[80px] whitespace-pre-wrap shadow-sm break-words">{suggestionsText.trim()}</div>
+      </div>
     </div>
   );
 }
 
-export default function GeneralVisitPreview() {
+export default function ReportPreview() {
   const { id } = useParams();
   const navigate = useNavigate();
   const reportRef = useRef(null);
@@ -131,15 +206,27 @@ export default function GeneralVisitPreview() {
   useEffect(() => {
     const fetchReport = async () => {
       try {
-        const res = await api.get(`/general-visits`);
-        const allVisits = res.data || [];
-        setReportsList(allVisits);
-        const match = allVisits.find((r) => r.id === id);
-        if (match) {
-          setReport(match);
-        }
+        const res = await api.get(`/officer-rounds/reports/${id}`);
+        setReport(res.data);
       } catch (err) {
-        console.error("Failed to fetch general visit details:", err);
+        console.error(
+          "Failed to fetch report details from API, falling back to localStorage:",
+          err,
+        );
+        const local = getStoredReports().find((r) => r.id === id);
+        if (local) {
+          setReport(local);
+        } else {
+          console.error("Report not found in localStorage either.");
+        }
+      }
+    };
+    const fetchAllReports = async () => {
+      try {
+        const res = await api.get('/officer-rounds/reports');
+        setReportsList(res.data || []);
+      } catch (err) {
+        console.error("Failed to fetch reports list:", err);
       }
     };
     const fetchClients = async () => {
@@ -151,6 +238,7 @@ export default function GeneralVisitPreview() {
       }
     };
     fetchReport();
+    fetchAllReports();
     fetchClients();
   }, [id]);
 
@@ -158,18 +246,16 @@ export default function GeneralVisitPreview() {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-2">
         <p className="text-muted-foreground text-sm">Report not found.</p>
-        <Button
-          onClick={() => navigate("/general-visits")}
-          variant="outline"
-          className="text-xs rounded-lg"
-        >
+        <Button onClick={() => navigate("/officer-rounds")} variant="outline">
           Back to Reports
         </Button>
       </div>
     );
   }
 
-  const clientName = report.clientName || "N/A";
+  const clientName = report.clientId
+    ? clients.find((c) => c.id == report.clientId)?.name || `Client #${report.clientId}`
+    : report.clientName || "N/A";
 
   const formatDateToDMY = (dateStr) => {
     if (!dateStr) return "DD/MM/YY";
@@ -191,12 +277,12 @@ export default function GeneralVisitPreview() {
     if (reportsList.length === 0 || !report) return '01';
     const siteVisits = reportsList
       .filter((r) => r.siteId === report.siteId)
-      .sort((a, b) => (a.created_on || a.createdOn || 0) - (b.created_on || b.createdOn || 0));
+      .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
     const idx = siteVisits.findIndex(r => r.id === report.id);
     return idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
   })();
 
-  const formattedReportId = `${reportIndex}-${clientName}-${report.siteName}-OGV-${formatDateToDMY(report.visitDate || report.createdOn)}`;
+  const formattedReportId = `${reportIndex}-${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
 
   const handleDownloadPDF = async () => {
     if (isDownloading) return;
@@ -307,7 +393,7 @@ export default function GeneralVisitPreview() {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12 print:p-0 print:m-0 print:max-w-full">
+    <div className="space-y-4 max-w-4xl mx-auto pb-8 print:p-0 print:m-0 print:max-w-full">
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -333,12 +419,13 @@ export default function GeneralVisitPreview() {
       {/* Top Controls (Hidden on Print) */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:hidden">
         <Button
-          onClick={() => navigate("/general-visits")}
+          onClick={() => navigate("/officer-rounds")}
           variant="ghost"
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground -ml-2 w-fit text-xs font-semibold"
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground -ml-2 w-fit"
         >
           <ArrowLeft className="h-4.5 w-4.5" /> Back to Reports
         </Button>
+
         <div className="flex gap-2">
           <Button
             onClick={handleDownloadPDF}
@@ -355,12 +442,12 @@ export default function GeneralVisitPreview() {
         </div>
       </div>
 
-      {/* Main Report Document Container */}
+      {/* A4 Sheet Container */}
       <div
         ref={reportRef}
         className="report-sheet"
       >
-        <GeneralVisitReportTemplate report={fullReportData} />
+        <NightVisitReportTemplate report={fullReportData} />
       </div>
     </div>
   );

@@ -48,7 +48,7 @@ export default function GeneralVisit() {
   const [clientFilter, setClientFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
   const [siteFilter, setSiteFilter] = useState("all");
-  const [dateRangeType, setDateRangeType] = useState("all");
+  const [dateRangeType, setDateRangeType] = useState("today");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -68,8 +68,12 @@ export default function GeneralVisit() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [remark, setRemark] = useState("");
-  const [officer, setOfficer] = useState("");
-  const [visitType, setVisitType] = useState("");
+  const [officer, setOfficer] = useState(() => {
+    const userStr = sessionStorage.getItem("user");
+    const loggedInUser = userStr ? JSON.parse(userStr) : null;
+    return loggedInUser ? loggedInUser.name : "";
+  });
+  const [visitType, setVisitType] = useState("Scheduled");
   const [submitting, setSubmitting] = useState(false);
 
   // Selection and Bulk Actions State
@@ -156,7 +160,9 @@ export default function GeneralVisit() {
       setStartTime("");
       setEndTime("");
       setRemark("");
-      setOfficer("");
+      const userStr = sessionStorage.getItem("user");
+      const loggedInUser = userStr ? JSON.parse(userStr) : null;
+      setOfficer(loggedInUser ? loggedInUser.name : "");
       setVisitType("");
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get("open") === "true") {
@@ -169,6 +175,7 @@ export default function GeneralVisit() {
 
   // Helper to format report ID
   const getFormattedReportId = (v, index = 0) => {
+    if (v.reportId) return v.reportId;
     const formatDateToDMY = (dateStr) => {
       if (!dateStr) return "DD/MM/YY";
       try {
@@ -200,9 +207,32 @@ export default function GeneralVisit() {
     try {
       const clientName = clients.find((c) => c.id.toString() === selectedClientId)?.name || "";
       const siteName = sites.find((s) => s.id.toString() === selectedSiteId)?.name || "";
+      let newId = editId;
+      if (!newId) {
+        let maxId = 100;
+        visits.forEach((v) => {
+          const num = parseInt(v.id || v.oid, 10);
+          if (!isNaN(num) && num > maxId) maxId = num;
+        });
+        newId = String(maxId + 1);
+      }
+      const tempReportObj = {
+        id: newId,
+        clientId: parseInt(selectedClientId, 10),
+        clientName,
+        siteId: parseInt(selectedSiteId, 10),
+        siteName,
+        visitDate,
+        createdOn: new Date().toISOString(),
+      };
+      const formattedId = getFormattedReportId(tempReportObj, editId ? visits.findIndex(v => v.id === editId) : visits.length);
+
+      const now = new Date();
+      const endTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
       const payload = {
-        id: editId || `gv-${Date.now()}`,
+        id: newId,
+        reportId: formattedId,
         clientId: parseInt(selectedClientId, 10),
         clientName,
         siteId: parseInt(selectedSiteId, 10),
@@ -211,7 +241,7 @@ export default function GeneralVisit() {
         reasonOfVisit: reasonOfVisit.trim(),
         visitDate,
         startTime,
-        endTime,
+        endTime: editId ? endTime : endTimeStr,
         remark: remark.trim(),
         officer: officer.trim(),
         visitType: visitType,
@@ -229,7 +259,9 @@ export default function GeneralVisit() {
       setStartTime("");
       setEndTime("");
       setRemark("");
-      setOfficer("");
+      const userStr = sessionStorage.getItem("user");
+      const loggedInUser = userStr ? JSON.parse(userStr) : null;
+      setOfficer(loggedInUser ? loggedInUser.name : "");
       setVisitType("");
       setIsOpen(false);
       setEditId(null);
@@ -449,12 +481,14 @@ export default function GeneralVisit() {
         </div>
         <Button
           onClick={() => {
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
             setSelectedClientId("");
             setSelectedSiteId("");
             setPersonVisited("");
             setReasonOfVisit("");
             setVisitDate(new Date().toISOString().split("T")[0]);
-            setStartTime("");
+            setStartTime(timeStr);
             setEndTime("");
             setRemark("");
             setEditId(null);
@@ -681,7 +715,7 @@ export default function GeneralVisit() {
                             onCheckedChange={(checked) => handleSelectRow(v.id, !!checked)}
                           />
                         </TableCell>
-                        <TableCell className="font-bold text-foreground break-all max-w-[200px]">
+                        <TableCell className="font-semibold text-foreground whitespace-normal break-words max-w-[220px] text-xs leading-normal py-3">
                           {getFormattedReportId(v, globalIndex)}
                         </TableCell>
                         <TableCell className="font-semibold text-foreground whitespace-nowrap">
@@ -758,72 +792,69 @@ export default function GeneralVisit() {
         </CardContent>
       </Card>
 
-      {/* Creation/Edit Modal dialog */}
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="rounded-xl border max-w-[500px] bg-card text-xs max-h-[90vh] overflow-y-auto">
+        <DialogContent className="rounded-xl border max-w-[800px] bg-card text-xs max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm font-bold flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-blue-600" /> {editId ? "Edit General Visit" : "Log General Visit"}
             </DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-3 py-2">
-            {/* Client Select */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
-                Select Client <span className="text-rose-500">*</span>
-              </label>
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
-                  <SelectValue placeholder="Choose a client..." />
-                </SelectTrigger>
-                <SelectContent className="text-xs">
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Site Select */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
-                Select Site <span className="text-rose-500">*</span>
-              </label>
-              <Select value={selectedSiteId} onValueChange={setSelectedSiteId} disabled={!selectedClientId}>
-                <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
-                  <SelectValue placeholder={selectedClientId ? "Choose a site..." : "Select client first..."} />
-                </SelectTrigger>
-                <SelectContent className="text-xs">
-                  {sites.map((s) => (
-                    <SelectItem key={s.id} value={s.id.toString()}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Date Input */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
-                Date <span className="text-rose-500">*</span>
-              </label>
-              <Input
-                type="date"
-                value={visitDate}
-                onChange={(e) => setVisitDate(e.target.value)}
-                className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
-                required
-              />
-            </div>
-
-            {/* Officer Name & Visit Type */}
-            <div className="grid grid-cols-2 gap-2">
+          <form onSubmit={handleSubmit} className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              {/* Row 1 */}
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
+                  Select Client <span className="text-rose-500">*</span>
+                </label>
+                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                  <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
+                    <SelectValue placeholder="Choose a client..." />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs">
+                    {clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id.toString()}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
+                  Select Site <span className="text-rose-500">*</span>
+                </label>
+                <Select value={selectedSiteId} onValueChange={setSelectedSiteId} disabled={!selectedClientId}>
+                  <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
+                    <SelectValue placeholder={selectedClientId ? "Choose a site..." : "Select client first..."} />
+                  </SelectTrigger>
+                  <SelectContent className="text-xs">
+                    {sites.map((s) => (
+                      <SelectItem key={s.id} value={s.id.toString()}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 2 */}
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
+                  Date <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  type="date"
+                  value={visitDate}
+                  onChange={(e) => setVisitDate(e.target.value)}
+                  className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
                   Officer Name
                 </label>
                 <Input
@@ -832,28 +863,54 @@ export default function GeneralVisit() {
                   value={officer}
                   onChange={(e) => setOfficer(e.target.value)}
                   className="h-9 border-border bg-background text-foreground text-xs rounded-lg"
+                  disabled
                 />
               </div>
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
-                  Visit Type
-                </label>
-                <Select value={visitType} onValueChange={setVisitType}>
-                  <SelectTrigger className="h-9 border-border bg-background text-foreground text-xs rounded-lg">
-                    <SelectValue placeholder="Select type..." />
-                  </SelectTrigger>
-                  <SelectContent className="text-xs">
-                    <SelectItem value="Scheduled">Scheduled</SelectItem>
-                    <SelectItem value="Sudden">Sudden</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
-            {/* Start & End Time */}
-            <div className="grid grid-cols-2 gap-2">
+              {/* Row 3 - Full width */}
+              <div className="space-y-1 col-span-2">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
+                  Person Visited <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Name or details of the person visited..."
+                  value={personVisited}
+                  onChange={(e) => setPersonVisited(e.target.value)}
+                  className="h-9 border-border text-xs rounded-lg bg-background text-foreground"
+                  required
+                />
+              </div>
+
+              {/* Row 4 */}
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
+                  Reason of Visit <span className="text-rose-500">*</span>
+                </label>
+                <Textarea
+                  placeholder="Reason or description of the visit..."
+                  value={reasonOfVisit}
+                  onChange={(e) => setReasonOfVisit(e.target.value)}
+                  className="min-h-[80px] border-border text-xs rounded-lg bg-background text-foreground"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
+                  Remark
+                </label>
+                <Textarea
+                  placeholder="Write remark or notes..."
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  className="min-h-[80px] border-border text-xs rounded-lg bg-background text-foreground"
+                />
+              </div>
+
+              {/* Row 5 - Times at the end */}
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
                   Start Time
                 </label>
                 <Input
@@ -861,10 +918,12 @@ export default function GeneralVisit() {
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                   className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
+                  disabled
                 />
               </div>
+
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
+                <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300 whitespace-nowrap">
                   End Time
                 </label>
                 <Input
@@ -872,49 +931,9 @@ export default function GeneralVisit() {
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
                   className="h-9 border-border bg-background text-foreground text-xs rounded-lg [&::-webkit-calendar-picker-indicator]:invert"
+                  disabled
                 />
               </div>
-            </div>
-
-            {/* Person Visited Textarea */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
-                Person Visited <span className="text-rose-500">*</span>
-              </label>
-              <Textarea
-                placeholder="Name or details of the person visited..."
-                value={personVisited}
-                onChange={(e) => setPersonVisited(e.target.value)}
-                className="min-h-[50px] border-border text-xs rounded-lg bg-background text-foreground"
-                required
-              />
-            </div>
-
-            {/* Reason of Visit Textarea */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
-                Reason of Visit <span className="text-rose-500">*</span>
-              </label>
-              <Textarea
-                placeholder="Reason or description of the visit..."
-                value={reasonOfVisit}
-                onChange={(e) => setReasonOfVisit(e.target.value)}
-                className="min-h-[50px] border-border text-xs rounded-lg bg-background text-foreground"
-                required
-              />
-            </div>
-
-            {/* Remark Textarea */}
-            <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-200 dark:text-slate-300">
-                Remark
-              </label>
-              <Textarea
-                placeholder="Write remark or notes..."
-                value={remark}
-                onChange={(e) => setRemark(e.target.value)}
-                className="min-h-[50px] border-border text-xs rounded-lg bg-background text-foreground"
-              />
             </div>
 
             <DialogFooter className="gap-2 pt-2 border-t mt-3">

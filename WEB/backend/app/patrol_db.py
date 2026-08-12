@@ -9,8 +9,8 @@ SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{D
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     pool_pre_ping=True,
-    pool_size=15,
-    max_overflow=25,
+    pool_size=3,
+    max_overflow=2,
     pool_recycle=3600
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

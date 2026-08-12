@@ -50,9 +50,9 @@ export default function SelectVisitType() {
             <Sun className="h-8 w-8" />
           </div>
           <CardHeader className="p-0 space-y-2">
-            <CardTitle className="text-base font-bold text-foreground">Officer Day Visit</CardTitle>
+            <CardTitle className="text-base font-bold text-foreground">Day Visit</CardTitle>
             <CardDescription className="text-xs text-muted-foreground leading-relaxed max-w-[200px]">
-              Conduct a scheduled officer day visit report during the day shift.
+              Conduct a scheduled day visit report during the day shift.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -66,9 +66,9 @@ export default function SelectVisitType() {
             <Moon className="h-8 w-8" />
           </div>
           <CardHeader className="p-0 space-y-2">
-            <CardTitle className="text-base font-bold text-foreground">Officer Night Round</CardTitle>
+            <CardTitle className="text-base font-bold text-foreground">Night Visit</CardTitle>
             <CardDescription className="text-xs text-muted-foreground leading-relaxed max-w-[200px]">
-              Conduct a scheduled officer night round report during the night shift.
+              Conduct a scheduled night visit report during the night shift.
             </CardDescription>
           </CardHeader>
         </Card>

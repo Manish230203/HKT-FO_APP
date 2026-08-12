@@ -203,7 +203,17 @@ export function TimePicker24({ value, onChange }) {
   );
 }
 
-export default function CreateOfficerRoundReport() {
+const getCurrentTimeFormatted = (offsetMinutes = 0) => {
+  const d = new Date();
+  if (offsetMinutes) {
+    d.setMinutes(d.getMinutes() + offsetMinutes);
+  }
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
+export default function CreateNightVisitReport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get("edit");
@@ -243,10 +253,14 @@ export default function CreateOfficerRoundReport() {
     new Date().toISOString().split("T")[0],
   );
   const [visitType, setVisitType] = useState("Scheduled");
-  const [officer, setOfficer] = useState("");
+  const [officer, setOfficer] = useState(() => {
+    const userStr = sessionStorage.getItem("user");
+    const loggedInUser = userStr ? JSON.parse(userStr) : null;
+    return loggedInUser ? loggedInUser.name : "";
+  });
   const [shift, setShift] = useState("");
-  const [startTime, setStartTime] = useState("20:00");
-  const [endTime, setEndTime] = useState("22:00");
+  const [startTime, setStartTime] = useState(() => getCurrentTimeFormatted());
+  const [endTime, setEndTime] = useState(() => getCurrentTimeFormatted(120)); // default +2 hours
   const [gps, setGps] = useState("18.5204° N, 73.8567° E");
   const [photos, setPhotos] = useState([]);
   const [lectureDetails, setLectureDetails] = useState("");
@@ -436,12 +450,34 @@ export default function CreateOfficerRoundReport() {
           console.error("Failed to load report detail:", e);
         }
       } else {
-        setReportId(`rep-${Date.now()}`);
+        const initReportId = async () => {
+          try {
+            const res = await api.get("/officer-rounds/reports");
+            const reports = res.data || [];
+            let maxId = 100;
+            reports.forEach((r) => {
+              const num = parseInt(r.id || r.oid, 10);
+              if (!isNaN(num) && num > maxId) maxId = num;
+            });
+            setReportId(String(maxId + 1));
+          } catch (e) {
+            setReportId(String(Date.now()));
+          }
+        };
+        initReportId();
         const initRoundReportNo = async () => {
           try {
             const res = await api.get("/officer-rounds/reports");
-            const count = (res.data || []).length;
-            const nextNum = (count + 1).toString().padStart(3, "0");
+            const reports = res.data || [];
+            let maxNum = 0;
+            reports.forEach((r) => {
+              const match = (r.reportNo || r.report_no || "").match(/OR-\d+-(\d+)/);
+              if (match) {
+                const num = parseInt(match[1], 10);
+                if (num > maxNum) maxNum = num;
+              }
+            });
+            const nextNum = (maxNum + 1).toString().padStart(3, "0");
             setReportNo(`OR-${new Date().getFullYear()}-${nextNum}`);
           } catch (e) {
             setReportNo(
@@ -450,6 +486,8 @@ export default function CreateOfficerRoundReport() {
           }
         };
         initRoundReportNo();
+        setStartTime(getCurrentTimeFormatted());
+        setEndTime("");
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -646,11 +684,40 @@ export default function CreateOfficerRoundReport() {
       }
     }
 
+    const clientName = companies.find((c) => c.id === clientId)?.name || "N/A";
+    const siteName = unit || "N/A";
+    let reportIndex = "01";
+    try {
+      const res = await api.get("/officer-rounds/reports");
+      const reports = res.data || [];
+      const siteVisits = reports
+        .filter((r) => r.siteId === siteId)
+        .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+      const idx = siteVisits.length;
+      reportIndex = String(idx + 1).padStart(2, '0');
+    } catch (e) {
+      reportIndex = "01";
+    }
+
+    const formatDateToDMY = (dateStr) => {
+      if (!dateStr) return "DD/MM/YY";
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime()))
+          return dateStr.replace(/-/g, "/");
+        return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear().toString().slice(-2)}`;
+      } catch {
+        return dateStr;
+      }
+    };
+
+    const finalReportNo = `${reportIndex}-${clientName}-${siteName}-ONR-${formatDateToDMY(visitDate)}`;
+
+    const endTimeStr = getCurrentTimeFormatted();
+
     const newReport = {
       id: reportId,
-      reportNo:
-        reportNo ||
-        `OR-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      reportNo: finalReportNo,
       unit: unit || "Unspecified Unit",
       clientId: clientId || undefined,
       siteId: siteId || undefined,
@@ -659,7 +726,7 @@ export default function CreateOfficerRoundReport() {
       officer: officer || "Unspecified Officer",
       shift,
       startTime,
-      endTime,
+      endTime: editId ? endTime : endTimeStr,
       gps,
       photos,
       guards,
@@ -903,6 +970,7 @@ export default function CreateOfficerRoundReport() {
                   value={officer}
                   onChange={(e) => setOfficer(e.target.value)}
                   placeholder="e.g. Manish Kenjale"
+                  disabled
                 />
               </div>
 
@@ -933,13 +1001,21 @@ export default function CreateOfficerRoundReport() {
                   <label className="text-sm font-semibold text-muted-foreground">
                     Start Time
                   </label>
-                  <TimePicker24 value={startTime} onChange={setStartTime} />
+                  <Input
+                    value={startTime}
+                    className="h-10 border-border rounded-lg text-sm bg-background/50"
+                    disabled
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-muted-foreground">
                     End Time
                   </label>
-                  <TimePicker24 value={endTime} onChange={setEndTime} />
+                  <Input
+                    value={editId ? endTime : "(Calculated on submit)"}
+                    className="h-10 border-border rounded-lg text-sm bg-background/50"
+                    disabled
+                  />
                 </div>
               </div>
             </div>

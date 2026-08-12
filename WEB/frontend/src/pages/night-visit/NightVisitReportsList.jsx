@@ -54,7 +54,7 @@ const RibbonHeader = ({ title }) => (
   </div>
 );
 
-export default function OfficerRoundReportsList() {
+export default function NightVisitReportsList() {
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [search, setSearch] = useState("");
@@ -62,7 +62,7 @@ export default function OfficerRoundReportsList() {
   const [branchFilter, setBranchFilter] = useState("all");
   const [siteFilter, setSiteFilter] = useState("all");
   const [officerFilter, setOfficerFilter] = useState("all");
-  const [dateRangeType, setDateRangeType] = useState("all");
+  const [dateRangeType, setDateRangeType] = useState("today");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -201,7 +201,7 @@ export default function OfficerRoundReportsList() {
 
       const clientName = reportDetail.clientId
         ? clients.find((c) => c.id === reportDetail.clientId)?.name ||
-          `Client #${reportDetail.clientId}`
+        `Client #${reportDetail.clientId}`
         : "N/A";
       const formatDateToDMY = (dateStr) => {
         if (!dateStr) return "DD/MM/YY";
@@ -353,7 +353,7 @@ export default function OfficerRoundReportsList() {
         const detail = details[i];
         const clientName = detail.clientId
           ? clients.find((c) => c.id === detail.clientId)?.name ||
-            `Client #${detail.clientId}`
+          `Client #${detail.clientId}`
           : "N/A";
         const formatDateToDMY = (dateStr) => {
           if (!dateStr) return "DD/MM/YY";
@@ -421,21 +421,21 @@ export default function OfficerRoundReportsList() {
       (r.reportNo?.toLowerCase() ?? "").includes(search.toLowerCase()) ||
       (r.unit?.toLowerCase() ?? "").includes(search.toLowerCase()) ||
       (r.officer?.toLowerCase() ?? "").includes(search.toLowerCase());
-      
+
     const matchesClient = clientFilter === "all" || r.clientId == clientFilter;
-    
+
     // Resolve branch using site
     let matchesBranch = true;
     if (branchFilter !== "all") {
       const siteObj = sites.find((s) => s.id === r.siteId || s.name === r.unit);
       matchesBranch = siteObj && siteObj.BRANCH == branchFilter;
     }
-    
+
     const matchesSite = siteFilter === "all" || r.siteId == siteFilter || r.unit === siteFilter;
-    
+
     const matchesOfficer =
       officerFilter === "all" || r.officer === officerFilter;
-      
+
     let matchesDate = true;
     if (r.visitDate) {
       const reportDate = new Date(r.visitDate);
@@ -443,7 +443,7 @@ export default function OfficerRoundReportsList() {
         reportDate.setHours(0, 0, 0, 0);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
- 
+
         if (dateRangeType === "today") {
           matchesDate = reportDate.getTime() === today.getTime();
         } else if (dateRangeType === "yesterday") {
@@ -470,7 +470,7 @@ export default function OfficerRoundReportsList() {
         }
       }
     }
- 
+
     return (
       matchesSearch &&
       matchesClient &&
@@ -537,7 +537,7 @@ export default function OfficerRoundReportsList() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Officer Night Round Reports
+            Night Visit Reports
           </h1>
         </div>
         <Button
@@ -779,11 +779,11 @@ export default function OfficerRoundReportsList() {
                         />
                       </TableCell>
                       <TableCell
-                        className="font-semibold text-foreground text-xs break-all"
-                        title={(() => {
+                        className="font-semibold text-foreground text-xs whitespace-normal break-words max-w-[220px] py-3 leading-normal"
+                        title={report.reportNo || (() => {
                           const clientName = report.clientId
                             ? clients.find((c) => c.id == report.clientId)
-                                ?.name || `Client #${report.clientId}`
+                              ?.name || `Client #${report.clientId}`
                             : "N/A";
                           const formatDateToDMY = (dateStr) => {
                             if (!dateStr) return "DD/MM/YY";
@@ -804,10 +804,10 @@ export default function OfficerRoundReportsList() {
                           return `${reportIndex}-${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
                         })()}
                       >
-                        {(() => {
+                        {report.reportNo || (() => {
                           const clientName = report.clientId
                             ? clients.find((c) => c.id == report.clientId)
-                                ?.name || `Client #${report.clientId}`
+                              ?.name || `Client #${report.clientId}`
                             : "N/A";
                           const formatDateToDMY = (dateStr) => {
                             if (!dateStr) return "DD/MM/YY";
@@ -938,7 +938,7 @@ export default function OfficerRoundReportsList() {
         {bulkRoundDetails.map((report) => {
           const clientName = report.clientId
             ? clients.find((c) => c.id == report.clientId)?.name ||
-              `Client #${report.clientId}`
+            `Client #${report.clientId}`
             : "N/A";
           const formatDateToDMY = (dateStr) => {
             if (!dateStr) return "DD/MM/YY";
@@ -1088,7 +1088,7 @@ export default function OfficerRoundReportsList() {
                 </div>
                 <div className="text-center max-w-[40%]">
                   <h3 className="text-xs font-black text-[#1e3a8a] uppercase tracking-wider border-b-2 border-[#1e3a8a] pb-1">
-                    FIELD OFFICER NIGHT ROUND REPORT
+                    FIELD OFFICER NIGHT VISIT REPORT
                   </h3>
                 </div>
                 <div className="text-right max-w-[30%] pr-2">

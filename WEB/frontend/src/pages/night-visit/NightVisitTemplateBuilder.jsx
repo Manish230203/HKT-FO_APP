@@ -30,9 +30,9 @@ import { Badge } from "@/components/ui/badge";
 import { getStoredTemplates } from "./mockData";
 import api from "../../services/api";
 
-export default function TemplateBuilder() {
+export default function NightVisitTemplateBuilder() {
   const [templates, setTemplates] = useState([]);
-  const [activeTemplateId, setActiveTemplateId] = useState("temp-default");
+  const [activeTemplateId, setActiveTemplateId] = useState("101");
   // Modals state
   const [isAddTemplateOpen, setIsAddTemplateOpen] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");

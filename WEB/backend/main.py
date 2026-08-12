@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.officer_patrol import router as officer_router
+from app.routes.attendance import router as attendance_router
 from app.patrolling.routes import admin_routes
 import uvicorn
 
@@ -17,6 +18,7 @@ app.add_middleware(
 
 # Include routes under prefix /api
 app.include_router(officer_router, prefix="/api")
+app.include_router(attendance_router, prefix="/api")
 app.include_router(admin_routes.router, prefix="/api")
 
 @app.get("/")

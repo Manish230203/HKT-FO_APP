@@ -29,10 +29,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import api from "../../services/api";
 
-export default function VisitTemplateBuilder() {
+export default function DayVisitTemplateBuilder() {
   const [templates, setTemplates] = useState([]);
   const [activeTemplateId, setActiveTemplateId] =
-    useState("temp-default-visit");
+    useState("101");
   // Modals state
   const [isAddTemplateOpen, setIsAddTemplateOpen] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -289,10 +289,10 @@ export default function VisitTemplateBuilder() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">
-            Officer Day Visit Template Builder
+            Day Visit Template Builder
           </h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Build and organize checklist templates for Officer Day Visit rounds.
+            Build and organize checklist templates for Day Visit rounds.
           </p>
         </div>
 

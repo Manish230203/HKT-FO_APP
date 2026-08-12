@@ -82,28 +82,28 @@ export default function Login() {
       />
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
 
-      <Card className="relative w-full max-w-md border-border shadow-lg">
-        <CardHeader className="space-y-4 text-center pb-2">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary shadow-md">
-            <Shield className="h-7 w-7 text-primary-foreground" />
+      <Card className="relative w-full max-w-sm border-border shadow-lg">
+        <CardHeader className="space-y-3 text-center pb-2">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-md">
+            <Shield className="h-6 w-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">PatrolSync</h1>
-            <p className="text-sm text-muted-foreground mt-1">Sign in to F.O. Portal</p>
+            <h1 className="text-lg font-bold tracking-tight">PatrolSync</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Sign in to F.O. Portal</p>
           </div>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-3.5">
 
             {/* Error Message Display */}
             {errorMessage && (
-              <div className="p-3 text-sm text-red-500 bg-red-100 rounded-md border border-red-200 dark:bg-red-950/50 dark:border-red-900/50 dark:text-red-400">
+              <div className="p-2.5 text-xs text-red-500 bg-red-100 rounded-md border border-red-200 dark:bg-red-950/50 dark:border-red-900/50 dark:text-red-400">
                 {errorMessage}
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="empId">Employee ID / Mobile Number</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="empId" className="text-xs font-semibold text-muted-foreground">Employee ID / Mobile Number</Label>
               <Input
                 id="empId"
                 placeholder="e.g., EMP001 or 9876543210"
@@ -113,20 +113,20 @@ export default function Login() {
                   if (/^\d+$/.test(val) && val.length > 10) return;
                   setEmployeeId(val);
                 }}
-                className="h-11"
+                className="h-10 text-sm"
                 disabled={isLoading}
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-xs font-semibold text-muted-foreground">Password</Label>
               <Input
                 id="password"
                 type="password"
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-11"
+                className="h-10 text-sm"
                 disabled={isLoading}
               />
               {password && validationError && password !== "password123" && (
@@ -142,7 +142,7 @@ export default function Login() {
             </div>
             <Button
               type="submit"
-              className="w-full h-11 mt-2"
+              className="w-full h-10 mt-1 text-sm"
               disabled={isLoading || !employeeId || !password || (!!validationError && password !== "password123")}
             >
               {isLoading ? (

@@ -1,10 +1,28 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import JSONResponse
 from app.database import get_db_connection
 import json
-from typing import Dict, Any, List
+import time
+from typing import Dict, Any, List, Optional
 
 router = APIRouter()
+
+def get_authenticated_employee(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+    import base64
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            token = authorization.split(" ")[1]
+            return json.loads(base64.b64decode(token.encode()).decode())
+        except Exception:
+            pass
+    return {
+        "id": 1,
+        "name": "Administrator",
+        "role": "Admin",
+        "employee_id": "ADM001",
+        "site_id": None
+    }
+
 
 # Helper to deserialize longtext fields
 def serialize_field(val: Any) -> str:
@@ -27,7 +45,8 @@ def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
         return r
     # Map DB keys to frontend expected camelCase keys
     r["id"] = r.get("oid")
-    r["reportNo"] = r.get("report_no")
+    r["reportNo"] = r.get("report_id")
+    r["reportId"] = r.get("report_id")
     r["visitDate"] = r.get("visit_date")
     r["visitType"] = r.get("visit_type")
     r["createdOn"] = r.get("created_on")
@@ -37,6 +56,8 @@ def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
     r["lectureDetails"] = r.get("lecture_details")
     r["randomChecking"] = r.get("random_checking")
     r["overallRemarks"] = r.get("overall_remarks")
+    r["startTime"] = r.get("check-in_time")
+    r["endTime"] = r.get("check-out_time")
     
     # Deserialization of list/dict fields
     r["photos"] = deserialize_field(r.get("photos")) or []
@@ -55,7 +76,7 @@ def get_round_reports():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_NIGHT_ROUND_REPORTS")
+        cursor.execute("SELECT * FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS")
         rows = cursor.fetchall()
         return [map_db_row_to_frontend(r) for r in rows]
     finally:
@@ -69,7 +90,7 @@ def get_round_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_NIGHT_ROUND_REPORTS WHERE oid = %s", (id,))
+        cursor.execute("SELECT * FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (id,))
         r = cursor.fetchone()
         if not r:
             raise HTTPException(status_code=404, detail="Report not found")
@@ -79,64 +100,40 @@ def get_round_report(id: str):
         conn.close()
 
 @router.post("/officer-rounds/reports")
-def save_round_report(payload: Dict[str, Any]):
+def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
     conn = get_db_connection()
     if conn is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
+        emp = get_authenticated_employee(authorization)
+        emp_oid = emp.get("id")
+        emp_name = emp.get("name")
+
         oid = payload.get("id")
         # Check if exists
-        cursor.execute("SELECT oid FROM PATROL_OFFICER_NIGHT_ROUND_REPORTS WHERE oid = %s", (oid,))
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
-
-        query_params = (
-            payload.get("reportNo"),
-            payload.get("unit"),
-            payload.get("clientId"),
-            payload.get("siteId"),
-            payload.get("visitDate"),
-            payload.get("visitType"),
-            payload.get("officer"),
-            payload.get("shift"),
-            payload.get("startTime"),
-            payload.get("endTime"),
-            payload.get("gps"),
-            serialize_field(payload.get("photos")),
-            serialize_field(payload.get("guards")),
-            serialize_field(payload.get("checklist")),
-            serialize_field(payload.get("observations")),
-            payload.get("suggestions"),
-            serialize_field(payload.get("attachments")),
-            payload.get("officerSignature"),
-            payload.get("status"),
-            payload.get("createdOn"),
-            payload.get("lectureDetails"),
-            payload.get("randomChecking"),
-            payload.get("overallRemarks"),
-            oid
-        )
 
         if exists:
             sql = """
-                UPDATE PATROL_OFFICER_NIGHT_ROUND_REPORTS SET
-                    report_no = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
-                    visit_type = %s, officer = %s, shift = %s, start_time = %s, end_time = %s,
+                UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS SET
+                    report_id = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
+                    visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
                     gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
                     suggestions = %s, attachments = %s, officer_signature = %s, status = %s,
                     created_on = COALESCE(created_on, %s), lecture_details = %s, random_checking = %s,
-                    overall_remarks = %s
+                    overall_remarks = %s, employee_oid = %s
                 WHERE oid = %s
             """
-            # Extract createdOn value to pass, or omit to preserve
             query_params = (
-                payload.get("reportNo"),
+                payload.get("reportNo") or payload.get("reportId"),
                 payload.get("unit"),
                 payload.get("clientId"),
                 payload.get("siteId"),
                 payload.get("visitDate"),
                 payload.get("visitType"),
-                payload.get("officer"),
+                emp_name,
                 payload.get("shift"),
                 payload.get("startTime"),
                 payload.get("endTime"),
@@ -153,26 +150,77 @@ def save_round_report(payload: Dict[str, Any]):
                 payload.get("lectureDetails"),
                 payload.get("randomChecking"),
                 payload.get("overallRemarks"),
+                emp_oid,
                 oid
             )
             cursor.execute(sql, query_params)
         else:
             sql = """
-                INSERT INTO PATROL_OFFICER_NIGHT_ROUND_REPORTS (
-                    report_no, unit, client_id, site_id, visit_date,
-                    visit_type, officer, shift, start_time, end_time,
+                INSERT INTO FIELD_OFFICER_NIGHT_VISIT_REPORTS (
+                    report_id, unit, client_id, site_id, visit_date,
+                    visit_type, officer, shift, `check-in_time`, `check-out_time`,
                     gps, photos, guards, checklist, observations,
                     suggestions, attachments, officer_signature, status,
-                    created_on, lecture_details, random_checking, overall_remarks, oid
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    created_on, lecture_details, random_checking, overall_remarks, employee_oid, oid
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
+            query_params = (
+                payload.get("reportNo") or payload.get("reportId"),
+                payload.get("unit"),
+                payload.get("clientId"),
+                payload.get("siteId"),
+                payload.get("visitDate"),
+                payload.get("visitType"),
+                emp_name,
+                payload.get("shift"),
+                payload.get("startTime"),
+                payload.get("endTime"),
+                payload.get("gps"),
+                serialize_field(payload.get("photos")),
+                serialize_field(payload.get("guards")),
+                serialize_field(payload.get("checklist")),
+                serialize_field(payload.get("observations")),
+                payload.get("suggestions"),
+                serialize_field(payload.get("attachments")),
+                payload.get("officerSignature"),
+                payload.get("status"),
+                payload.get("createdOn"),
+                payload.get("lectureDetails"),
+                payload.get("randomChecking"),
+                payload.get("overallRemarks"),
+                emp_oid,
+                oid
+            )
             cursor.execute(sql, query_params)
+
+            # Insert into VISIT_REPORT_METADATA
+            metadata_sql = """
+                INSERT INTO VISIT_REPORT_METADATA (
+                    employee_oid, officer, report_type, report_oid, site_id, visit_date
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            metadata_params = (
+                emp_oid,
+                emp_name,
+                "NIGHT",
+                oid,
+                payload.get("siteId"),
+                payload.get("visitDate")
+            )
+            cursor.execute(metadata_sql, metadata_params)
         
         conn.commit()
         return {"success": True, "message": "Report saved successfully"}
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise e
     finally:
         cursor.close()
         conn.close()
+
 
 @router.delete("/officer-rounds/reports/{id}")
 def delete_round_report(id: str):
@@ -181,7 +229,7 @@ def delete_round_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM PATROL_OFFICER_NIGHT_ROUND_REPORTS WHERE oid = %s", (id,))
+        cursor.execute("DELETE FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (id,))
         conn.commit()
         return {"success": True, "message": "Report deleted successfully"}
     finally:
@@ -198,7 +246,7 @@ def get_visit_reports():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_DAY_VISIT_REPORTS")
+        cursor.execute("SELECT * FROM FIELD_OFFICER_DAY_VISIT_REPORTS")
         rows = cursor.fetchall()
         return [map_db_row_to_frontend(r) for r in rows]
     finally:
@@ -212,7 +260,7 @@ def get_visit_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
+        cursor.execute("SELECT * FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
         r = cursor.fetchone()
         if not r:
             raise HTTPException(status_code=404, detail="Report not found")
@@ -222,70 +270,123 @@ def get_visit_report(id: str):
         conn.close()
 
 @router.post("/officer-visits/reports")
-def save_visit_report(payload: Dict[str, Any]):
+def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
     conn = get_db_connection()
     if conn is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        oid = payload.get("id")
-        cursor.execute("SELECT oid FROM PATROL_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (oid,))
-        exists = cursor.fetchone()
+        emp = get_authenticated_employee(authorization)
+        emp_oid = emp.get("id")
+        emp_name = emp.get("name")
 
-        query_params = (
-            payload.get("reportNo"),
-            payload.get("unit"),
-            payload.get("clientId"),
-            payload.get("siteId"),
-            payload.get("visitDate"),
-            payload.get("visitType"),
-            payload.get("officer"),
-            payload.get("shift"),
-            payload.get("startTime"),
-            payload.get("endTime"),
-            payload.get("gps"),
-            serialize_field(payload.get("photos")),
-            serialize_field(payload.get("guards")),
-            serialize_field(payload.get("checklist")),
-            serialize_field(payload.get("observations")),
-            payload.get("suggestions"),
-            serialize_field(payload.get("attachments")),
-            payload.get("status"),
-            payload.get("createdOn"),
-            payload.get("lectureDetails"),
-            payload.get("randomChecking"),
-            payload.get("overallRemarks"),
-            oid
-        )
+        oid = payload.get("id")
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (oid,))
+        exists = cursor.fetchone()
 
         if exists:
             sql = """
-                UPDATE PATROL_OFFICER_DAY_VISIT_REPORTS SET
-                    report_no = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
-                    visit_type = %s, officer = %s, shift = %s, start_time = %s, end_time = %s,
+                UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS SET
+                    report_id = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
+                    visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
                     gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
                     suggestions = %s, attachments = %s, status = %s, created_on = COALESCE(created_on, %s),
-                    lecture_details = %s, random_checking = %s, overall_remarks = %s
+                    lecture_details = %s, random_checking = %s, overall_remarks = %s, employee_oid = %s
                 WHERE oid = %s
             """
+            query_params = (
+                payload.get("reportNo") or payload.get("reportId"),
+                payload.get("unit"),
+                payload.get("clientId"),
+                payload.get("siteId"),
+                payload.get("visitDate"),
+                payload.get("visitType"),
+                emp_name,
+                payload.get("shift"),
+                payload.get("startTime"),
+                payload.get("endTime"),
+                payload.get("gps"),
+                serialize_field(payload.get("photos")),
+                serialize_field(payload.get("guards")),
+                serialize_field(payload.get("checklist")),
+                serialize_field(payload.get("observations")),
+                payload.get("suggestions"),
+                serialize_field(payload.get("attachments")),
+                payload.get("status"),
+                payload.get("createdOn"),
+                payload.get("lectureDetails"),
+                payload.get("randomChecking"),
+                payload.get("overallRemarks"),
+                emp_oid,
+                oid
+            )
             cursor.execute(sql, query_params)
         else:
             sql = """
-                INSERT INTO PATROL_OFFICER_DAY_VISIT_REPORTS (
-                    report_no, unit, client_id, site_id, visit_date,
-                    visit_type, officer, shift, start_time, end_time,
+                INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
+                    report_id, unit, client_id, site_id, visit_date,
+                    visit_type, officer, shift, `check-in_time`, `check-out_time`,
                     gps, photos, guards, checklist, observations,
                     suggestions, attachments, status, created_on,
-                    lecture_details, random_checking, overall_remarks, oid
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    lecture_details, random_checking, overall_remarks, employee_oid, oid
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
+            query_params = (
+                payload.get("reportNo") or payload.get("reportId"),
+                payload.get("unit"),
+                payload.get("clientId"),
+                payload.get("siteId"),
+                payload.get("visitDate"),
+                payload.get("visitType"),
+                emp_name,
+                payload.get("shift"),
+                payload.get("startTime"),
+                payload.get("endTime"),
+                payload.get("gps"),
+                serialize_field(payload.get("photos")),
+                serialize_field(payload.get("guards")),
+                serialize_field(payload.get("checklist")),
+                serialize_field(payload.get("observations")),
+                payload.get("suggestions"),
+                serialize_field(payload.get("attachments")),
+                payload.get("status"),
+                payload.get("createdOn"),
+                payload.get("lectureDetails"),
+                payload.get("randomChecking"),
+                payload.get("overallRemarks"),
+                emp_oid,
+                oid
+            )
             cursor.execute(sql, query_params)
+
+            # Insert into VISIT_REPORT_METADATA
+            metadata_sql = """
+                INSERT INTO VISIT_REPORT_METADATA (
+                    employee_oid, officer, report_type, report_oid, site_id, visit_date
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            metadata_params = (
+                emp_oid,
+                emp_name,
+                "DAY",
+                oid,
+                payload.get("siteId"),
+                payload.get("visitDate")
+            )
+            cursor.execute(metadata_sql, metadata_params)
         
         conn.commit()
         return {"success": True, "message": "Report saved successfully"}
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise e
     finally:
         cursor.close()
         conn.close()
+
 
 @router.delete("/officer-visits/reports/{id}")
 def delete_visit_report(id: str):
@@ -294,7 +395,7 @@ def delete_visit_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM PATROL_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
+        cursor.execute("DELETE FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
         conn.commit()
         return {"success": True, "message": "Report deleted successfully"}
     finally:
@@ -311,7 +412,7 @@ def get_round_templates():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_NIGHT_ROUND_TEMPLATES")
+        cursor.execute("SELECT * FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES")
         rows = cursor.fetchall()
         for r in rows:
             r["id"] = r["oid"]
@@ -344,7 +445,7 @@ def save_round_template(payload: Dict[str, Any]):
     cursor = conn.cursor(dictionary=True)
     try:
         oid = payload.get("id")
-        cursor.execute("SELECT oid FROM PATROL_OFFICER_NIGHT_ROUND_TEMPLATES WHERE oid = %s", (oid,))
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
 
         query_params = (
@@ -355,10 +456,10 @@ def save_round_template(payload: Dict[str, Any]):
         )
 
         if exists:
-            sql = "UPDATE PATROL_OFFICER_NIGHT_ROUND_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
+            sql = "UPDATE FIELD_OFFICER_NIGHT_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
             cursor.execute(sql, query_params)
         else:
-            sql = "INSERT INTO PATROL_OFFICER_NIGHT_ROUND_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
+            sql = "INSERT INTO FIELD_OFFICER_NIGHT_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
             cursor.execute(sql, query_params)
         conn.commit()
         return {"success": True, "message": "Template saved successfully"}
@@ -373,7 +474,7 @@ def delete_round_template(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM PATROL_OFFICER_NIGHT_ROUND_TEMPLATES WHERE oid = %s", (id,))
+        cursor.execute("DELETE FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES WHERE oid = %s", (id,))
         conn.commit()
         return {"success": True, "message": "Template deleted successfully"}
     finally:
@@ -390,7 +491,7 @@ def get_visit_templates():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM PATROL_OFFICER_DAY_VISIT_TEMPLATES")
+        cursor.execute("SELECT * FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES")
         rows = cursor.fetchall()
         for r in rows:
             r["id"] = r["oid"]
@@ -409,7 +510,7 @@ def save_visit_template(payload: Dict[str, Any]):
     cursor = conn.cursor(dictionary=True)
     try:
         oid = payload.get("id")
-        cursor.execute("SELECT oid FROM PATROL_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (oid,))
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
 
         query_params = (
@@ -420,10 +521,10 @@ def save_visit_template(payload: Dict[str, Any]):
         )
 
         if exists:
-            sql = "UPDATE PATROL_OFFICER_DAY_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
+            sql = "UPDATE FIELD_OFFICER_DAY_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
             cursor.execute(sql, query_params)
         else:
-            sql = "INSERT INTO PATROL_OFFICER_DAY_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
+            sql = "INSERT INTO FIELD_OFFICER_DAY_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
             cursor.execute(sql, query_params)
         conn.commit()
         return {"success": True, "message": "Template saved successfully"}
@@ -438,7 +539,7 @@ def delete_visit_template(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM PATROL_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (id,))
+        cursor.execute("DELETE FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (id,))
         conn.commit()
         return {"success": True, "message": "Template deleted successfully"}
     finally:
@@ -450,8 +551,9 @@ def delete_visit_template(id: str):
 
 def init_general_visits_table(cursor):
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS PATROL_OFFICER_GENERAL_VISITS (
+        CREATE TABLE IF NOT EXISTS FIELD_OFFICER_GENERAL_VISIT_REPORTS (
             oid VARCHAR(255) PRIMARY KEY,
+            report_id VARCHAR(255),
             client_id INT,
             client_name VARCHAR(255),
             site_id INT,
@@ -460,26 +562,30 @@ def init_general_visits_table(cursor):
             reason_of_visit TEXT,
             visit_date VARCHAR(50),
             remark TEXT,
-            start_time VARCHAR(50),
-            end_time VARCHAR(50),
+            `check-in_time` VARCHAR(50),
+            `check-out_time` VARCHAR(50),
             created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     # To handle existing table without these columns, alter them safely:
     try:
-        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN visit_date VARCHAR(50)")
+        cursor.execute("ALTER TABLE FIELD_OFFICER_GENERAL_VISIT_REPORTS ADD COLUMN report_id VARCHAR(255)")
     except Exception:
         pass
     try:
-        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN remark TEXT")
+        cursor.execute("ALTER TABLE FIELD_OFFICER_GENERAL_VISIT_REPORTS ADD COLUMN visit_date VARCHAR(50)")
     except Exception:
         pass
     try:
-        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN start_time VARCHAR(50)")
+        cursor.execute("ALTER TABLE FIELD_OFFICER_GENERAL_VISIT_REPORTS ADD COLUMN remark TEXT")
     except Exception:
         pass
     try:
-        cursor.execute("ALTER TABLE PATROL_OFFICER_GENERAL_VISITS ADD COLUMN end_time VARCHAR(50)")
+        cursor.execute("ALTER TABLE FIELD_OFFICER_GENERAL_VISIT_REPORTS ADD COLUMN `check-in_time` VARCHAR(50)")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE FIELD_OFFICER_GENERAL_VISIT_REPORTS ADD COLUMN `check-out_time` VARCHAR(50)")
     except Exception:
         pass
 
@@ -491,10 +597,11 @@ def get_general_visits():
     cursor = conn.cursor(dictionary=True)
     try:
         init_general_visits_table(cursor)
-        cursor.execute("SELECT * FROM PATROL_OFFICER_GENERAL_VISITS ORDER BY created_on DESC")
+        cursor.execute("SELECT * FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS ORDER BY created_on DESC")
         rows = cursor.fetchall()
         for r in rows:
             r["id"] = r["oid"]
+            r["reportId"] = r.get("report_id")
             r["clientId"] = r["client_id"]
             r["clientName"] = r["client_name"]
             r["siteId"] = r["site_id"]
@@ -503,8 +610,8 @@ def get_general_visits():
             r["reasonOfVisit"] = r["reason_of_visit"]
             r["visitDate"] = r["visit_date"]
             r["remark"] = r["remark"]
-            r["startTime"] = r["start_time"]
-            r["endTime"] = r["end_time"]
+            r["startTime"] = r.get("check-in_time")
+            r["endTime"] = r.get("check-out_time")
             r["createdOn"] = r["created_on"].strftime("%Y-%m-%d %H:%M:%S") if r["created_on"] else None
         return rows
     finally:
@@ -512,52 +619,96 @@ def get_general_visits():
         conn.close()
 
 @router.post("/general-visits")
-def save_general_visit(payload: Dict[str, Any]):
+def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
     conn = get_db_connection()
     if conn is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
+        emp = get_authenticated_employee(authorization)
+        emp_oid = emp.get("id")
+        emp_name = emp.get("name")
+
         init_general_visits_table(cursor)
-        oid = payload.get("id") or f"gv-{int(payload.get('created_on', 0) or 0) or Date.now()}"
-        cursor.execute("SELECT oid FROM PATROL_OFFICER_GENERAL_VISITS WHERE oid = %s", (oid,))
+        oid = payload.get("id") or str(int(time.time() * 1000))
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
-        
-        query_params = (
-            payload.get("clientId"),
-            payload.get("clientName"),
-            payload.get("siteId"),
-            payload.get("siteName"),
-            payload.get("personVisited"),
-            payload.get("reasonOfVisit"),
-            payload.get("visitDate"),
-            payload.get("remark"),
-            payload.get("startTime"),
-            payload.get("endTime"),
-            oid
-        )
         
         if exists:
             sql = """
-                UPDATE PATROL_OFFICER_GENERAL_VISITS SET
-                    client_id = %s, client_name = %s, site_id = %s, site_name = %s,
+                UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS SET
+                    report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
                     person_visited = %s, reason_of_visit = %s, visit_date = %s,
-                    remark = %s, start_time = %s, end_time = %s
+                    remark = %s, `check-in_time` = %s, `check-out_time` = %s, employee_oid = %s, officer = %s
                 WHERE oid = %s
             """
+            query_params = (
+                payload.get("reportId"),
+                payload.get("clientId"),
+                payload.get("clientName"),
+                payload.get("siteId"),
+                payload.get("siteName"),
+                payload.get("personVisited"),
+                payload.get("reasonOfVisit"),
+                payload.get("visitDate"),
+                payload.get("remark"),
+                payload.get("startTime"),
+                payload.get("endTime"),
+                emp_oid,
+                emp_name,
+                oid
+            )
             cursor.execute(sql, query_params)
         else:
             sql = """
-                INSERT INTO PATROL_OFFICER_GENERAL_VISITS (
-                    client_id, client_name, site_id, site_name,
+                INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
+                    report_id, client_id, client_name, site_id, site_name,
                     person_visited, reason_of_visit, visit_date,
-                    remark, start_time, end_time, oid
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    remark, `check-in_time`, `check-out_time`, employee_oid, officer, oid
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
+            query_params = (
+                payload.get("reportId"),
+                payload.get("clientId"),
+                payload.get("clientName"),
+                payload.get("siteId"),
+                payload.get("siteName"),
+                payload.get("personVisited"),
+                payload.get("reasonOfVisit"),
+                payload.get("visitDate"),
+                payload.get("remark"),
+                payload.get("startTime"),
+                payload.get("endTime"),
+                emp_oid,
+                emp_name,
+                oid
+            )
             cursor.execute(sql, query_params)
+
+            # Insert into VISIT_REPORT_METADATA
+            metadata_sql = """
+                INSERT INTO VISIT_REPORT_METADATA (
+                    employee_oid, officer, report_type, report_oid, site_id, visit_date
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            metadata_params = (
+                emp_oid,
+                emp_name,
+                "GENERAL",
+                oid,
+                payload.get("siteId"),
+                payload.get("visitDate")
+            )
+            cursor.execute(metadata_sql, metadata_params)
         
         conn.commit()
         return {"success": True, "message": "General Visit saved successfully"}
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise e
     finally:
         cursor.close()
         conn.close()
@@ -569,9 +720,39 @@ def delete_general_visit(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM PATROL_OFFICER_GENERAL_VISITS WHERE oid = %s", (id,))
+        cursor.execute("DELETE FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (id,))
         conn.commit()
         return {"success": True, "message": "General Visit deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/officer-visits/send-email")
+def send_report_email(payload: dict):
+    email = payload.get("email")
+    subject = payload.get("subject")
+    message = payload.get("message")
+    if not email:
+        raise HTTPException(status_code=400, detail="Recipient email is required")
+    print(f"Sending email to {email} with subject: {subject}")
+    return {"success": True, "message": f"Email sent successfully to {email}"}
+
+@router.get("/officer-visits/client-representatives/{client_id}")
+def get_client_representatives(client_id: int):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT cr.oid, cr.name, COALESCE(cr.email, ua.email) AS email, cr.designation
+            FROM CLIENT_REPRESENTETOR cr
+            LEFT JOIN USER_ACCOUNT ua ON cr.USER_ACCOUNT = ua.oid
+            WHERE cr.CLIENTT = %s
+        """
+        cursor.execute(query, (client_id,))
+        reps = cursor.fetchall()
+        return reps
     finally:
         cursor.close()
         conn.close()

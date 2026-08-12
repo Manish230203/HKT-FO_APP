@@ -35,7 +35,7 @@ import api from "../../services/api";
 import {
   getStoredVisitReports,
   saveStoredVisitReports,
-} from "../officer-round/mockData";
+} from "../night-visit/mockData";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import JSZip from "jszip";
@@ -47,7 +47,7 @@ const formatTo12Hour = (time24) => {
   return time24;
 };
 
-export default function OfficerVisitReportsList() {
+export default function DayVisitReportsList() {
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [search, setSearch] = useState("");
@@ -55,7 +55,7 @@ export default function OfficerVisitReportsList() {
   const [branchFilter, setBranchFilter] = useState("all");
   const [siteFilter, setSiteFilter] = useState("all");
   const [officerFilter, setOfficerFilter] = useState("all");
-  const [dateRangeType, setDateRangeType] = useState("all");
+  const [dateRangeType, setDateRangeType] = useState("today");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -133,7 +133,7 @@ export default function OfficerVisitReportsList() {
   const handleDelete = async (id) => {
     if (
       window.confirm(
-        "Are you sure you want to delete this officer day visit report?",
+        "Are you sure you want to delete this day visit report?",
       )
     ) {
       try {
@@ -257,7 +257,7 @@ export default function OfficerVisitReportsList() {
         const detail = details[i];
         const clientName = detail.clientId
           ? clients.find((c) => c.id === detail.clientId)?.name ||
-            `Client #${detail.clientId}`
+          `Client #${detail.clientId}`
           : "N/A";
         const formatDateToDMY = (dateStr) => {
           if (!dateStr) return "DD/MM/YY";
@@ -320,9 +320,10 @@ export default function OfficerVisitReportsList() {
   };
 
   const getFormattedReportId = (report, index = 0) => {
+    if (report.reportNo) return report.reportNo;
     const clientName = report.clientId
       ? clients.find((c) => c.id == report.clientId)?.name ||
-        `Client #${report.clientId}`
+      `Client #${report.clientId}`
       : "N/A";
     const formatDateToDMY = (dateStr) => {
       if (!dateStr) return "DD/MM/YY";
@@ -451,7 +452,7 @@ export default function OfficerVisitReportsList() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <ClipboardList className="h-6 w-6 text-blue-600" /> Officer Day Visit
+            <ClipboardList className="h-6 w-6 text-blue-600" /> Day Visit
             Reports
           </h1>
         </div>
@@ -730,7 +731,7 @@ export default function OfficerVisitReportsList() {
                           }
                         />
                       </TableCell>
-                      <TableCell className="font-bold text-foreground py-3.5 break-all max-w-[220px]">
+                      <TableCell className="font-semibold text-foreground py-3 whitespace-normal break-words max-w-[220px] text-xs leading-normal">
                         {getFormattedReportId(report, index)}
                       </TableCell>
                       <TableCell className="font-semibold text-foreground/90 py-3.5">
@@ -823,7 +824,7 @@ export default function OfficerVisitReportsList() {
         {bulkVisitDetails.map((report) => {
           const clientName = report.clientId
             ? clients.find((c) => c.id == report.clientId)?.name ||
-              `Client #${report.clientId}`
+            `Client #${report.clientId}`
             : "N/A";
           let customerFeedbackText = "";
           let overallSuggestionsText = "";
@@ -1131,13 +1132,12 @@ export default function OfficerVisitReportsList() {
                               </td>
                               <td className="p-2 border border-slate-400 dark:border-slate-600 text-center">
                                 <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    c.status === "Satisfactory"
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.status === "Satisfactory"
                                       ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                       : c.status === "Unsatisfactory"
                                         ? "bg-rose-50 text-rose-700 border border-rose-200"
                                         : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800"
-                                  }`}
+                                    }`}
                                 >
                                   {c.status}
                                 </span>

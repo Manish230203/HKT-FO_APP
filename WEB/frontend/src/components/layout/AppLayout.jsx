@@ -15,6 +15,7 @@ import {
   MapPin,
   User,
   LogOut,
+  CalendarDays,
 } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useTheme } from "@/hooks/useTheme";
@@ -67,9 +68,14 @@ export function AppLayout({ children }) {
   const [visitsOpen, setVisitsOpen] = useState(() =>
     location.pathname.startsWith("/officer-visits"),
   );
+  const [attendanceOpen, setAttendanceOpen] = useState(() =>
+    location.pathname.startsWith("/attendance"),
+  );
+
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin" || currentUser?.role?.toLowerCase() === "it admin";
 
   const roundsGroup = {
-    title: "Officer Night Rounds",
+    title: "Night Visits",
     icon: ClipboardList,
     isOpen: roundsOpen,
     setIsOpen: setRoundsOpen,
@@ -80,16 +86,16 @@ export function AppLayout({ children }) {
         href: "/officer-rounds/create",
         icon: PlusCircle,
       },
-      {
+      isAdmin && {
         name: "Template Builder",
         href: "/officer-rounds/template-builder",
         icon: Settings,
       },
-    ],
+    ].filter(Boolean),
   };
 
   const visitsGroup = {
-    title: "Officer Day Visits",
+    title: "Day Visits",
     icon: ClipboardList,
     isOpen: visitsOpen,
     setIsOpen: setVisitsOpen,
@@ -100,11 +106,22 @@ export function AppLayout({ children }) {
         href: "/officer-visits/create",
         icon: PlusCircle,
       },
-      {
+      isAdmin && {
         name: "Template Builder",
         href: "/officer-visits/template-builder",
         icon: Settings,
       },
+    ].filter(Boolean),
+  };
+
+  const attendanceGroup = {
+    title: "Attendance",
+    icon: CalendarDays,
+    isOpen: attendanceOpen,
+    setIsOpen: setAttendanceOpen,
+    items: [
+      { name: "Guard Attendance", href: "/attendance/guard-attendance", icon: User },
+      { name: "Regularize History", href: "/attendance/regularize-history", icon: FileText },
     ],
   };
 
@@ -119,11 +136,10 @@ export function AppLayout({ children }) {
         {/* Header Toggle */}
         <button
           onClick={() => group.setIsOpen(!group.isOpen)}
-          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
-            isAnyChildActive
+          className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${isAnyChildActive
               ? "bg-slate-100 dark:bg-slate-800 text-sky-500 dark:text-sky-400"
               : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-          }`}
+            }`}
         >
           <div className="flex items-center gap-3">
             <Icon className="h-4 w-4 shrink-0" />
@@ -146,11 +162,10 @@ export function AppLayout({ children }) {
                 <Link
                   key={item.name}
                   to={item.href}
-                  className={`flex items-center gap-2.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isActive
+                  className={`flex items-center gap-2.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive
                       ? "bg-sky-500 text-white shadow-sm"
                       : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
-                  }`}
+                    }`}
                 >
                   <ChildIcon className="h-3.5 w-3.5 shrink-0" />
                   {item.name}
@@ -177,39 +192,38 @@ export function AppLayout({ children }) {
           <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
             <Link
               to="/"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
-                location.pathname === "/" || location.pathname === "/dashboard"
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${location.pathname === "/" || location.pathname === "/dashboard"
                   ? "bg-sky-500 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
-              }`}
+                }`}
             >
               <LayoutDashboard className="h-4.5 w-4.5" />
               Dashboard
             </Link>
             <Link
-              to="/general-visits"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
-                location.pathname.startsWith("/general-visits")
-                  ? "bg-sky-500 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
-              }`}
-            >
-              <BookOpen className="h-4.5 w-4.5" />
-              General Visit
-            </Link>
-            <Link
               to="/my-sites"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
-                location.pathname.startsWith("/my-sites")
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${location.pathname.startsWith("/my-sites")
                   ? "bg-sky-500 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
-              }`}
+                }`}
             >
               <MapPin className="h-4.5 w-4.5" />
               My Sites
             </Link>
+            {renderGroup(attendanceGroup)}
             {renderGroup(roundsGroup)}
             {renderGroup(visitsGroup)}
+
+            <Link
+              to="/general-visits"
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${location.pathname.startsWith("/general-visits")
+                  ? "bg-sky-500 text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
+                }`}
+            >
+              <BookOpen className="h-4.5 w-4.5" />
+              General Visits
+            </Link>
           </nav>
         </aside>
 

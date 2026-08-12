@@ -61,7 +61,7 @@ import {
 import {
   getStoredVisitReports,
   saveStoredVisitReports,
-} from "../officer-round/mockData";
+} from "../night-visit/mockData";
 import api from "../../services/api";
 
 const PRE_DEFINED_QUESTIONS = [
@@ -237,7 +237,17 @@ export function TimePicker24({ value, onChange }) {
   );
 }
 
-export default function CreateOfficerVisitReport() {
+const getCurrentTimeFormatted = (offsetMinutes = 0) => {
+  const d = new Date();
+  if (offsetMinutes) {
+    d.setMinutes(d.getMinutes() + offsetMinutes);
+  }
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
+export default function CreateDayVisitReport() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditMode = !!id;
@@ -269,10 +279,14 @@ export default function CreateOfficerVisitReport() {
     new Date().toISOString().split("T")[0],
   );
   const [visitType, setVisitType] = useState("Scheduled");
-  const [officerName, setOfficerName] = useState("");
+  const [officerName, setOfficerName] = useState(() => {
+    const userStr = sessionStorage.getItem("user");
+    const loggedInUser = userStr ? JSON.parse(userStr) : null;
+    return loggedInUser ? loggedInUser.name : "";
+  });
   const [shift, setShift] = useState("Morning");
-  const [startTime, setStartTime] = useState("08:00");
-  const [endTime, setEndTime] = useState("16:00");
+  const [startTime, setStartTime] = useState(() => getCurrentTimeFormatted());
+  const [endTime, setEndTime] = useState(() => getCurrentTimeFormatted(480)); // default +8 hours
   const [gpsLocation, setGpsLocation] = useState("18.601955, 73.825619");
   // Client & Site selection
   const [companies, setCompanies] = useState([]);
@@ -642,8 +656,16 @@ export default function CreateOfficerVisitReport() {
       const initNewReport = async () => {
         try {
           const res = await api.get("/officer-visits/reports");
-          const count = (res.data || []).length;
-          const nextNum = (count + 1).toString().padStart(3, "0");
+          const reports = res.data || [];
+          let maxNum = 0;
+          reports.forEach((r) => {
+            const match = (r.reportNo || r.report_no || "").match(/OV-\d+-(\d+)/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNum) maxNum = num;
+            }
+          });
+          const nextNum = (maxNum + 1).toString().padStart(3, "0");
           setReportNo(`OV-${new Date().getFullYear()}-${nextNum}`);
         } catch (e) {
           setReportNo(
@@ -664,11 +686,13 @@ export default function CreateOfficerVisitReport() {
           },
         );
       }
-      const token = sessionStorage.getItem("access_token");
-      if (token) {
+      setStartTime(getCurrentTimeFormatted());
+      setEndTime("");
+      const userStr = sessionStorage.getItem("user");
+      if (userStr) {
         try {
-          const payload = JSON.parse(atob(token.split(".")[1]));
-          setOfficerName(payload.name || payload.username || "Field Officer");
+          const loggedInUser = JSON.parse(userStr);
+          setOfficerName(loggedInUser.name || "Field Officer");
         } catch (e) {
           setOfficerName("Field Officer");
         }
@@ -746,12 +770,58 @@ export default function CreateOfficerVisitReport() {
     }
     
     setLoading(true);
-    const targetUnit =
-      sites.find((s) => s.id === siteId)?.name || "Unknown Site";
+    const clientName = companies.find((c) => c.id === clientId)?.name || "N/A";
+    const siteName = sites.find((s) => s.id === siteId)?.name || "N/A";
+    let reportIndex = "01";
+    let finalId = id;
+    try {
+      const res = await api.get("/officer-visits/reports");
+      const reports = res.data || [];
+      const siteVisits = reports
+        .filter((r) => r.siteId === siteId)
+        .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+      const idx = siteVisits.length;
+      reportIndex = String(idx + 1).padStart(2, '0');
+
+      if (!isEditMode) {
+        let maxId = 100;
+        reports.forEach((r) => {
+          const num = parseInt(r.id || r.oid, 10);
+          if (!isNaN(num) && num > maxId) maxId = num;
+        });
+        finalId = String(maxId + 1);
+      }
+    } catch (e) {
+      reportIndex = "01";
+      if (!isEditMode) {
+        finalId = String(Date.now());
+      }
+    }
+
+    const formatDateToDMY = (dateStr) => {
+      if (!dateStr) return "DD/MM/YY";
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) {
+          return dateStr.replace(/-/g, "/");
+        }
+        const day = d.getDate().toString().padStart(2, "0");
+        const month = (d.getMonth() + 1).toString().padStart(2, "0");
+        const year = d.getFullYear().toString().slice(-2);
+        return `${day}/${month}/${year}`;
+      } catch (e) {
+        return dateStr;
+      }
+    };
+
+    const finalReportNo = `${reportIndex}-${clientName}-${siteName}-ODV-${formatDateToDMY(visitDate)}`;
+
+    const endTimeStr = getCurrentTimeFormatted();
+
     const payload = {
-      id: isEditMode ? id : `rep-${Date.now()}`,
-      reportNo,
-      unit: targetUnit,
+      id: finalId,
+      reportNo: finalReportNo,
+      unit: siteName,
       clientId,
       siteId,
       visitDate,
@@ -759,7 +829,7 @@ export default function CreateOfficerVisitReport() {
       officer: officerName,
       shift,
       startTime,
-      endTime,
+      endTime: isEditMode ? endTime : endTimeStr,
       gps: gpsLocation,
       guards: guards,
       checklist: preDefinedAnswers,
@@ -1076,12 +1146,20 @@ export default function CreateOfficerVisitReport() {
                 <label className="text-slate-600 dark:text-slate-300 font-semibold">
                   Start Time
                 </label>
-                <TimePicker24 value={startTime} onChange={setStartTime} />
+                <Input
+                  value={startTime}
+                  className="h-10 border-border rounded-lg text-sm bg-background/50"
+                  disabled
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-slate-600 dark:text-slate-300 font-semibold">End Time</label>
-                <TimePicker24 value={endTime} onChange={setEndTime} />
+                <Input
+                  value={isEditMode ? endTime : "(Calculated on submit)"}
+                  className="h-10 border-border rounded-lg text-sm bg-background/50"
+                  disabled
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -1093,6 +1171,7 @@ export default function CreateOfficerVisitReport() {
                   onChange={(e) => setOfficerName(e.target.value)}
                   placeholder="Officer Name"
                   className="h-10 border-border rounded-lg text-sm"
+                  disabled
                 />
               </div>
 

@@ -452,7 +452,7 @@ export const getStoredTemplates = () => {
   if (!data) {
     const initial = [
       {
-        id: "temp-default",
+        id: "101",
         name: "Officer Night Round Template",
         sections: [
           "Guards & Patrol",
@@ -486,7 +486,7 @@ export const getStoredVisitTemplates = () => {
   if (!data) {
     const initial = [
       {
-        id: "temp-default-visit",
+        id: "101",
         name: "Officer Day Visit Template",
         sections: ["General"],
         questions: PRE_DEFINED_QUESTIONS_MOCK,
