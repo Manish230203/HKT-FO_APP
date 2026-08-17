@@ -1363,7 +1363,7 @@ def get_clients(db: Session = Depends(get_patrol_db)):
 
 @router.get("/assessments/branches")
 def get_branches(db: Session = Depends(get_patrol_db)):
-    sql = text("SELECT oid as id, name FROM BRANCH ORDER BY name ASC")
+    sql = text("SELECT oid as id, name, email_access as emailAccess, email_access FROM BRANCH ORDER BY name ASC")
     branches = db.execute(sql).mappings().all()
     return [dict(b) for b in branches]
 

@@ -323,158 +323,148 @@
 
   /* Blue Information Cards */
   .kpi-card-blue {
-    background-color: rgba(14, 165, 233, 0.04) !important;
-    border-color: rgba(14, 165, 233, 0.35) !important;
-    border-left-color: rgb(14, 165, 233) !important;
+    background-color: rgba(14, 165, 233, 0.12) !important;
+    border-color: rgba(14, 165, 233, 0.4) !important;
   }
 
   .kpi-card-blue:hover {
-    background-color: rgba(14, 165, 233, 0.06) !important;
+    background-color: rgba(14, 165, 233, 0.18) !important;
   }
 
   .kpi-icon-blue {
-    background-color: rgba(14, 165, 233, 0.12) !important;
+    background-color: rgba(14, 165, 233, 0.2) !important;
     color: rgb(14, 165, 233) !important;
   }
 
   /* Green Success Cards */
   .kpi-card-green {
-    background-color: rgba(5, 150, 105, 0.04) !important;
-    border-color: rgba(5, 150, 105, 0.35) !important;
-    border-left-color: rgb(5, 150, 105) !important;
+    background-color: rgba(5, 150, 105, 0.12) !important;
+    border-color: rgba(5, 150, 105, 0.4) !important;
   }
 
   .kpi-card-green:hover {
-    background-color: rgba(5, 150, 105, 0.06) !important;
+    background-color: rgba(5, 150, 105, 0.18) !important;
   }
 
   .kpi-icon-green {
-    background-color: rgba(5, 150, 105, 0.12) !important;
+    background-color: rgba(5, 150, 105, 0.2) !important;
     color: rgb(5, 150, 105) !important;
   }
 
   /* Purple / Indigo Information Cards */
   .kpi-card-purple {
-    background-color: rgba(99, 102, 241, 0.04) !important;
-    border-color: rgba(99, 102, 241, 0.35) !important;
-    border-left-color: rgb(99, 102, 241) !important;
+    background-color: rgba(99, 102, 241, 0.12) !important;
+    border-color: rgba(99, 102, 241, 0.4) !important;
   }
 
   .kpi-card-purple:hover {
-    background-color: rgba(99, 102, 241, 0.06) !important;
+    background-color: rgba(99, 102, 241, 0.18) !important;
   }
 
   .kpi-icon-purple {
-    background-color: rgba(99, 102, 241, 0.12) !important;
+    background-color: rgba(99, 102, 241, 0.2) !important;
     color: rgb(99, 102, 241) !important;
   }
 
   /* Amber Warning Cards */
   .kpi-card-amber {
-    background-color: rgba(217, 119, 6, 0.04) !important;
-    border-color: rgba(217, 119, 6, 0.35) !important;
-    border-left-color: rgb(217, 119, 6) !important;
+    background-color: rgba(217, 119, 6, 0.12) !important;
+    border-color: rgba(217, 119, 6, 0.4) !important;
   }
 
   .kpi-card-amber:hover {
-    background-color: rgba(217, 119, 6, 0.06) !important;
+    background-color: rgba(217, 119, 6, 0.18) !important;
   }
 
   .kpi-icon-amber {
-    background-color: rgba(217, 119, 6, 0.12) !important;
+    background-color: rgba(217, 119, 6, 0.2) !important;
     color: rgb(217, 119, 6) !important;
   }
 
   /* Red Critical Cards */
   .kpi-card-red {
-    background-color: rgba(220, 38, 38, 0.04) !important;
-    border-color: rgba(220, 38, 38, 0.35) !important;
-    border-left-color: rgb(220, 38, 38) !important;
+    background-color: rgba(220, 38, 38, 0.12) !important;
+    border-color: rgba(220, 38, 38, 0.4) !important;
   }
 
   .kpi-card-red:hover {
-    background-color: rgba(220, 38, 38, 0.06) !important;
+    background-color: rgba(220, 38, 38, 0.18) !important;
   }
 
   .kpi-icon-red {
-    background-color: rgba(220, 38, 38, 0.12) !important;
+    background-color: rgba(220, 38, 38, 0.2) !important;
     color: rgb(220, 38, 38) !important;
   }
 
   /* --- Dark Mode Styles --- */
   .dark .kpi-card-blue {
-    background: linear-gradient(135deg, rgba(59, 141, 248, 0.08), rgba(59, 141, 248, 0.02)) !important;
-    border-color: rgba(59, 141, 248, 0.35) !important;
-    border-left-color: rgb(59, 141, 248) !important;
-    box-shadow: 0 0 30px rgba(59, 141, 248, 0.08) !important;
+    background: linear-gradient(135deg, rgba(59, 141, 248, 0.22), rgba(59, 141, 248, 0.10)) !important;
+    border-color: rgba(59, 141, 248, 0.45) !important;
+    box-shadow: 0 0 30px rgba(59, 141, 248, 0.12) !important;
   }
 
   .dark .kpi-card-blue:hover {
-    background: linear-gradient(135deg, rgba(59, 141, 248, 0.12), rgba(59, 141, 248, 0.04)) !important;
+    background: linear-gradient(135deg, rgba(59, 141, 248, 0.30), rgba(59, 141, 248, 0.15)) !important;
   }
 
   .dark .kpi-icon-blue {
-    background-color: rgba(59, 141, 248, 0.15) !important;
+    background-color: rgba(59, 141, 248, 0.25) !important;
     color: rgb(59, 141, 248) !important;
   }
 
   .dark .kpi-card-green {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.02)) !important;
-    border-color: rgba(34, 197, 94, 0.35) !important;
-    border-left-color: rgb(34, 197, 94) !important;
-    box-shadow: 0 0 30px rgba(34, 197, 94, 0.08) !important;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.22), rgba(34, 197, 94, 0.10)) !important;
+    border-color: rgba(34, 197, 94, 0.45) !important;
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.12) !important;
   }
 
   .dark .kpi-card-green:hover {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04)) !important;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.30), rgba(34, 197, 94, 0.15)) !important;
   }
 
   .dark .kpi-icon-green {
-    background-color: rgba(34, 197, 94, 0.15) !important;
+    background-color: rgba(34, 197, 94, 0.25) !important;
     color: rgb(34, 197, 94) !important;
   }
 
   .dark .kpi-card-purple {
-    background: linear-gradient(135deg, rgba(129, 140, 248, 0.08), rgba(129, 140, 248, 0.02)) !important;
-    border-color: rgba(129, 140, 248, 0.35) !important;
-    border-left-color: rgb(129, 140, 248) !important;
-    box-shadow: 0 0 30px rgba(129, 140, 248, 0.08) !important;
+    background: linear-gradient(135deg, rgba(129, 140, 248, 0.22), rgba(129, 140, 248, 0.10)) !important;
+    border-color: rgba(129, 140, 248, 0.45) !important;
+    box-shadow: 0 0 30px rgba(129, 140, 248, 0.12) !important;
   }
 
   .dark .kpi-card-purple:hover {
-    background: linear-gradient(135deg, rgba(129, 140, 248, 0.12), rgba(129, 140, 248, 0.04)) !important;
+    background: linear-gradient(135deg, rgba(129, 140, 248, 0.30), rgba(129, 140, 248, 0.15)) !important;
   }
 
   .dark .kpi-icon-purple {
-    background-color: rgba(129, 140, 248, 0.15) !important;
+    background-color: rgba(129, 140, 248, 0.25) !important;
     color: rgb(129, 140, 248) !important;
   }
 
   .dark .kpi-card-amber {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.02)) !important;
-    border-color: rgba(245, 158, 11, 0.35) !important;
-    border-left-color: rgb(245, 158, 11) !important;
-    box-shadow: 0 0 30px rgba(245, 158, 11, 0.08) !important;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(245, 158, 11, 0.10)) !important;
+    border-color: rgba(245, 158, 11, 0.45) !important;
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.12) !important;
   }
 
   .dark .kpi-card-amber:hover {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04)) !important;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.30), rgba(245, 158, 11, 0.15)) !important;
   }
 
   .dark .kpi-icon-amber {
-    background-color: rgba(245, 158, 11, 0.15) !important;
+    background-color: rgba(245, 158, 11, 0.25) !important;
     color: rgb(245, 158, 11) !important;
   }
 
   .dark .kpi-card-red {
-    background: linear-gradient(135deg, rgba(244, 63, 94, 0.08), rgba(244, 63, 94, 0.02)) !important;
-    border-color: rgba(244, 63, 94, 0.35) !important;
-    border-left-color: rgb(244, 63, 94) !important;
-    box-shadow: 0 0 30px rgba(244, 63, 94, 0.08) !important;
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.22), rgba(244, 63, 94, 0.10)) !important;
+    border-color: rgba(244, 63, 94, 0.45) !important;
+    box-shadow: 0 0 30px rgba(244, 63, 94, 0.12) !important;
   }
 
   .dark .kpi-card-red:hover {
-    background: linear-gradient(135deg, rgba(244, 63, 94, 0.12), rgba(244, 63, 94, 0.04)) !important;
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.30), rgba(244, 63, 94, 0.15)) !important;
   }
 
   .dark .kpi-icon-red {

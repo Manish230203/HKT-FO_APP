@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Loader2,
   MapPin,
+  Mail,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,17 @@ import html2pdf from "html2pdf.js";
 const formatTo12Hour = (time24) => {
   if (!time24) return "N/A";
   return time24;
+};
+
+const parseLocalDate = (dateStr) => {
+  if (!dateStr) return null;
+  if (typeof dateStr === "string" && dateStr.includes("-")) {
+    const parts = dateStr.split("T")[0].split("-");
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+  }
+  return new Date(dateStr);
 };
 
 export default function DayVisitReportsList() {
@@ -383,9 +395,10 @@ export default function DayVisitReportsList() {
         officerFilter === "all" || r.officer === officerFilter;
 
       let matchesDate = true;
-      if (r.visitDate) {
-        const reportDate = new Date(r.visitDate);
-        if (!isNaN(reportDate.getTime())) {
+      const rawDate = r.visitDate || r.createdOn || r.createdAt;
+      if (rawDate) {
+        const reportDate = parseLocalDate(rawDate);
+        if (reportDate && !isNaN(reportDate.getTime())) {
           reportDate.setHours(0, 0, 0, 0);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -404,14 +417,18 @@ export default function DayVisitReportsList() {
               reportDate.getTime() <= today.getTime();
           } else if (dateRangeType === "custom") {
             if (startDate) {
-              const start = new Date(startDate);
-              start.setHours(0, 0, 0, 0);
-              if (reportDate.getTime() < start.getTime()) matchesDate = false;
+              const start = parseLocalDate(startDate);
+              if (start && !isNaN(start.getTime())) {
+                start.setHours(0, 0, 0, 0);
+                if (reportDate.getTime() < start.getTime()) matchesDate = false;
+              }
             }
             if (endDate) {
-              const end = new Date(endDate);
-              end.setHours(0, 0, 0, 0);
-              if (reportDate.getTime() > end.getTime()) matchesDate = false;
+              const end = parseLocalDate(endDate);
+              if (end && !isNaN(end.getTime())) {
+                end.setHours(23, 59, 59, 999);
+                if (reportDate.getTime() > end.getTime()) matchesDate = false;
+              }
             }
           }
         }
@@ -585,7 +602,7 @@ export default function DayVisitReportsList() {
           </div>
 
           {dateRangeType === "custom" && (
-            <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-border/50">
+            <div className="grid grid-cols-2 gap-4 mt-4 mb-6 pt-4 border-t border-border/50">
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
                   Start Date
@@ -597,7 +614,7 @@ export default function DayVisitReportsList() {
                     setStartDate(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="border-border rounded-lg h-9 text-xs w-full bg-background text-foreground"
+                  className="border-border rounded-lg h-9 text-xs w-full bg-background text-foreground cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
                 />
               </div>
               <div>
@@ -611,7 +628,7 @@ export default function DayVisitReportsList() {
                     setEndDate(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="border-border rounded-lg h-9 text-xs w-full bg-background text-foreground"
+                  className="border-border rounded-lg h-9 text-xs w-full bg-background text-foreground cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
                 />
               </div>
             </div>
@@ -630,7 +647,7 @@ export default function DayVisitReportsList() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between bg-muted/90 dark:bg-slate-900/90 border border-border rounded-lg p-3 mb-4 sticky top-[64px] z-30 shadow-md backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-200">
+      <div className="flex items-center justify-between bg-muted/90 dark:bg-slate-900/90 border border-border rounded-lg p-3 mt-4 mb-4 sticky top-[64px] z-30 shadow-md backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-200">
         <span className="text-xs font-semibold text-muted-foreground">
           {selectedVisitIds.length} report(s) selected
         </span>
@@ -758,6 +775,27 @@ export default function DayVisitReportsList() {
                         </Badge>
                       </TableCell>
                       <TableCell className="py-3.5 pr-6 text-right space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                        {report.emailAccess === 1 || report.email_access === 1 ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                            title="Send Report via Email"
+                            onClick={() => navigate(`/officer-visit/preview/${report.id}`)}
+                          >
+                            <Mail className="h-4.5 w-4.5" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled
+                            className="h-8 w-8 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-40"
+                            title="Email access is disabled for this branch (email_access = 0 in BRANCH table)"
+                          >
+                            <Mail className="h-4.5 w-4.5" />
+                          </Button>
+                        )}
                         <Button
                           onClick={() =>
                             navigate(`/officer-visit/edit/${report.id}`)
@@ -1133,10 +1171,10 @@ export default function DayVisitReportsList() {
                               <td className="p-2 border border-slate-400 dark:border-slate-600 text-center">
                                 <span
                                   className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.status === "Satisfactory"
-                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                      : c.status === "Unsatisfactory"
-                                        ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : c.status === "Unsatisfactory"
+                                      ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800"
                                     }`}
                                 >
                                   {c.status}

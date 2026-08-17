@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "PatrolSync FO",
+    "slug": "fo-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "fomobile",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0A1128"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A1128"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow PatrolSync FO to access your location for attendance and verification."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow PatrolSync FO to access your camera for site observation photos."
+        }
+      ]
+    ]
+  }
+}

@@ -56,8 +56,22 @@ def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
     r["lectureDetails"] = r.get("lecture_details")
     r["randomChecking"] = r.get("random_checking")
     r["overallRemarks"] = r.get("overall_remarks")
-    r["startTime"] = r.get("check-in_time")
-    r["endTime"] = r.get("check-out_time")
+    r["clientName"] = r.get("client_name") or r.get("company") or "N/A"
+    r["company"] = r.get("client_name") or r.get("company") or "N/A"
+    
+    unit_val = r.get("unit")
+    if not unit_val or unit_val in ("Unspecified Unit", "N/A"):
+        unit_val = r.get("site_name") or "N/A"
+    r["unit"] = unit_val
+
+    rep_id = r.get("report_id") or ""
+    if ("-N/A-" in rep_id or "-Unspecified Unit-" in rep_id) and r.get("site_name"):
+        rep_id = rep_id.replace("-N/A-", f"-{r['site_name']}-").replace("-Unspecified Unit-", f"-{r['site_name']}-")
+    r["reportNo"] = rep_id
+    r["reportId"] = rep_id
+
+    r["branchId"] = r.get("branch_id")
+    r["emailAccess"] = 1 if r.get("email_access") in (1, "1", True) else 0
     
     # Deserialization of list/dict fields
     r["photos"] = deserialize_field(r.get("photos")) or []
@@ -66,6 +80,158 @@ def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
     r["observations"] = deserialize_field(r.get("observations")) or []
     r["attachments"] = deserialize_field(r.get("attachments")) or []
     return r
+
+# --- PLANNED VISITS ENDPOINT (FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY) ---
+
+@router.get("/planned-visits")
+def get_planned_visits():
+    import calendar
+    from datetime import datetime
+
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+
+        # Count completed reports per (site_id, officer_name)
+        completed_counts = {}
+        try:
+            query_counts = """
+                SELECT site_id, LOWER(TRIM(officer)) as off_name, COUNT(*) as cnt
+                FROM (
+                    SELECT site_id, officer FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE status = 'Completed' AND site_id IS NOT NULL AND officer IS NOT NULL
+                    UNION ALL
+                    SELECT site_id, officer FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE status = 'Completed' AND site_id IS NOT NULL AND officer IS NOT NULL
+                ) t
+                GROUP BY site_id, LOWER(TRIM(officer))
+            """
+            cursor.execute(query_counts)
+            for row in cursor.fetchall():
+                key = (row["site_id"], row["off_name"])
+                completed_counts[key] = row["cnt"]
+        except Exception as err:
+            print("Error checking completed site counts:", err)
+
+        query = """
+            SELECT 
+                av.oid as id,
+                av.plan_code as planCode,
+                av.planning_type as planningType,
+                av.week_start_date as weekStartDate,
+                av.week_end_date as weekEndDate,
+                av.planning_month as planningMonth,
+                av.planning_year as planningYear,
+                av.status as planStatus,
+                av.created_at as createdAt,
+                e.oid as officerId,
+                e.name as officerName,
+                s.oid as siteId,
+                s.name as siteName,
+                cl.oid as clientId,
+                cl.name as clientName,
+                vf.visit_frequency as visitFrequency
+            FROM FIELD_OFFICER_ASSIGNED_VISITS av
+            JOIN FIELD_OFFICER_VISIT_FREQUENCY vf ON av.oid = vf.plan_oid
+            LEFT JOIN EMPLOYEE e ON av.employee_oid = e.oid
+            LEFT JOIN SITE s ON vf.site_oid = s.oid
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            ORDER BY av.created_at DESC, av.oid DESC
+        """
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        result = []
+        today_str = time.strftime("%Y-%m-%d")
+
+        for r in rows:
+            site_id_val = r.get("siteId")
+            officer_name = (r.get("officerName") or "").lower().strip()
+            done_cnt = completed_counts.get((site_id_val, officer_name), 0)
+            freq = r.get("visitFrequency") or 1
+            pending_cnt = max(0, freq - done_cnt)
+
+            # Calculate plannedPeriod time span
+            ws = r.get("weekStartDate")
+            we = r.get("weekEndDate")
+            pm = r.get("planningMonth")
+            py = r.get("planningYear")
+
+            if ws and we:
+                try:
+                    ws_dt = datetime.strptime(str(ws), "%Y-%m-%d")
+                    we_dt = datetime.strptime(str(we), "%Y-%m-%d")
+                    period_str = f"{ws_dt.strftime('%d %b %Y')} - {we_dt.strftime('%d %b %Y')}"
+                except Exception:
+                    period_str = f"{ws} - {we}"
+            elif pm and py:
+                try:
+                    last_day = calendar.monthrange(int(py), int(pm))[1]
+                    month_name = datetime(int(py), int(pm), 1).strftime("%b")
+                    period_str = f"01 {month_name} {py} - {last_day} {month_name} {py}"
+                except Exception:
+                    period_str = f"Month {pm}/{py}"
+            elif r.get("createdAt"):
+                period_str = r["createdAt"].strftime("%d %b %Y") if hasattr(r["createdAt"], "strftime") else str(r["createdAt"])[:10]
+            else:
+                period_str = time.strftime("%d %b %Y")
+
+            date_str = str(ws) if ws else period_str
+
+            raw_status = (r.get("planStatus") or "PUBLISHED").upper()
+            if raw_status == "COMPLETED" or done_cnt >= freq:
+                status = "Completed"
+            elif done_cnt > 0:
+                status = "In Progress"
+            elif raw_status == "DRAFT":
+                status = "Pending"
+            else:
+                if r.get("weekEndDate") and str(r["weekEndDate"]) < today_str:
+                    status = "Overdue"
+                else:
+                    status = "Pending"
+
+            pt_raw = (r.get("planningType") or "WEEKLY").upper()
+            if pt_raw == "WEEKLY":
+                type_name = "Weekly"
+            elif pt_raw == "MONTHLY":
+                type_name = "Monthly"
+            elif pt_raw == "SINGLE":
+                type_name = "Single"
+            else:
+                type_name = pt_raw.title()
+
+            shift_text = f"{type_name} ({done_cnt}/{freq} Done)"
+
+            result.append({
+                "id": f"pv-{r['id']}-{r.get('siteId', 0)}",
+                "planCode": r.get("planCode"),
+                "planningType": r.get("planningType"),
+                "clientId": r.get("clientId") or 1,
+                "clientName": r.get("clientName") or "N/A",
+                "siteId": r.get("siteId") or 1,
+                "siteName": r.get("siteName") or "N/A",
+                "officerId": r.get("officerId"),
+                "officerName": r.get("officerName") or "Field Officer",
+                "date": date_str,
+                "plannedPeriod": period_str,
+                "shift": shift_text,
+                "visitFrequency": freq,
+                "completedVisits": done_cnt,
+                "pendingVisits": pending_cnt,
+                "status": status
+            })
+
+        cursor.close()
+        conn.close()
+        return JSONResponse(content=result)
+    except Exception as e:
+        if 'conn' in locals() and conn:
+            conn.close()
+        print(f"Error in get_planned_visits: {e}")
+        return JSONResponse(status_code=500, content={"message": f"Server error: {str(e)}"})
+
 
 # --- OFFICER ROUND REPORTS ---
 
@@ -76,7 +242,15 @@ def get_round_reports():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS")
+        query = """
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            ORDER BY r.created_on DESC, r.oid DESC
+        """
+        cursor.execute(query)
         rows = cursor.fetchall()
         return [map_db_row_to_frontend(r) for r in rows]
     finally:
@@ -90,7 +264,15 @@ def get_round_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (id,))
+        query = """
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            WHERE r.oid = %s
+        """
+        cursor.execute(query, (id,))
         r = cursor.fetchone()
         if not r:
             raise HTTPException(status_code=404, detail="Report not found")
@@ -246,7 +428,15 @@ def get_visit_reports():
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM FIELD_OFFICER_DAY_VISIT_REPORTS")
+        query = """
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            ORDER BY r.created_on DESC, r.oid DESC
+        """
+        cursor.execute(query)
         rows = cursor.fetchall()
         return [map_db_row_to_frontend(r) for r in rows]
     finally:
@@ -260,7 +450,15 @@ def get_visit_report(id: str):
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
+        query = """
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            WHERE r.oid = %s
+        """
+        cursor.execute(query, (id,))
         r = cursor.fetchone()
         if not r:
             raise HTTPException(status_code=404, detail="Report not found")
@@ -732,8 +930,45 @@ def send_report_email(payload: dict):
     email = payload.get("email")
     subject = payload.get("subject")
     message = payload.get("message")
+    branch_id = payload.get("branchId") or payload.get("branch_id")
+    site_id = payload.get("siteId") or payload.get("site_id")
+
     if not email:
         raise HTTPException(status_code=400, detail="Recipient email is required")
+
+    # Validate branch email_access in DB
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor(dictionary=True)
+            if branch_id:
+                cursor.execute("SELECT email_access FROM BRANCH WHERE oid = %s", (branch_id,))
+                res = cursor.fetchone()
+                if res and res.get("email_access") in (0, "0", False):
+                    cursor.close()
+                    conn.close()
+                    raise HTTPException(status_code=403, detail="Email sending is disabled for this branch (email_access = 0).")
+            elif site_id:
+                cursor.execute("""
+                    SELECT b.email_access 
+                    FROM SITE s 
+                    JOIN BRANCH b ON s.BRANCH = b.oid 
+                    WHERE s.oid = %s
+                """, (site_id,))
+                res = cursor.fetchone()
+                if res and res.get("email_access") in (0, "0", False):
+                    cursor.close()
+                    conn.close()
+                    raise HTTPException(status_code=403, detail="Email sending is disabled for this branch (email_access = 0).")
+            cursor.close()
+            conn.close()
+        except HTTPException as he:
+            raise he
+        except Exception as e:
+            if conn:
+                conn.close()
+            print("DB Check Error in send_report_email:", e)
+
     print(f"Sending email to {email} with subject: {subject}")
     return {"success": True, "message": f"Email sent successfully to {email}"}
 

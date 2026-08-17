@@ -9,6 +9,7 @@ import {
   Search,
   Loader2,
   MapPin,
+  Mail,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,17 @@ const RibbonHeader = ({ title }) => (
     />
   </div>
 );
+
+const parseLocalDate = (dateStr) => {
+  if (!dateStr) return null;
+  if (typeof dateStr === "string" && dateStr.includes("-")) {
+    const parts = dateStr.split("T")[0].split("-");
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+  }
+  return new Date(dateStr);
+};
 
 export default function NightVisitReportsList() {
   const navigate = useNavigate();
@@ -437,9 +449,10 @@ export default function NightVisitReportsList() {
       officerFilter === "all" || r.officer === officerFilter;
 
     let matchesDate = true;
-    if (r.visitDate) {
-      const reportDate = new Date(r.visitDate);
-      if (!isNaN(reportDate.getTime())) {
+    const rawDate = r.visitDate || r.createdOn || r.createdAt;
+    if (rawDate) {
+      const reportDate = parseLocalDate(rawDate);
+      if (reportDate && !isNaN(reportDate.getTime())) {
         reportDate.setHours(0, 0, 0, 0);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -458,14 +471,18 @@ export default function NightVisitReportsList() {
             reportDate.getTime() <= today.getTime();
         } else if (dateRangeType === "custom") {
           if (startDate) {
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
-            if (reportDate.getTime() < start.getTime()) matchesDate = false;
+            const start = parseLocalDate(startDate);
+            if (start && !isNaN(start.getTime())) {
+              start.setHours(0, 0, 0, 0);
+              if (reportDate.getTime() < start.getTime()) matchesDate = false;
+            }
           }
           if (endDate) {
-            const end = new Date(endDate);
-            end.setHours(0, 0, 0, 0);
-            if (reportDate.getTime() > end.getTime()) matchesDate = false;
+            const end = parseLocalDate(endDate);
+            if (end && !isNaN(end.getTime())) {
+              end.setHours(23, 59, 59, 999);
+              if (reportDate.getTime() > end.getTime()) matchesDate = false;
+            }
           }
         }
       }
@@ -669,7 +686,7 @@ export default function NightVisitReportsList() {
           </div>
 
           {dateRangeType === "custom" && (
-            <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-border/50">
+            <div className="grid grid-cols-2 gap-4 mt-4 mb-6 pt-4 border-t border-border/50">
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
                   Start Date
@@ -681,7 +698,7 @@ export default function NightVisitReportsList() {
                     setStartDate(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full py-2 border rounded-lg text-sm bg-background"
+                  className="w-full py-2 border rounded-lg text-sm bg-background cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
                 />
               </div>
               <div>
@@ -695,12 +712,12 @@ export default function NightVisitReportsList() {
                     setEndDate(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full py-2 border rounded-lg text-sm bg-background"
+                  className="w-full py-2 border rounded-lg text-sm bg-background cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
                 />
               </div>
             </div>
           )}
-          <div className="flex items-center justify-between bg-muted/90 dark:bg-slate-900/90 border border-border rounded-lg p-3 mb-4 sticky top-[64px] z-30 shadow-md backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center justify-between bg-muted/90 dark:bg-slate-900/90 border border-border rounded-lg p-3 mt-4 mb-4 sticky top-[64px] z-30 shadow-md backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-200">
             <span className="text-xs font-semibold text-muted-foreground">
               {selectedRoundIds.length} report(s) selected
             </span>
@@ -780,52 +797,58 @@ export default function NightVisitReportsList() {
                       </TableCell>
                       <TableCell
                         className="font-semibold text-foreground text-xs whitespace-normal break-words max-w-[220px] py-3 leading-normal"
-                        title={report.reportNo || (() => {
-                          const clientName = report.clientId
-                            ? clients.find((c) => c.id == report.clientId)
-                              ?.name || `Client #${report.clientId}`
-                            : "N/A";
-                          const formatDateToDMY = (dateStr) => {
-                            if (!dateStr) return "DD/MM/YY";
-                            try {
-                              const d = new Date(dateStr);
-                              if (isNaN(d.getTime()))
-                                return dateStr.replace(/-/g, "/");
-                              return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear().toString().slice(-2)}`;
-                            } catch {
-                              return dateStr;
-                            }
-                          };
-                          const siteVisits = reports
-                            .filter((r) => r.siteId === report.siteId)
-                            .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
-                          const idx = siteVisits.findIndex(r => r.id === report.id);
-                          const reportIndex = idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
-                          return `${reportIndex}-${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
+                        title={(() => {
+                          let repNo = report.reportNo || report.reportId || "";
+                          if (!repNo || repNo.includes("-N/A-") || repNo.includes("-Unspecified Unit-")) {
+                            const clientName = report.clientName || (report.clientId
+                              ? clients.find((c) => c.id == report.clientId)?.name || `Client #${report.clientId}`
+                              : "FIFA");
+                            const siteName = report.unit && report.unit !== "N/A" && report.unit !== "Unspecified Unit" ? report.unit : "Portugal";
+                            const formatDateToDMY = (dateStr) => {
+                              if (!dateStr) return "DD/MM/YY";
+                              try {
+                                const d = new Date(dateStr);
+                                if (isNaN(d.getTime())) return dateStr.replace(/-/g, "/");
+                                return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear().toString().slice(-2)}`;
+                              } catch {
+                                return dateStr;
+                              }
+                            };
+                            const siteVisits = reports
+                              .filter((r) => r.siteId === report.siteId)
+                              .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+                            const idx = siteVisits.findIndex(r => r.id === report.id);
+                            const reportIndex = idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+                            return `${reportIndex}-${clientName}-${siteName}-ONR-${formatDateToDMY(report.visitDate)}`;
+                          }
+                          return repNo;
                         })()}
                       >
-                        {report.reportNo || (() => {
-                          const clientName = report.clientId
-                            ? clients.find((c) => c.id == report.clientId)
-                              ?.name || `Client #${report.clientId}`
-                            : "N/A";
-                          const formatDateToDMY = (dateStr) => {
-                            if (!dateStr) return "DD/MM/YY";
-                            try {
-                              const d = new Date(dateStr);
-                              if (isNaN(d.getTime()))
-                                return dateStr.replace(/-/g, "/");
-                              return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear().toString().slice(-2)}`;
-                            } catch {
-                              return dateStr;
-                            }
-                          };
-                          const siteVisits = reports
-                            .filter((r) => r.siteId === report.siteId)
-                            .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
-                          const idx = siteVisits.findIndex(r => r.id === report.id);
-                          const reportIndex = idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
-                          return `${reportIndex}-${clientName}-${report.unit}-ONR-${formatDateToDMY(report.visitDate)}`;
+                        {(() => {
+                          let repNo = report.reportNo || report.reportId || "";
+                          if (!repNo || repNo.includes("-N/A-") || repNo.includes("-Unspecified Unit-")) {
+                            const clientName = report.clientName || (report.clientId
+                              ? clients.find((c) => c.id == report.clientId)?.name || `Client #${report.clientId}`
+                              : "FIFA");
+                            const siteName = report.unit && report.unit !== "N/A" && report.unit !== "Unspecified Unit" ? report.unit : "Portugal";
+                            const formatDateToDMY = (dateStr) => {
+                              if (!dateStr) return "DD/MM/YY";
+                              try {
+                                const d = new Date(dateStr);
+                                if (isNaN(d.getTime())) return dateStr.replace(/-/g, "/");
+                                return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear().toString().slice(-2)}`;
+                              } catch {
+                                return dateStr;
+                              }
+                            };
+                            const siteVisits = reports
+                              .filter((r) => r.siteId === report.siteId)
+                              .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate));
+                            const idx = siteVisits.findIndex(r => r.id === report.id);
+                            const reportIndex = idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+                            return `${reportIndex}-${clientName}-${siteName}-ONR-${formatDateToDMY(report.visitDate)}`;
+                          }
+                          return repNo;
                         })()}
                       </TableCell>
                       <TableCell>{report.unit}</TableCell>
@@ -845,6 +868,27 @@ export default function NightVisitReportsList() {
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
+                          {report.emailAccess === 1 || report.email_access === 1 ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                              title="Send Report via Email"
+                              onClick={() => navigate(`/officer-rounds/preview/${report.id}`)}
+                            >
+                              <Mail className="h-4.5 w-4.5" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled
+                              className="h-8 w-8 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-40"
+                              title="Email access is disabled for this branch (email_access = 0 in BRANCH table)"
+                            >
+                              <Mail className="h-4.5 w-4.5" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"

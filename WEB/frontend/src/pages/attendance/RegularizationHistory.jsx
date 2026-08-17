@@ -60,6 +60,10 @@ export default function RegularizationHistory() {
   }, []);
 
   useEffect(() => {
+    fetchSitesForClient(selectedClientId);
+  }, [selectedClientId]);
+
+  useEffect(() => {
     fetchHistory();
   }, [selectedClientId, selectedSiteId, selectedStatus]);
 
@@ -67,10 +71,20 @@ export default function RegularizationHistory() {
     try {
       const compRes = await api.get("/assessments/clients");
       setCompanies(compRes.data || []);
-      const siteRes = await api.get("/assessments/sites");
-      setSites(siteRes.data || []);
     } catch (e) {
       console.error("Failed to load filters", e);
+    }
+  };
+
+  const fetchSitesForClient = async (clientId) => {
+    try {
+      const url = clientId === "all"
+        ? "/assessments/sites?all_sites=true"
+        : `/assessments/sites?company_id=${clientId}&all_sites=true`;
+      const siteRes = await api.get(url);
+      setSites(siteRes.data || []);
+    } catch (e) {
+      console.error("Failed to load sites", e);
     }
   };
 
@@ -224,7 +238,10 @@ export default function RegularizationHistory() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div>
               <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Client</label>
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+              <Select value={selectedClientId} onValueChange={(val) => {
+                setSelectedClientId(val);
+                setSelectedSiteId("all");
+              }}>
                 <SelectTrigger className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
                   <SelectValue placeholder="All Clients" />
                 </SelectTrigger>

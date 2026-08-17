@@ -331,7 +331,14 @@ export default function CreateNightVisitReport() {
           const siteRes = await api.get(
             `/assessments/sites?company_id=${clientId}&all_sites=true`,
           );
-          setSites(siteRes.data || []);
+          const loadedSites = siteRes.data || [];
+          setSites(loadedSites);
+          if (siteId) {
+            const foundSite = loadedSites.find((s) => s.id == siteId || s.oid == siteId);
+            if (foundSite && foundSite.name) {
+              setUnit(foundSite.name);
+            }
+          }
         } catch (error) {
           console.error("Failed to load sites", error);
         }
@@ -340,7 +347,17 @@ export default function CreateNightVisitReport() {
       }
     };
     loadSites();
-  }, [clientId]);
+  }, [clientId, siteId]);
+
+  // Synchronize unit name when siteId or sites change
+  useEffect(() => {
+    if (siteId && sites.length > 0) {
+      const foundSite = sites.find((s) => s.id == siteId || s.oid == siteId);
+      if (foundSite && foundSite.name) {
+        setUnit(foundSite.name);
+      }
+    }
+  }, [siteId, sites]);
 
   // Load guards when siteId changes
   useEffect(() => {

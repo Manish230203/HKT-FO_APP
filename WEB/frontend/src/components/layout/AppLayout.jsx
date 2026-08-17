@@ -16,6 +16,7 @@ import {
   User,
   LogOut,
   CalendarDays,
+  PanelLeft,
 } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useTheme } from "@/hooks/useTheme";
@@ -32,6 +33,19 @@ export function AppLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark, toggle } = useTheme();
+
+  // Collapsible Sidebar State
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem("sidebar_collapsed") === "true";
+  });
+
+  const toggleSidebar = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("sidebar_collapsed", String(next));
+      return next;
+    });
+  };
 
   // Get logged-in user
   const currentUser = (() => {
@@ -131,6 +145,48 @@ export function AppLayout({ children }) {
       (item) => location.pathname === item.href,
     );
 
+    if (isCollapsed) {
+      return (
+        <div className="space-y-1">
+          <button
+            onClick={() => {
+              setIsCollapsed(false);
+              group.setIsOpen(true);
+            }}
+            title={group.title}
+            className={`w-full flex items-center justify-center p-2.5 rounded-xl transition-all ${isAnyChildActive
+                ? "bg-sky-500 text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+          >
+            <Icon className="h-5 w-5 shrink-0" />
+          </button>
+
+          {group.isOpen && (
+            <div className="space-y-1 py-1 flex flex-col items-center">
+              {group.items.map((item) => {
+                const isActive = location.pathname === item.href;
+                const ChildIcon = item.icon;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    title={`${group.title}: ${item.name}`}
+                    className={`flex items-center justify-center p-2 rounded-lg transition-all ${isActive
+                        ? "bg-sky-500 text-white shadow-sm"
+                        : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                  >
+                    <ChildIcon className="h-4 w-4 shrink-0" />
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-1">
         {/* Header Toggle */}
@@ -142,7 +198,7 @@ export function AppLayout({ children }) {
             }`}
         >
           <div className="flex items-center gap-3">
-            <Icon className="h-4 w-4 shrink-0" />
+            <Icon className="h-4.5 w-4.5 shrink-0" />
             <span>{group.title}</span>
           </div>
           {group.isOpen ? (
@@ -182,47 +238,64 @@ export function AppLayout({ children }) {
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 print:bg-white print:text-black print:block">
         {/* Sidebar */}
-        <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0 print:hidden">
-          <div className="h-16 flex items-center gap-2 px-6 border-b border-slate-200 dark:border-slate-800">
-            <Shield className="h-6 w-6 text-sky-500" />
-            <span className="font-bold text-lg tracking-tight">
-              F.O. Portal
-            </span>
+        <aside
+          className={`${isCollapsed ? "w-20" : "w-64"
+            } border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0 transition-all duration-300 ease-in-out print:hidden`}
+        >
+          <div
+            className={`h-16 flex items-center ${isCollapsed ? "justify-center px-2" : "px-6"
+              } border-b border-slate-200 dark:border-slate-800`}
+          >
+            <div className="flex items-center gap-2 overflow-hidden">
+              <Shield className="h-6 w-6 text-sky-500 shrink-0" />
+              {!isCollapsed && (
+                <span className="font-bold text-lg tracking-tight truncate">
+                  F.O. Portal
+                </span>
+              )}
+            </div>
           </div>
-          <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
+          <nav className="flex-1 p-3 space-y-3 overflow-y-auto">
             <Link
               to="/"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${location.pathname === "/" || location.pathname === "/dashboard"
+              title="Dashboard"
+              className={`flex items-center ${isCollapsed ? "justify-center p-2.5" : "gap-3 px-4 py-2.5"
+                } rounded-xl text-base font-semibold transition-all ${location.pathname === "/" || location.pathname === "/dashboard"
                   ? "bg-sky-500 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
             >
-              <LayoutDashboard className="h-4.5 w-4.5" />
-              Dashboard
+              <LayoutDashboard className="h-5 w-5 shrink-0" />
+              {!isCollapsed && <span>Dashboard</span>}
             </Link>
             <Link
               to="/my-sites"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${location.pathname.startsWith("/my-sites")
+              title="My Sites"
+              className={`flex items-center ${isCollapsed ? "justify-center p-2.5" : "gap-3 px-4 py-2.5"
+                } rounded-xl text-base font-semibold transition-all ${location.pathname.startsWith("/my-sites")
                   ? "bg-sky-500 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
             >
-              <MapPin className="h-4.5 w-4.5" />
-              My Sites
+              <MapPin className="h-5 w-5 shrink-0" />
+              {!isCollapsed && <span>My Sites</span>}
             </Link>
+
             {renderGroup(attendanceGroup)}
             {renderGroup(roundsGroup)}
             {renderGroup(visitsGroup)}
 
             <Link
               to="/general-visits"
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${location.pathname.startsWith("/general-visits")
+              title="General Visits"
+              className={`flex items-center ${isCollapsed ? "justify-center p-2.5" : "gap-3 px-4 py-2.5"
+                } rounded-xl text-base font-semibold transition-all ${location.pathname.startsWith("/general-visits")
                   ? "bg-sky-500 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
             >
-              <BookOpen className="h-4.5 w-4.5" />
-              General Visits
+              <BookOpen className="h-5 w-5 shrink-0" />
+              {!isCollapsed && <span>General Visits</span>}
             </Link>
           </nav>
         </aside>
@@ -230,10 +303,21 @@ export function AppLayout({ children }) {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 print:block print:p-0">
           {/* Header */}
-          <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-card dark:bg-slate-900 flex items-center justify-between px-6 md:px-8 print:hidden">
-            <h1 className="text-xl font-semibold tracking-tight text-slate-800 dark:text-slate-200">
-              Field Officer Management
-            </h1>
+          <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-card dark:bg-slate-900 flex items-center justify-between px-4 md:px-6 print:hidden">
+            <div className="flex items-center gap-3">
+              {/* Collapse/Expand Toggle Button in Header */}
+              <button
+                onClick={toggleSidebar}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all shadow-xs"
+                title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              >
+                <PanelLeft className="h-5 w-5" />
+              </button>
+
+              <h1 className="text-xl font-semibold tracking-tight text-slate-800 dark:text-slate-200">
+                Field Officer Management
+              </h1>
+            </div>
             <div className="flex items-center gap-4">
               {/* Theme Toggle Button */}
               <button

@@ -62,58 +62,14 @@ export default function VisitDashboard() {
 
         // Load planned visits from localStorage, or initialize with mock data
         const storedPlanned = localStorage.getItem("planned_visits");
-        if (storedPlanned) {
-          setPlannedVisits(JSON.parse(storedPlanned));
-        } else {
-          // Generate mock planned visits relative to loaded clients/sites if possible
-          const defaultPlanned = [
-            {
-              id: "pv-1",
-              clientId: clientRes.data?.[0]?.id || 1,
-              clientName: clientRes.data?.[0]?.name || "Tata Power",
-              siteId: siteRes.data?.[0]?.id || 1,
-              siteName: siteRes.data?.[0]?.name || "Pimpri Substation",
-              date: new Date().toISOString().split("T")[0],
-              shift: "Morning",
-              officerName: "Field Officer Amit",
-              status: "Pending",
-            },
-            {
-              id: "pv-2",
-              clientId: clientRes.data?.[0]?.id || 1,
-              clientName: clientRes.data?.[0]?.name || "Tata Power",
-              siteId: siteRes.data?.[1]?.id || 2,
-              siteName: siteRes.data?.[1]?.name || "Chinchwad Hub",
-              date: new Date().toISOString().split("T")[0],
-              shift: "Evening",
-              officerName: "Field Officer Rajesh",
-              status: "Completed",
-            },
-            {
-              id: "pv-3",
-              clientId: clientRes.data?.[1]?.id || 2,
-              clientName: clientRes.data?.[1]?.name || "Humankind Tech",
-              siteId: siteRes.data?.[2]?.id || 3,
-              siteName: siteRes.data?.[2]?.name || "Baner HQ Office",
-              date: new Date(Date.now() + 86400000).toISOString().split("T")[0], // Tomorrow
-              shift: "Night A",
-              officerName: "Field Officer Priyansh",
-              status: "Pending",
-            },
-            {
-              id: "pv-4",
-              clientId: clientRes.data?.[1]?.id || 2,
-              clientName: clientRes.data?.[1]?.name || "Humankind Tech",
-              siteId: siteRes.data?.[0]?.id || 1,
-              siteName: siteRes.data?.[0]?.name || "Pimpri Substation",
-              date: new Date(Date.now() - 86400000).toISOString().split("T")[0], // Yesterday
-              shift: "Morning",
-              officerName: "Field Officer Amit",
-              status: "Overdue",
-            },
-          ];
-          setPlannedVisits(defaultPlanned);
-          localStorage.setItem("planned_visits", JSON.stringify(defaultPlanned));
+        // Fetch dynamic planned visits from database tables FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY
+        try {
+          const plannedRes = await api.get("/planned-visits");
+          if (plannedRes.data && Array.isArray(plannedRes.data)) {
+            setPlannedVisits(plannedRes.data);
+          }
+        } catch (pvErr) {
+          console.error("Failed to load planned visits from DB", pvErr);
         }
       } catch (error) {
         console.error("Error fetching dashboard data", error);
@@ -148,7 +104,7 @@ export default function VisitDashboard() {
 
   // KPI Calculations
   const totalPlannedCount = plannedVisits.length;
-  const pendingPlannedCount = plannedVisits.filter((pv) => pv.status === "Pending").length;
+  const pendingPlannedCount = plannedVisits.filter((pv) => pv.status === "Pending" || pv.status === "Overdue").length;
   const completedPlannedCount = plannedVisits.filter((pv) => pv.status === "Completed").length;
 
   // Sites Visited (Unique Site names/Ids from completed reports)
@@ -178,81 +134,81 @@ export default function VisitDashboard() {
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: Planned Visits */}
-        <Card className="rounded-[14px] border border-border bg-card shadow-sm overflow-hidden">
+        {/* KPI 1: Planned Visits - Blue */}
+        <Card className="rounded-[14px] border border-blue-200/80 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/25 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider block">
-                Planned Visits
+              <span className="text-blue-700/80 dark:text-blue-300/80 text-[10px] font-bold uppercase tracking-wider block flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-500 inline-block" /> Planned Visits
               </span>
-              <span className="text-2xl font-bold text-foreground block">
+              <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 block">
                 {totalPlannedCount}
               </span>
-              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <span className="text-[10px] text-blue-600/80 dark:text-blue-400 flex items-center gap-1">
                 <Clock className="h-3 w-3 text-amber-500" /> {pendingPlannedCount} pending, {completedPlannedCount} completed
               </span>
             </div>
-            <div className="h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center text-blue-600 shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-blue-100/80 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
               <Calendar className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        {/* KPI 2: Sites Visited */}
-        <Card className="rounded-[14px] border border-border bg-card shadow-sm overflow-hidden">
+        {/* KPI 2: Sites Visited - Emerald/Green */}
+        <Card className="rounded-[14px] border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/25 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider block">
-                Sites Visited
+              <span className="text-emerald-700/80 dark:text-emerald-300/80 text-[10px] font-bold uppercase tracking-wider block flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Sites Visited
               </span>
-              <span className="text-2xl font-bold text-foreground block">
+              <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 block">
                 {uniqueSitesVisited}
               </span>
-              <span className="text-[10px] text-emerald-500 flex items-center gap-1">
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <TrendingUp className="h-3 w-3" /> Unique sites logged
               </span>
             </div>
-            <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600 shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-emerald-100/80 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
               <MapPin className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        {/* KPI 3: Sudden / Surprise Visits */}
-        <Card className="rounded-[14px] border border-border bg-card shadow-sm overflow-hidden">
+        {/* KPI 3: Sudden / Surprise Visits - RED */}
+        <Card className="rounded-[14px] border border-rose-200/80 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/25 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider block">
-                Sudden Visits Logged
+              <span className="text-rose-700/80 dark:text-rose-300/80 text-[10px] font-bold uppercase tracking-wider block flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-rose-500 inline-block" /> Sudden Visits Logged
               </span>
-              <span className="text-2xl font-bold text-foreground block">
+              <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 block">
                 {reports.filter((r) => r.visitType === "Surprise").length}
               </span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-rose-600 dark:text-rose-400 block">
                 Unscheduled checks
               </span>
             </div>
-            <div className="h-10 w-10 rounded-full bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center text-indigo-600 shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-rose-100/80 dark:bg-rose-900/50 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
               <ClipboardCheck className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        {/* KPI 4: Total Reports Submitted */}
-        <Card className="rounded-[14px] border border-border bg-card shadow-sm overflow-hidden">
+        {/* KPI 4: Total Reports Submitted - PURPLE / VIOLET */}
+        <Card className="rounded-[14px] border border-purple-200/80 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/25 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider block">
-                Total Visit Reports
+              <span className="text-purple-700/80 dark:text-purple-300/80 text-[10px] font-bold uppercase tracking-wider block flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-violet-500 inline-block" /> Total Visit Reports
               </span>
-              <span className="text-2xl font-bold text-foreground block">
+              <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 block">
                 {reports.length}
               </span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-purple-600 dark:text-purple-400 block">
                 Submitted to dashboard
               </span>
             </div>
-            <div className="h-10 w-10 rounded-full bg-teal-50 dark:bg-teal-950/30 flex items-center justify-center text-teal-600 shrink-0">
+            <div className="h-10 w-10 rounded-xl bg-purple-100/80 dark:bg-purple-900/50 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
               <FileText className="h-5 w-5" />
             </div>
           </CardContent>

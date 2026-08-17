@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { getStoredReports } from "./mockData";
 import api from "../../services/api";
 import html2pdf from "html2pdf.js";
@@ -202,6 +205,11 @@ export default function ReportPreview() {
   const [reportsList, setReportsList] = useState([]);
   const [clients, setClients] = useState([]);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -426,7 +434,29 @@ export default function ReportPreview() {
           <ArrowLeft className="h-4.5 w-4.5" /> Back to Reports
         </Button>
 
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {report?.emailAccess === 1 || report?.email_access === 1 ? (
+            <Button
+              onClick={() => {
+                setRecipientEmail("");
+                setEmailSubject(`Night Visit Report - ${report?.unit || ""}`);
+                setEmailMessage(`Dear Team,\n\nPlease find the Night Visit Report for site: ${report?.unit || ""}.\n\nBest regards,\nField Officer Management`);
+                setIsEmailModalOpen(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 rounded-full px-5 h-9 text-xs font-semibold shadow-sm"
+            >
+              <Mail className="h-4 w-4" /> Send Email
+            </Button>
+          ) : (
+            <Button
+              disabled
+              className="bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-70 flex items-center gap-2 rounded-full px-5 h-9 text-xs font-semibold border border-border"
+              title="Email access is disabled for this branch (email_access = 0 in BRANCH table)"
+            >
+              <Mail className="h-4 w-4" /> Email Disabled (Branch)
+            </Button>
+          )}
+
           <Button
             onClick={handleDownloadPDF}
             disabled={isDownloading}
@@ -449,6 +479,89 @@ export default function ReportPreview() {
       >
         <NightVisitReportTemplate report={fullReportData} />
       </div>
+
+      {/* Send Email Dialog */}
+      <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
+        <DialogContent className="sm:max-w-[480px] bg-card border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <Mail className="h-5 w-5 text-emerald-600" /> Send Report via Email
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3 text-xs">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Recipient Email *</label>
+              <Input
+                type="email"
+                placeholder="officer@company.com"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                className="text-xs bg-background border-input text-foreground h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Subject</label>
+              <Input
+                type="text"
+                placeholder="Email Subject..."
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                className="text-xs bg-background border-input text-foreground h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Message</label>
+              <Textarea
+                rows={4}
+                placeholder="Enter custom email message..."
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                className="text-xs bg-background border-input text-foreground"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEmailModalOpen(false)}
+              className="text-xs border-border hover:bg-muted text-foreground h-9"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={isSendingEmail}
+              onClick={async () => {
+                if (!recipientEmail) {
+                  toast.error("Please enter a recipient email.");
+                  return;
+                }
+                setIsSendingEmail(true);
+                try {
+                  await api.post("/officer-visits/send-email", {
+                    email: recipientEmail,
+                    subject: emailSubject,
+                    message: emailMessage,
+                    branchId: report?.branchId,
+                    siteId: report?.siteId
+                  });
+                  toast.success(`Email sent successfully to ${recipientEmail}!`);
+                  setIsEmailModalOpen(false);
+                } catch (err) {
+                  console.error("Email error:", err);
+                  toast.error(err.response?.data?.detail || "Failed to send email.");
+                } finally {
+                  setIsSendingEmail(false);
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold h-9 flex items-center gap-1.5"
+            >
+              {isSendingEmail ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />} Send Email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

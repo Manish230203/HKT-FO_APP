@@ -33,6 +33,17 @@ import api from "../../services/api";
 import html2pdf from "html2pdf.js";
 import JSZip from "jszip";
 
+const parseLocalDate = (dateStr) => {
+  if (!dateStr) return null;
+  if (typeof dateStr === "string" && dateStr.includes("-")) {
+    const parts = dateStr.split("T")[0].split("-");
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+  }
+  return new Date(dateStr);
+};
+
 export default function GeneralVisit() {
   const navigate = useNavigate();
   const [visits, setVisits] = useState([]);
@@ -437,29 +448,31 @@ export default function GeneralVisit() {
 
     // 5. Date Range filter
     if (dateRangeType !== "all") {
-      const vDate = new Date(v.visitDate || v.createdOn);
-      vDate.setHours(0, 0, 0, 0);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const vDate = parseLocalDate(v.visitDate || v.createdOn);
+      if (vDate && !isNaN(vDate.getTime())) {
+        vDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-      if (dateRangeType === "today") {
-        if (vDate.getTime() !== today.getTime()) return false;
-      } else if (dateRangeType === "yesterday") {
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        if (vDate.getTime() !== yesterday.getTime()) return false;
-      } else if (dateRangeType === "week") {
-        const lastWeek = new Date(today);
-        lastWeek.setDate(lastWeek.getDate() - 7);
-        if (vDate < lastWeek) return false;
-      } else if (dateRangeType === "custom") {
-        const start = startDate ? new Date(startDate) : null;
-        const end = endDate ? new Date(endDate) : null;
-        if (start) start.setHours(0, 0, 0, 0);
-        if (end) end.setHours(23, 59, 59, 999);
+        if (dateRangeType === "today") {
+          if (vDate.getTime() !== today.getTime()) return false;
+        } else if (dateRangeType === "yesterday") {
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          if (vDate.getTime() !== yesterday.getTime()) return false;
+        } else if (dateRangeType === "week") {
+          const lastWeek = new Date(today);
+          lastWeek.setDate(lastWeek.getDate() - 7);
+          if (vDate < lastWeek) return false;
+        } else if (dateRangeType === "custom") {
+          const start = startDate ? parseLocalDate(startDate) : null;
+          const end = endDate ? parseLocalDate(endDate) : null;
+          if (start && !isNaN(start.getTime())) start.setHours(0, 0, 0, 0);
+          if (end && !isNaN(end.getTime())) end.setHours(23, 59, 59, 999);
 
-        if (start && vDate < start) return false;
-        if (end && vDate > end) return false;
+          if (start && vDate < start) return false;
+          if (end && vDate > end) return false;
+        }
       }
     }
 
@@ -638,7 +651,7 @@ export default function GeneralVisit() {
 
           {/* Custom Date Inputs if Custom is selected */}
           {dateRangeType === "custom" && (
-            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-dashed border-border">
+            <div className="flex flex-wrap items-center gap-2 pt-2 mt-1 border-t border-dashed border-border">
               <span className="text-[10px] font-bold text-muted-foreground uppercase">Range:</span>
               <Input
                 type="date"
@@ -647,7 +660,7 @@ export default function GeneralVisit() {
                   setStartDate(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="h-8 text-xs w-36 bg-background"
+                className="h-8 text-xs w-36 bg-background cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
               />
               <span className="text-muted-foreground text-xs">to</span>
               <Input
@@ -657,7 +670,7 @@ export default function GeneralVisit() {
                   setEndDate(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="h-8 text-xs w-36 bg-background"
+                className="h-8 text-xs w-36 bg-background cursor-pointer dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
               />
             </div>
           )}
