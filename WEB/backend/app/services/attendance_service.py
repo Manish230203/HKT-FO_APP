@@ -5,6 +5,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from app.database import get_db_connection
+from app.utils.timezone import get_ist_now, get_ist_today
 
 def format_duty_type(raw_val: str) -> str:
     if not raw_val:
@@ -948,6 +949,26 @@ from geopy.distance import geodesic
 def is_within_radius(user_lat, user_long, site_lat, site_long, radius_meters):
     return geodesic((site_lat, site_long), (user_lat, user_long)).meters <= radius_meters
 
+def init_fo_location_table(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS FIELD_OFFICER_ATTENDANCE_LOCATION (
+            oid BIGINT AUTO_INCREMENT PRIMARY KEY,
+            attendance_time_log BIGINT NOT NULL,
+            employee_oid BIGINT NOT NULL,
+            officer VARCHAR(255) NULL,
+            punch_type VARCHAR(10) NOT NULL,
+            latitude DECIMAL(10,8) NOT NULL,
+            longitude DECIMAL(11,8) NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_fo_location_timelog
+                FOREIGN KEY (attendance_time_log) 
+                REFERENCES ATTENDANCE_TIME_LOG(oid) ON DELETE CASCADE,
+            CONSTRAINT fk_fo_location_employee
+                FOREIGN KEY (employee_oid) 
+                REFERENCES EMPLOYEE(oid) ON DELETE CASCADE
+        )
+    """)
+
 def mark_attendance_logic(data):
     try:
         conn = get_db_connection()
@@ -955,21 +976,30 @@ def mark_attendance_logic(data):
             return {"success": False, "message": "Database connection failed"}
             
         cursor = conn.cursor(dictionary=True)
+        init_fo_location_table(cursor)
+
         empOid = data.empOid
         lat, long = data.latitude, data.longitude
         qrSiteOid = getattr(data, 'siteOid', None)
 
-        client_ts = getattr(data, 'timestamp', None)
-        now = datetime.fromisoformat(client_ts.replace('Z', '+00:00')) if client_ts else datetime.now()
-        today = now.date()
+        now = get_ist_now()
+        today = get_ist_today()
 
-        cursor.execute("SELECT oid, site, name, emp_code, active, DESIGNATION, COMPANY_DESIGNATION FROM EMPLOYEE WHERE oid = %s", (empOid,))
+        cursor.execute("""
+            SELECT e.oid, e.site, e.name, e.emp_code, e.active, e.DESIGNATION, e.COMPANY_DESIGNATION, d.name as designation_name
+            FROM EMPLOYEE e
+            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            WHERE e.oid = %s
+        """, (empOid,))
         user = cursor.fetchone()
 
         if not user:
             cursor.close()
             conn.close()
             return {"success": False, "message": "USER NOT FOUND"}
+
+        desig_str = str(user.get("designation_name", "") or user.get("COMPANY_DESIGNATION", "") or "").upper()
+        is_field_officer = "FIELD OFFICER" in desig_str
 
         user_assigned_site = user.get("site") or user.get("SITE")
         active_site_oid = qrSiteOid if qrSiteOid else user_assigned_site
@@ -1004,19 +1034,20 @@ def mark_attendance_logic(data):
         user["assigned_site"] = user_assigned_site
         active_site_oid = master_site_oid
 
-        if site["latitude"] is None or site["longitude"] is None:
-            cursor.close()
-            conn.close()
-            return {"success": False, "message": f"SITE COORDINATES NOT SET FOR {site['name'].upper()}"}
+        if not is_field_officer:
+            if site["latitude"] is None or site["longitude"] is None:
+                cursor.close()
+                conn.close()
+                return {"success": False, "message": f"SITE COORDINATES NOT SET FOR {site['name'].upper()}"}
 
-        distance_km = geodesic((site["latitude"], site["longitude"]), (lat, long)).km
-        if (distance_km * 1000) > (site["radius"] or 100):
-            cursor.close()
-            conn.close()
-            return {
-                "success": False, 
-                "message": f"YOU ARE FAR FROM {site['name'].upper()} ({distance_km:.2f} kms away)."
-            }
+            distance_km = geodesic((site["latitude"], site["longitude"]), (lat, long)).km
+            if (distance_km * 1000) > (site["radius"] or 100):
+                cursor.close()
+                conn.close()
+                return {
+                    "success": False, 
+                    "message": f"YOU ARE FAR FROM {site['name'].upper()} ({distance_km:.2f} kms away)."
+                }
 
         cursor.execute("SELECT clientt FROM SITE WHERE oid = %s", (user_assigned_site,))
         primary_site_data = cursor.fetchone()
@@ -1090,6 +1121,7 @@ def mark_attendance_logic(data):
             shift_detect = detect_shift_logic_internal(cursor, empOid, user["site_oid"], "IN")
             matched_shift = shift_detect.get("matched_shift")
 
+            sdc_oid = None
             if matched_shift:
                 matched_shift_oid = matched_shift["oid"]
                 cursor.execute("""
@@ -1107,8 +1139,34 @@ def mark_attendance_logic(data):
                         VALUES (%s, 1, 1, %s, %s)
                     """, (today, matched_shift_oid, user["DESIGNATION"]))
                     sdc_oid = cursor.lastrowid
-            else:
-                sdc_oid = None
+
+            if not sdc_oid:
+                desig_val = user.get("DESIGNATION") or user.get("COMPANY_DESIGNATION") or 1
+                cursor.execute("SELECT oid FROM SHIFT WHERE SITE = %s LIMIT 1", (user["site_oid"],))
+                fallback_s = cursor.fetchone()
+                if not fallback_s:
+                    cursor.execute("SELECT oid FROM SHIFT LIMIT 1")
+                    fallback_s = cursor.fetchone()
+
+                if fallback_s:
+                    f_shift_oid = fallback_s["oid"]
+                else:
+                    cursor.execute("INSERT INTO SHIFT (name, start_time, end_time, SITE) VALUES ('GENERAL', '09:00:00', '18:00:00', %s)", (user["site_oid"],))
+                    f_shift_oid = cursor.lastrowid
+
+                cursor.execute("""
+                    SELECT oid FROM SHIFT_DESIGNATION_COUNT 
+                    WHERE SHIFT = %s AND attendance_date = %s AND DESIGNATION = %s
+                """, (f_shift_oid, today, desig_val))
+                sdc_res = cursor.fetchone()
+                if sdc_res:
+                    sdc_oid = sdc_res["oid"]
+                else:
+                    cursor.execute("""
+                        INSERT INTO SHIFT_DESIGNATION_COUNT (attendance_date, planned_head_count, actual_head_count, SHIFT, DESIGNATION)
+                        VALUES (%s, 1, 1, %s, %s)
+                    """, (today, f_shift_oid, desig_val))
+                    sdc_oid = cursor.lastrowid
 
             duty_desig = user.get("DESIGNATION") or user.get("COMPANY_DESIGNATION") or 3
             year_month = today.replace(day=1)
@@ -1148,6 +1206,15 @@ def mark_attendance_logic(data):
                 INSERT INTO ATTENDANCE_TIME_LOG (in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
                 VALUES (%s, %s, %s)
             """, (now, cell_oid, sdc_oid))
+            log_oid = cursor.lastrowid
+
+            if is_field_officer:
+                officer_name = user.get("name") or user.get("NAME") or ""
+                cursor.execute("""
+                    INSERT INTO FIELD_OFFICER_ATTENDANCE_LOCATION 
+                    (attendance_time_log, employee_oid, officer, punch_type, latitude, longitude)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (log_oid, empOid, officer_name, 'IN', lat, long))
 
             conn.commit()
             cursor.close()
@@ -1173,6 +1240,15 @@ def mark_attendance_logic(data):
 
             cursor.execute("UPDATE ATTENDANCE_TIME_LOG SET out_time = %s WHERE oid = %s", (out_time_to_save, open_log["oid"]))
             cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'PRESENT' WHERE oid = %s", (open_log["cell_oid"],))
+            log_oid = open_log["oid"]
+
+            if is_field_officer:
+                officer_name = user.get("name") or user.get("NAME") or ""
+                cursor.execute("""
+                    INSERT INTO FIELD_OFFICER_ATTENDANCE_LOCATION 
+                    (attendance_time_log, employee_oid, officer, punch_type, latitude, longitude)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (log_oid, empOid, officer_name, 'OUT', lat, long))
 
             conn.commit()
             cursor.close()
@@ -1222,7 +1298,7 @@ def get_today_status_logic(empOid: int):
     if conn is None:
         return {"success": False, "message": "Database connection failed"}
     
-    today = date.today()
+    today = get_ist_today()
     cursor = conn.cursor(dictionary=True)
     query = """
         SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status
@@ -1233,6 +1309,17 @@ def get_today_status_logic(empOid: int):
     """
     cursor.execute(query, (empOid, today))
     record = cursor.fetchone()
+
+    if not record:
+        query_open = """
+            SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status
+            FROM ATTENDANCE_TIME_LOG atl
+            JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+            WHERE ac.EMPLOYEE = %s AND atl.out_time IS NULL
+            ORDER BY atl.oid DESC LIMIT 1
+        """
+        cursor.execute(query_open, (empOid,))
+        record = cursor.fetchone()
     
     if record:
         record["date"] = record["date"].isoformat() if record["date"] else None
@@ -1249,7 +1336,7 @@ def get_monthly_stats_logic(empOid: int):
         return {"success": False, "message": "Database connection failed"}
     
     cursor = conn.cursor(dictionary=True)
-    today = date.today()
+    today = get_ist_today()
     first_day = today.replace(day=1)
     
     _, last_day_of_month = calendar.monthrange(today.year, today.month)
@@ -1284,16 +1371,18 @@ def get_profile_logic(empOid: int):
         cursor = conn.cursor(dictionary=True)
         query = """
             SELECT 
-                e.name, e.emp_code, e.email, e.mobile, e.date_of_joining, e.active, e.SITE as site_id,
+                e.name, e.emp_code, e.email, e.mobile, e.date_of_joining, e.active, e.SITE as site_id, e.COMPANY as company_id,
                 COALESCE(d.name, '') as designation,
                 COALESCE(s.name, '') as site_name,
                 COALESCE(c.name, '') as client_name,
-                COALESCE(b.name, '') as branch_name
+                COALESCE(b.name, '') as branch_name,
+                COALESCE(comp.name, '') as company_name
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
             LEFT JOIN SITE s ON e.SITE = s.oid
             LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
             LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+            LEFT JOIN COMPANY comp ON e.COMPANY = comp.oid
             WHERE e.oid = %s
         """
         cursor.execute(query, (empOid,))

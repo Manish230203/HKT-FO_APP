@@ -349,7 +349,9 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
         "name": user["name"],
         "role": user["role_name"] or "Staff",
         "employee_id": user["emp_code"],
-        "site_id": user["site_id"]
+        "site_id": user["site_id"],
+        "company_id": user.get("company_id") or 1,
+        "company_name": user.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if user.get("company_id") == 4 else "Unique Delta Force")
     }
     
     import base64
@@ -363,13 +365,26 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     }
 
 @router.get("/auth/me")
-def get_current_admin(authorization: Optional[str] = Header(None)):
+def get_current_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_patrol_db)):
     import base64
     import json
     if authorization and authorization.startswith("Bearer "):
         try:
             token = authorization.split(" ")[1]
-            return json.loads(base64.b64decode(token.encode()).decode())
+            data = json.loads(base64.b64decode(token.encode()).decode())
+            emp_id = data.get("id")
+            if emp_id:
+                sql = text("""
+                    SELECT e.COMPANY as company_id, c.name as company_name
+                    FROM EMPLOYEE e
+                    LEFT JOIN COMPANY c ON e.COMPANY = c.oid
+                    WHERE e.oid = :oid
+                """)
+                emp = db.execute(sql, {"oid": emp_id}).mappings().first()
+                if emp:
+                    data["company_id"] = emp["company_id"]
+                    data["company_name"] = emp["company_name"]
+            return data
         except Exception:
             pass
     return {
@@ -377,7 +392,9 @@ def get_current_admin(authorization: Optional[str] = Header(None)):
         "name": "Administrator",
         "role": "Admin",
         "employee_id": "ADM001",
-        "site_id": None
+        "site_id": None,
+        "company_id": 1,
+        "company_name": "Unique Delta Force"
     }
 
 @router.get("/patrol/search")

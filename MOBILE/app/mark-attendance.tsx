@@ -147,10 +147,10 @@ export default function MarkAttendanceScreen() {
     })();
   }, []);
 
-  // Auto-Capture 3s Countdown Loop (Only runs if profile photo exists and no 10-min buffer error)
+  // Auto-Capture 3s Countdown Loop (Only runs if profile photo exists, no 10-min buffer error, and NO alert modal visible)
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (currentStep === 1 && !verificationSuccess && !isVerifying && !bufferError && !profileMissingError && profileImage) {
+    if (currentStep === 1 && !verificationSuccess && !isVerifying && !bufferError && !profileMissingError && profileImage && !alertInfo.visible) {
       if (countdown > 0) {
         timer = setInterval(() => {
           setCountdown((prev) => prev - 1);
@@ -160,7 +160,7 @@ export default function MarkAttendanceScreen() {
       }
     }
     return () => clearInterval(timer);
-  }, [countdown, currentStep, verificationSuccess, isVerifying, bufferError, profileMissingError, profileImage]);
+  }, [countdown, currentStep, verificationSuccess, isVerifying, bufferError, profileMissingError, profileImage, alertInfo.visible]);
 
   // Real-Time Liveness Detection & Face Embeddings Comparison via backend validateSelfie
   const handleAutoFaceVerification = async () => {
@@ -415,7 +415,7 @@ export default function MarkAttendanceScreen() {
                 </Text>
               </View>
               <Text style={[styles.stepLabelText, currentStep === 2 && styles.stepLabelActive]}>
-                Scan Site QR
+                Instant Attendance
               </Text>
             </View>
           </View>
@@ -487,7 +487,10 @@ export default function MarkAttendanceScreen() {
           title={alertInfo.title}
           message={alertInfo.message}
           type={alertInfo.type}
-          onClose={() => setAlertInfo({ ...alertInfo, visible: false })}
+          onClose={() => {
+            setAlertInfo({ ...alertInfo, visible: false });
+            setCountdown(3);
+          }}
         />
       </SafeAreaView>
     </SwipeableBackWrapper>

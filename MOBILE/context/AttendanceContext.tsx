@@ -3,7 +3,6 @@ import { Alert } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Config } from '../constants/Config';
 import { getPunchRecords, savePunchRecord, updatePunchRecordsList } from '../services/db';
-import * as Network from 'expo-network';
 
 export interface AttendanceRecord {
   date: string;
@@ -61,7 +60,7 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
 
   const getEmpOid = () => {
     if (!user) return null;
-    return user.oid || user.id || user.employee_id || user.username;
+    return user.id || (user as any).oid || user.employee_id || (user as any).username;
   };
 
   const refreshStatus = async () => {
@@ -115,19 +114,31 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         // Also map to local SQLite format so local fallback is populated
         try {
           const empIdStr = String(empOid);
-          const mappedForLocal = (logsData.logs || []).map((l: any, index: number) => ({
-            id: `remote_${index}_${l.date}`,
-            employee_id: empIdStr,
-            timestamp: l.check_in ? new Date(l.check_in).getTime() : Date.now(),
-            date: l.date,
-            dayTitle: l.date,
-            punchInTime: l.check_in ? new Date(l.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
-            punchOutTime: l.check_out ? new Date(l.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
-            siteName: l.site_name || 'AMA Facility',
-            clientName: 'Client',
-            status: l.check_out ? 'COMPLETED' : l.check_in ? 'PUNCHED-IN' : 'MISSED',
-            officerName: user?.name || 'Officer',
-          }));
+          const mappedForLocal = (logsData.logs || []).map((l: any, index: number) => {
+            let titleDate = l.date || 'Today';
+            if (l.date) {
+              try {
+                const dt = new Date(l.date);
+                titleDate = `${dt.toLocaleDateString('en-US', { weekday: 'long' })}, ${dt.getDate()} ${dt.toLocaleDateString('en-US', { month: 'short' })}`;
+              } catch (e) {
+                titleDate = l.date;
+              }
+            }
+            return {
+              id: `remote_${index}_${l.date}`,
+              employee_id: empIdStr,
+              employeeId: user?.employee_id || empIdStr,
+              timestamp: l.check_in ? new Date(l.check_in).getTime() : Date.now(),
+              date: l.date,
+              dayTitle: titleDate,
+              punchInTime: l.check_in ? new Date(l.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
+              punchOutTime: l.check_out ? new Date(l.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
+              siteName: l.site_name || 'AMA Facility',
+              clientName: 'Client',
+              status: l.check_out ? 'COMPLETED' : l.check_in ? 'PUNCHED-IN' : 'MISSED',
+              officerName: user?.name || 'Officer',
+            };
+          });
           await updatePunchRecordsList(mappedForLocal);
         } catch (e) {
           console.warn('Sync to local db error:', e);

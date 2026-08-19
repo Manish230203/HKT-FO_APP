@@ -144,9 +144,14 @@ export const getPunchRecords = async (empId?: string): Promise<any[]> => {
   try {
     const all = await getRawPunchRecords();
     if (!empId) return all;
-    return all.filter(
-      (r) => r.employee_id === empId || r.employeeId === empId || (r.officerName && empId && r.officerName.toLowerCase().includes(empId.toLowerCase()))
+    const empStr = String(empId).toLowerCase().trim();
+    const filtered = all.filter(
+      (r) =>
+        String(r.employee_id || '').toLowerCase() === empStr ||
+        String(r.employeeId || '').toLowerCase() === empStr ||
+        (r.officerName && r.officerName.toLowerCase().includes(empStr))
     );
+    return filtered.length > 0 ? filtered : all;
   } catch (e) {
     console.error("Get punch records failed", e);
     return [];

@@ -40,7 +40,7 @@ import { getDayVisitReports, getNightVisitReports, getGeneralVisits } from '../.
 
 export default function DashboardScreen() {
   const { user, profileImage } = useAuth();
-  const { todayRecord, refreshStatus } = useAttendance();
+  const { todayRecord, profileData, refreshStatus } = useAttendance();
   const { t } = useLanguage();
   const router = useRouter();
 
@@ -50,19 +50,16 @@ export default function DashboardScreen() {
 
 
   const getCompanyLogo = () => {
-    const compId = user?.company_id;
-    const compName = (user?.company_name || '').toLowerCase();
-    const empCode = (user?.employee_id || '').toUpperCase();
-    const empName = (user?.name || '').toLowerCase();
+    const compId = user?.company_id || (profileData as any)?.company_id;
+    const compName = (user?.company_name || (profileData as any)?.company_name || '').toLowerCase();
 
+    // Company OID 4 = Eagle Industrial Services Pvt. Ltd. (EISPL)
+    // Company OID 1 = Unique Delta Force (UDF)
     const isEagle = 
       compId === 4 || 
+      Number(compId) === 4 ||
       compName.includes('eagle') || 
-      compName.includes('eispl') || 
-      empCode === 'EMP001' || 
-      empCode === 'EMP002' ||
-      empName.includes('kunal') ||
-      empName.includes('sumit');
+      compName.includes('eispl');
 
     if (isEagle) {
       return require('../../assets/images/eagle_logo.png');
@@ -107,7 +104,7 @@ export default function DashboardScreen() {
   );
 
   const filteredModalSites = modalSites.filter((s) => {
-    const matchesClient = (!newClientId || newClientId === 'ALL') ? true : String(s.client_id) === String(newClientId);
+    const matchesClient = !newClientId ? true : String(s.client_id) === String(newClientId);
     const matchesSearch = s.name.toLowerCase().includes(modalSiteSearch.toLowerCase()) ||
                           (s.client_name && s.client_name.toLowerCase().includes(modalSiteSearch.toLowerCase()));
     return matchesClient && matchesSearch;
@@ -202,12 +199,19 @@ export default function DashboardScreen() {
 
       if (newPlanningType === 'SINGLE') {
         payload.visitDate = newVisitDate;
-        payload.weekStartDate = newVisitDate;
-        payload.weekEndDate = newVisitDate;
-      } else {
-        payload.visitDate = newStartDate;
+      } else if (newPlanningType === 'WEEKLY') {
         payload.weekStartDate = newStartDate;
         payload.weekEndDate = newEndDate;
+      } else if (newPlanningType === 'MONTHLY') {
+        try {
+          const d = new Date(newStartDate);
+          payload.planningMonth = d.getMonth() + 1;
+          payload.planningYear = d.getFullYear();
+        } catch (e) {
+          const now = new Date();
+          payload.planningMonth = now.getMonth() + 1;
+          payload.planningYear = now.getFullYear();
+        }
       }
 
       const res = await createPlannedVisit(payload);
@@ -588,223 +592,216 @@ export default function DashboardScreen() {
       <Modal visible={addVisitModalVisible} transparent animationType="slide" onRequestClose={handleCloseAddVisitModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('assign_visit_plan')}</Text>
-              <TouchableOpacity onPress={handleCloseAddVisitModal}>
-                <X color="#94A3B8" size={24} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={{ paddingVertical: 10 }}>
-              {/* Select Client */}
-              <Text style={styles.fieldLabel}>{t('select_client')}</Text>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => setPickerClientVisible(true)}
-              >
-                <Text style={styles.pickerBtnText}>
-                  {clients.find((c) => String(c.id) === String(newClientId))?.name || `${t('select_client')}...`}
-                </Text>
-                <ChevronDown color="#94A3B8" size={20} />
-              </TouchableOpacity>
-
-              {/* Select Site */}
-              <Text style={styles.fieldLabel}>{t('select_site')}</Text>
-              <TouchableOpacity
-                style={styles.pickerBtn}
-                onPress={() => setPickerSiteVisible(true)}
-              >
-                <Text style={styles.pickerBtnText}>
-                  {modalSites.find((s) => String(s.id) === String(newSiteId))?.name || `${t('select_site')}...`}
-                </Text>
-                <ChevronDown color="#94A3B8" size={20} />
-              </TouchableOpacity>
-
-              {/* Planning Type */}
-              <Text style={styles.fieldLabel}>{t('planning_type')}</Text>
-              <View style={styles.typeRow}>
-                {['SINGLE', 'WEEKLY', 'MONTHLY'].map((pt) => (
-                  <TouchableOpacity
-                    key={pt}
-                    style={[styles.typePill, newPlanningType === pt && styles.typePillActive]}
-                    onPress={() => handleTypeChange(pt)}
-                  >
-                    <Text style={[styles.typePillText, newPlanningType === pt && styles.typePillTextActive]}>
-                      {pt}
-                    </Text>
+            {pickerClientVisible ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{t('select_client')}</Text>
+                  <TouchableOpacity onPress={() => setPickerClientVisible(false)}>
+                    <X color="#94A3B8" size={24} />
                   </TouchableOpacity>
-                ))}
-              </View>
+                </View>
 
-              {/* Visit Frequency */}
-              <Text style={styles.fieldLabel}>{t('visit_frequency')}</Text>
-              <TextInput
-                style={styles.modalInput}
-                keyboardType="numeric"
-                value={newVisitFrequency}
-                onChangeText={setNewVisitFrequency}
-                placeholder="e.g. 1"
-                placeholderTextColor="#64748B"
-              />
+                <TextInput
+                  style={[styles.modalInput, { marginTop: 12, marginBottom: 12 }]}
+                  placeholder={t('search_client')}
+                  placeholderTextColor="#64748B"
+                  value={modalClientSearch}
+                  onChangeText={setModalClientSearch}
+                />
 
-              {/* Date Selection: Single vs Range */}
-              {newPlanningType === 'SINGLE' ? (
-                <>
-                  <Text style={styles.fieldLabel}>{t('visit_date')}</Text>
+                <FlatList
+                  data={filteredModalClients}
+                  keyExtractor={(item) => String(item.id)}
+                  initialNumToRender={15}
+                  maxToRenderPerBatch={15}
+                  windowSize={5}
+                  removeClippedSubviews
+                  ListEmptyComponent={
+                    <View style={{ padding: 20, alignItems: 'center' }}>
+                      <Text style={{ color: '#94A3B8', fontSize: 13 }}>No clients found.</Text>
+                    </View>
+                  }
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.modalItemRow}
+                      onPress={() => {
+                        setNewClientId(String(item.id));
+                        setNewSiteId('');
+                        setPickerClientVisible(false);
+                      }}
+                    >
+                      <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
+                      <Text style={styles.modalItemRowText}>{item.name}</Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              </>
+            ) : pickerSiteVisible ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{t('select_site')}</Text>
+                  <TouchableOpacity onPress={() => setPickerSiteVisible(false)}>
+                    <X color="#94A3B8" size={24} />
+                  </TouchableOpacity>
+                </View>
+
+                <TextInput
+                  style={[styles.modalInput, { marginTop: 12, marginBottom: 12 }]}
+                  placeholder={t('search_site')}
+                  placeholderTextColor="#64748B"
+                  value={modalSiteSearch}
+                  onChangeText={setModalSiteSearch}
+                />
+
+                <FlatList
+                  data={filteredModalSites}
+                  keyExtractor={(item) => String(item.id)}
+                  initialNumToRender={15}
+                  maxToRenderPerBatch={15}
+                  windowSize={5}
+                  removeClippedSubviews
+                  ListEmptyComponent={
+                    <View style={{ padding: 20, alignItems: 'center' }}>
+                      <Text style={{ color: '#94A3B8', fontSize: 13 }}>{t('no_sites_found')}</Text>
+                    </View>
+                  }
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.modalItemRow}
+                      onPress={() => {
+                        setNewSiteId(String(item.id));
+                        setPickerSiteVisible(false);
+                      }}
+                    >
+                      <Building color="#10B981" size={18} style={{ marginRight: 10 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.modalItemRowText}>{item.name}</Text>
+                        {item.client_name ? (
+                          <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>{item.client_name}</Text>
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+              </>
+            ) : (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{t('assign_visit_plan')}</Text>
+                  <TouchableOpacity onPress={handleCloseAddVisitModal}>
+                    <X color="#94A3B8" size={24} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView contentContainerStyle={{ paddingVertical: 10 }}>
+                  {/* Select Client */}
+                  <Text style={styles.fieldLabel}>{t('select_client')}</Text>
+                  <TouchableOpacity
+                    style={styles.pickerBtn}
+                    onPress={() => setPickerClientVisible(true)}
+                  >
+                    <Text style={styles.pickerBtnText}>
+                      {clients.find((c) => String(c.id) === String(newClientId))?.name || `${t('select_client')}...`}
+                    </Text>
+                    <ChevronDown color="#94A3B8" size={20} />
+                  </TouchableOpacity>
+
+                  {/* Select Site */}
+                  <Text style={styles.fieldLabel}>{t('select_site')}</Text>
+                  <TouchableOpacity
+                    style={styles.pickerBtn}
+                    onPress={() => setPickerSiteVisible(true)}
+                  >
+                    <Text style={styles.pickerBtnText}>
+                      {modalSites.find((s) => String(s.id) === String(newSiteId))?.name || `${t('select_site')}...`}
+                    </Text>
+                    <ChevronDown color="#94A3B8" size={20} />
+                  </TouchableOpacity>
+
+                  {/* Planning Type */}
+                  <Text style={styles.fieldLabel}>{t('planning_type')}</Text>
+                  <View style={styles.typeRow}>
+                    {['SINGLE', 'WEEKLY', 'MONTHLY'].map((pt) => (
+                      <TouchableOpacity
+                        key={pt}
+                        style={[styles.typePill, newPlanningType === pt && styles.typePillActive]}
+                        onPress={() => handleTypeChange(pt)}
+                      >
+                        <Text style={[styles.typePillText, newPlanningType === pt && styles.typePillTextActive]}>
+                          {pt}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Visit Frequency */}
+                  <Text style={styles.fieldLabel}>{t('visit_frequency')}</Text>
                   <TextInput
                     style={styles.modalInput}
-                    value={newVisitDate}
-                    onChangeText={setNewVisitDate}
-                    placeholder="YYYY-MM-DD"
+                    keyboardType="numeric"
+                    value={newVisitFrequency}
+                    onChangeText={setNewVisitFrequency}
+                    placeholder="e.g. 1"
                     placeholderTextColor="#64748B"
                   />
-                </>
-              ) : (
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.fieldLabel}>{t('start_date')}</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      value={newStartDate}
-                      onChangeText={setNewStartDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#64748B"
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.fieldLabel}>{t('end_date')}</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      value={newEndDate}
-                      onChangeText={setNewEndDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#64748B"
-                    />
-                  </View>
-                </View>
-              )}
 
-              {/* Assigning Officer */}
-              <Text style={styles.fieldLabel}>{t('assigned_officer')}</Text>
-              <TextInput
-                style={[styles.modalInput, { opacity: 0.7 }]}
-                value={user?.name || 'Amit Kulkarni'}
-                editable={false}
-              />
+                  {/* Date Selection: Single vs Range */}
+                  {newPlanningType === 'SINGLE' ? (
+                    <>
+                      <Text style={styles.fieldLabel}>{t('visit_date')}</Text>
+                      <TextInput
+                        style={styles.modalInput}
+                        value={newVisitDate}
+                        onChangeText={setNewVisitDate}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor="#64748B"
+                      />
+                    </>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.fieldLabel}>{t('start_date')}</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={newStartDate}
+                          onChangeText={setNewStartDate}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor="#64748B"
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.fieldLabel}>{t('end_date')}</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={newEndDate}
+                          onChangeText={setNewEndDate}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor="#64748B"
+                        />
+                      </View>
+                    </View>
+                  )}
 
-              <TouchableOpacity
-                style={styles.submitPlanBtn}
-                onPress={handleCreateNewVisit}
-                disabled={creatingVisit}
-              >
-                <Text style={styles.submitPlanBtnText}>
-                  {creatingVisit ? '...' : t('assign_visit_plan')}
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+                  {/* Assigning Officer */}
+                  <Text style={styles.fieldLabel}>{t('assigned_officer')}</Text>
+                  <TextInput
+                    style={[styles.modalInput, { opacity: 0.7 }]}
+                    value={user?.name || 'Amit Kulkarni'}
+                    editable={false}
+                  />
 
-      {/* Sub-modal Client Picker */}
-      <Modal visible={pickerClientVisible} transparent animationType="fade" onRequestClose={() => setPickerClientVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('select_client')}</Text>
-              <TouchableOpacity onPress={() => setPickerClientVisible(false)}>
-                <X color="#94A3B8" size={24} />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={[styles.modalInput, { marginTop: 12, marginBottom: 12 }]}
-              placeholder={t('search_client')}
-              placeholderTextColor="#64748B"
-              value={modalClientSearch}
-              onChangeText={setModalClientSearch}
-            />
-
-            <FlatList
-              data={[{ id: 'ALL', name: t('all_clients') }, ...filteredModalClients]}
-              keyExtractor={(item) => String(item.id)}
-              initialNumToRender={15}
-              maxToRenderPerBatch={15}
-              windowSize={5}
-              removeClippedSubviews
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItemRow}
-                  onPress={() => {
-                    if (item.id === 'ALL') {
-                      setNewClientId('ALL');
-                    } else {
-                      setNewClientId(String(item.id));
-                    }
-                    setNewSiteId('');
-                    setPickerClientVisible(false);
-                  }}
-                >
-                  <Building color={item.id === 'ALL' ? '#10B981' : '#3B82F6'} size={18} style={{ marginRight: 10 }} />
-                  <Text style={[styles.modalItemRowText, item.id === 'ALL' && { color: '#10B981', fontWeight: '700' }]}>
-                    {item.name}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Sub-modal Site Picker */}
-      <Modal visible={pickerSiteVisible} transparent animationType="fade" onRequestClose={() => setPickerSiteVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('select_site')}</Text>
-              <TouchableOpacity onPress={() => setPickerSiteVisible(false)}>
-                <X color="#94A3B8" size={24} />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={[styles.modalInput, { marginTop: 12, marginBottom: 12 }]}
-              placeholder={t('search_site')}
-              placeholderTextColor="#64748B"
-              value={modalSiteSearch}
-              onChangeText={setModalSiteSearch}
-            />
-
-            <FlatList
-              data={filteredModalSites}
-              keyExtractor={(item) => String(item.id)}
-              initialNumToRender={15}
-              maxToRenderPerBatch={15}
-              windowSize={5}
-              removeClippedSubviews
-              ListEmptyComponent={
-                <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>{t('no_sites_found')}</Text>
-                </View>
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItemRow}
-                  onPress={() => {
-                    setNewSiteId(String(item.id));
-                    setPickerSiteVisible(false);
-                  }}
-                >
-                  <Building color="#10B981" size={18} style={{ marginRight: 10 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modalItemRowText}>{item.name}</Text>
-                    {item.client_name ? (
-                      <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>{item.client_name}</Text>
-                    ) : null}
-                  </View>
-                </TouchableOpacity>
-              )}
-            />
+                  <TouchableOpacity
+                    style={styles.submitPlanBtn}
+                    onPress={handleCreateNewVisit}
+                    disabled={creatingVisit}
+                  >
+                    <Text style={styles.submitPlanBtnText}>
+                      {creatingVisit ? '...' : t('assign_visit_plan')}
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </>
+            )}
           </View>
         </View>
       </Modal>

@@ -3,6 +3,9 @@ from fastapi.responses import JSONResponse
 from app.database import get_db_connection
 import json
 import time
+import random
+import uuid
+from datetime import datetime, date
 from typing import Dict, Any, List, Optional
 
 router = APIRouter()
@@ -88,61 +91,28 @@ def get_assessments_clients(emp_oid: Optional[str] = Query(None), empOid: Option
     conn = get_db_connection()
     if conn is None:
         return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
-        emp = get_authenticated_employee(authorization)
-        is_admin = emp.get("role") in ["Admin", "ADMIN", "admin", "Super Admin"]
-        target_emp = emp_oid or empOid
-        if not is_admin and not target_emp and emp.get("id"):
-            target_emp = str(emp.get("id"))
-
-        if target_emp:
-            cursor.execute("SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s", (target_emp, target_emp))
-            emp_row = cursor.fetchone()
-            emp_name = emp_row["name"] if emp_row else target_emp
-
-            query = """
-                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code
-                FROM CLIENTT cl
-                JOIN SITE s ON s.CLIENTT = cl.oid
-                WHERE (
-                    s.oid IN (
-                        SELECT f.site_oid 
-                        FROM FIELD_OFFICER_VISIT_FREQUENCY f 
-                        JOIN FIELD_OFFICER_ASSIGNED_VISITS a ON f.plan_oid = a.oid 
-                        LEFT JOIN EMPLOYEE e ON a.employee_oid = e.oid OR a.employee_oid = e.emp_code
-                        WHERE a.employee_oid = %s OR e.oid = %s OR e.emp_code = %s
-                    )
-                    OR s.oid IN (
-                        SELECT e.SITE FROM EMPLOYEE e WHERE (e.oid = %s OR e.emp_code = %s) AND e.SITE IS NOT NULL
-                    )
-                    OR s.oid IN (
-                        SELECT r.site_id FROM FIELD_OFFICER_DAY_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
-                    )
-                    OR s.oid IN (
-                        SELECT r.site_id FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
-                    )
-                )
-                ORDER BY cl.name
-            """
-            params = [target_emp, target_emp, target_emp, target_emp, target_emp, target_emp, emp_name, target_emp, emp_name]
-            cursor.execute(query, params)
-        else:
-            cursor.execute("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name")
+        cursor.execute("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name")
         rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
         return JSONResponse(content=rows)
     except Exception as e:
-        if 'conn' in locals() and conn:
-            conn.close()
         return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 @router.get("/assessments/sites")
 def get_assessments_sites(client_id: Optional[int] = Query(None), company_id: Optional[int] = Query(None), emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
     conn = get_db_connection()
     if conn is None:
         return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
         query = """
@@ -159,50 +129,22 @@ def get_assessments_sites(client_id: Optional[int] = Query(None), company_id: Op
             where_clauses.append("(s.CLIENTT = %s)")
             params.append(target_client)
 
-        emp = get_authenticated_employee(authorization)
-        is_admin = emp.get("role") in ["Admin", "ADMIN", "admin", "Super Admin"]
-        target_emp = emp_oid or empOid
-        if not is_admin and not target_emp and emp.get("id"):
-            target_emp = str(emp.get("id"))
-
-        if target_emp:
-            cursor.execute("SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s", (target_emp, target_emp))
-            emp_row = cursor.fetchone()
-            emp_name = emp_row["name"] if emp_row else target_emp
-
-            where_clauses.append("""(
-                s.oid IN (
-                    SELECT f.site_oid 
-                    FROM FIELD_OFFICER_VISIT_FREQUENCY f 
-                    JOIN FIELD_OFFICER_ASSIGNED_VISITS a ON f.plan_oid = a.oid 
-                    LEFT JOIN EMPLOYEE e ON a.employee_oid = e.oid OR a.employee_oid = e.emp_code
-                    WHERE a.employee_oid = %s OR e.oid = %s OR e.emp_code = %s
-                )
-                OR s.oid IN (
-                    SELECT e.SITE FROM EMPLOYEE e WHERE (e.oid = %s OR e.emp_code = %s) AND e.SITE IS NOT NULL
-                )
-                OR s.oid IN (
-                    SELECT r.site_id FROM FIELD_OFFICER_DAY_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
-                )
-                OR s.oid IN (
-                    SELECT r.site_id FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
-                )
-            )""")
-            params.extend([target_emp, target_emp, target_emp, target_emp, target_emp, target_emp, emp_name, target_emp, emp_name])
-
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
 
         query += " ORDER BY s.name"
         cursor.execute(query, params)
         rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
         return JSONResponse(content=rows)
     except Exception as e:
-        if 'conn' in locals() and conn:
-            conn.close()
         return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 # --- PLANNED VISITS ENDPOINT (FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY) ---
 
@@ -218,30 +160,45 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
     try:
         cursor = conn.cursor(dictionary=True)
 
-        # Count completed reports per (site_id, officer_name)
-        completed_counts = {}
+        # Count completed reports per (site_id, officer_name / employee_oid) across all 3 visit types
+        completed_counts_by_emp = {}
+        completed_counts_by_name = {}
+        completed_counts_by_site = {}
         try:
             query_counts = """
-                SELECT site_id, LOWER(TRIM(officer)) as off_name, COUNT(*) as cnt
+                SELECT site_id, employee_oid, LOWER(TRIM(officer)) as off_name
                 FROM (
-                    SELECT site_id, officer FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE status = 'Completed' AND site_id IS NOT NULL AND officer IS NOT NULL
+                    SELECT site_id, employee_oid, officer FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE site_id IS NOT NULL AND status = 'Completed'
                     UNION ALL
-                    SELECT site_id, officer FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE status = 'Completed' AND site_id IS NOT NULL AND officer IS NOT NULL
+                    SELECT site_id, employee_oid, officer FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE site_id IS NOT NULL AND status = 'Completed'
+                    UNION ALL
+                    SELECT site_id, employee_oid, officer FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE site_id IS NOT NULL
                 ) t
-                GROUP BY site_id, LOWER(TRIM(officer))
             """
             cursor.execute(query_counts)
             for row in cursor.fetchall():
-                key = (row["site_id"], row["off_name"])
-                completed_counts[key] = row["cnt"]
+                sid = row["site_id"]
+                emp_id = str(row["employee_oid"]) if row.get("employee_oid") else None
+                off_n = row.get("off_name")
+
+                if sid:
+                    completed_counts_by_site[sid] = completed_counts_by_site.get(sid, 0) + 1
+                    if emp_id:
+                        key = (sid, emp_id)
+                        completed_counts_by_emp[key] = completed_counts_by_emp.get(key, 0) + 1
+                    if off_n:
+                        key = (sid, off_n)
+                        completed_counts_by_name[key] = completed_counts_by_name.get(key, 0) + 1
         except Exception as err:
             print("Error checking completed site counts:", err)
 
-        where_clause = ""
+        where_clauses = ["(UPPER(av.status) = 'PUBLISHED' OR UPPER(av.status) = 'COMPLETED')"]
         params = []
         if empOid:
-            where_clause = " WHERE (av.employee_oid = %s OR e.oid = %s OR e.emp_code = %s) "
-            params = [empOid, empOid, empOid]
+            where_clauses.append("(av.employee_oid = %s OR e.oid = %s OR e.emp_code = %s)")
+            params.extend([empOid, empOid, empOid])
+
+        where_clause = " WHERE " + " AND ".join(where_clauses)
 
         query = f"""
             SELECT 
@@ -277,8 +234,17 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
 
         for r in rows:
             site_id_val = r.get("siteId")
+            officer_id_str = str(r.get("officerId")) if r.get("officerId") is not None else None
             officer_name = (r.get("officerName") or "").lower().strip()
-            done_cnt = completed_counts.get((site_id_val, officer_name), 0)
+
+            done_cnt = 0
+            if site_id_val:
+                if officer_id_str and (site_id_val, officer_id_str) in completed_counts_by_emp:
+                    done_cnt = completed_counts_by_emp[(site_id_val, officer_id_str)]
+                elif officer_name and (site_id_val, officer_name) in completed_counts_by_name:
+                    done_cnt = completed_counts_by_name[(site_id_val, officer_name)]
+                elif not officer_id_str and not officer_name:
+                    done_cnt = completed_counts_by_site.get(site_id_val, 0)
             freq = r.get("visitFrequency") or 1
             pending_cnt = max(0, freq - done_cnt)
 
@@ -372,7 +338,16 @@ def create_planned_visit(payload: dict):
         import random
         from datetime import datetime
         
-        plan_code = f"PV-{datetime.now().strftime('%Y')}-{random.randint(1000, 9999)}"
+        cursor.execute("SELECT plan_code FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE plan_code LIKE 'VP-%' ORDER BY CHAR_LENGTH(plan_code) DESC, plan_code DESC LIMIT 1")
+        last_vp_row = cursor.fetchone()
+        next_num = 1
+        if last_vp_row and last_vp_row.get("plan_code"):
+            try:
+                num_str = str(last_vp_row["plan_code"]).replace("VP-", "").strip()
+                next_num = int(num_str) + 1
+            except Exception:
+                next_num = 1
+        plan_code = f"VP-{next_num:03d}"
         
         planning_type = str(payload.get("planningType", "SINGLE")).upper()
         if planning_type not in ["WEEKLY", "MONTHLY", "SINGLE"]:
@@ -381,24 +356,40 @@ def create_planned_visit(payload: dict):
         emp_oid = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or 7558
         site_oid = payload.get("siteId") or payload.get("site_oid") or 1
         freq = int(payload.get("visitFrequency", 1))
-        visit_date = payload.get("visitDate") or datetime.now().strftime("%Y-%m-%d")
-        week_start_date = payload.get("weekStartDate") or payload.get("startDate") or visit_date
-        week_end_date = payload.get("weekEndDate") or payload.get("endDate") or visit_date
 
-        try:
-            start_dt = datetime.strptime(str(week_start_date), "%Y-%m-%d")
-            p_month = start_dt.month
-            p_year = start_dt.year
-        except Exception:
-            today_dt = datetime.now()
-            p_month = today_dt.month
-            p_year = today_dt.year
+        week_start_date = None
+        week_end_date = None
+        planning_month = None
+        planning_year = None
+        visit_date = None
+
+        if planning_type == "SINGLE":
+            visit_date = payload.get("visitDate") or payload.get("startDate") or datetime.now().strftime("%Y-%m-%d")
+        elif planning_type == "WEEKLY":
+            week_start_date = payload.get("weekStartDate") or payload.get("startDate") or datetime.now().strftime("%Y-%m-%d")
+            week_end_date = payload.get("weekEndDate") or payload.get("endDate") or week_start_date
+        elif planning_type == "MONTHLY":
+            pm = payload.get("planningMonth") or payload.get("month")
+            py = payload.get("planningYear") or payload.get("year")
+            if pm and py:
+                planning_month = int(pm)
+                planning_year = int(py)
+            else:
+                date_ref = payload.get("startDate") or payload.get("visitDate") or datetime.now().strftime("%Y-%m-%d")
+                try:
+                    dt_ref = datetime.strptime(str(date_ref), "%Y-%m-%d")
+                    planning_month = dt_ref.month
+                    planning_year = dt_ref.year
+                except Exception:
+                    now_dt = datetime.now()
+                    planning_month = now_dt.month
+                    planning_year = now_dt.year
         
         cursor.execute("""
             INSERT INTO FIELD_OFFICER_ASSIGNED_VISITS 
             (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, employee_oid, planning_method, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'MANUAL', 'PUBLISHED')
-        """, (plan_code, planning_type, week_start_date, week_end_date, p_month, p_year, visit_date, emp_oid))
+        """, (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, emp_oid))
         
         plan_oid = cursor.lastrowid
         
@@ -484,7 +475,58 @@ def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = He
         emp_oid = emp.get("id")
         emp_name = emp.get("name")
 
-        oid = payload.get("id")
+        if not payload.get("id") and not payload.get("oid"):
+            cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
+            max_r = cursor.fetchone()
+            next_num = (int(max_r["oid"]) + 1) if max_r and max_r.get("oid") else 109
+            oid = str(next_num)
+        else:
+            oid = str(payload.get("id") or payload.get("oid"))
+
+        unit = payload.get("unit") or payload.get("unit_name") or ""
+        client_id = payload.get("clientId") or payload.get("client_id") or 1
+        site_id = payload.get("siteId") or payload.get("site_id") or 1
+        visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
+        visit_type = payload.get("visitType") or payload.get("visit_type") or "Night Round"
+        shift = payload.get("shift") or "Night"
+        start_time = payload.get("startTime") or payload.get("start_time") or "21:00"
+        end_time = payload.get("endTime") or payload.get("end_time") or "05:00"
+        gps = payload.get("gps") or ""
+        photos = payload.get("photos")
+        guards = payload.get("guards")
+        checklist = payload.get("checklist")
+        observations = payload.get("observations")
+        suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
+        attachments = payload.get("attachments")
+        officer_signature = payload.get("officerSignature") or payload.get("officer_signature") or ""
+        status = payload.get("status") or "Completed"
+        created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
+        lecture_details = payload.get("lectureDetails") or payload.get("lecture_details") or ""
+        random_checking = payload.get("randomChecking") or payload.get("random_checking") or ""
+        overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
+
+        if not payload.get("reportNo") and not payload.get("reportId") and not payload.get("report_id"):
+            try:
+                dt = datetime.strptime(str(visit_date), "%Y-%m-%d")
+                date_fmt = dt.strftime("%d/%m/%y")
+            except Exception:
+                date_fmt = datetime.now().strftime("%d/%m/%y")
+
+            c_name = "Client"
+            s_name = unit or "Site"
+            if client_id:
+                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
+                cr = cursor.fetchone()
+                if cr and cr.get("name"): c_name = cr["name"]
+            if site_id:
+                cursor.execute("SELECT name FROM SITE WHERE oid = %s", (site_id,))
+                sr = cursor.fetchone()
+                if sr and sr.get("name"): s_name = sr["name"]
+
+            report_id = f"01-{c_name}-{s_name}-ONR-{date_fmt}"
+        else:
+            report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
+
         # Check if exists
         cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
@@ -501,29 +543,29 @@ def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = He
                 WHERE oid = %s
             """
             query_params = (
-                payload.get("reportNo") or payload.get("reportId"),
-                payload.get("unit"),
-                payload.get("clientId"),
-                payload.get("siteId"),
-                payload.get("visitDate"),
-                payload.get("visitType"),
+                report_id,
+                unit,
+                client_id,
+                site_id,
+                visit_date,
+                visit_type,
                 emp_name,
-                payload.get("shift"),
-                payload.get("startTime"),
-                payload.get("endTime"),
-                payload.get("gps"),
-                serialize_field(payload.get("photos")),
-                serialize_field(payload.get("guards")),
-                serialize_field(payload.get("checklist")),
-                serialize_field(payload.get("observations")),
-                payload.get("suggestions"),
-                serialize_field(payload.get("attachments")),
-                payload.get("officerSignature"),
-                payload.get("status"),
-                payload.get("createdOn"),
-                payload.get("lectureDetails"),
-                payload.get("randomChecking"),
-                payload.get("overallRemarks"),
+                shift,
+                start_time,
+                end_time,
+                gps,
+                serialize_field(photos),
+                serialize_field(guards),
+                serialize_field(checklist),
+                serialize_field(observations),
+                suggestions,
+                serialize_field(attachments),
+                officer_signature,
+                status,
+                created_on,
+                lecture_details,
+                random_checking,
+                overall_remarks,
                 emp_oid,
                 oid
             )
@@ -539,58 +581,59 @@ def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = He
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             query_params = (
-                payload.get("reportNo") or payload.get("reportId"),
-                payload.get("unit"),
-                payload.get("clientId"),
-                payload.get("siteId"),
-                payload.get("visitDate"),
-                payload.get("visitType"),
+                report_id,
+                unit,
+                client_id,
+                site_id,
+                visit_date,
+                visit_type,
                 emp_name,
-                payload.get("shift"),
-                payload.get("startTime"),
-                payload.get("endTime"),
-                payload.get("gps"),
-                serialize_field(payload.get("photos")),
-                serialize_field(payload.get("guards")),
-                serialize_field(payload.get("checklist")),
-                serialize_field(payload.get("observations")),
-                payload.get("suggestions"),
-                serialize_field(payload.get("attachments")),
-                payload.get("officerSignature"),
-                payload.get("status"),
-                payload.get("createdOn"),
-                payload.get("lectureDetails"),
-                payload.get("randomChecking"),
-                payload.get("overallRemarks"),
+                shift,
+                start_time,
+                end_time,
+                gps,
+                serialize_field(photos),
+                serialize_field(guards),
+                serialize_field(checklist),
+                serialize_field(observations),
+                suggestions,
+                serialize_field(attachments),
+                officer_signature,
+                status,
+                created_on,
+                lecture_details,
+                random_checking,
+                overall_remarks,
                 emp_oid,
                 oid
             )
             cursor.execute(sql, query_params)
 
-            # Insert into VISIT_REPORT_METADATA
+            # Insert or update into VISIT_REPORT_METADATA
             metadata_sql = """
                 INSERT INTO VISIT_REPORT_METADATA (
                     employee_oid, officer, report_type, report_oid, site_id, visit_date
                 ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
             """
             metadata_params = (
                 emp_oid,
                 emp_name,
                 "NIGHT",
                 oid,
-                payload.get("siteId"),
-                payload.get("visitDate")
+                site_id,
+                visit_date
             )
             cursor.execute(metadata_sql, metadata_params)
         
         conn.commit()
-        return {"success": True, "message": "Report saved successfully"}
+        return {"success": True, "message": "Report saved successfully", "id": oid, "report_id": report_id}
     except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
-        raise e
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         cursor.close()
         conn.close()
@@ -678,7 +721,57 @@ def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = He
         emp_oid = emp.get("id")
         emp_name = emp.get("name")
 
-        oid = payload.get("id")
+        if not payload.get("id") and not payload.get("oid"):
+            cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
+            max_r = cursor.fetchone()
+            next_num = (int(max_r["oid"]) + 1) if max_r and max_r.get("oid") else 107
+            oid = str(next_num)
+        else:
+            oid = str(payload.get("id") or payload.get("oid"))
+
+        unit = payload.get("unit") or payload.get("unit_name") or ""
+        client_id = payload.get("clientId") or payload.get("client_id") or 1
+        site_id = payload.get("siteId") or payload.get("site_id") or 1
+        visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
+        visit_type = payload.get("visitType") or payload.get("visit_type") or "Scheduled"
+        shift = payload.get("shift") or "Day"
+        start_time = payload.get("startTime") or payload.get("start_time") or "09:00"
+        end_time = payload.get("endTime") or payload.get("end_time") or "17:00"
+        gps = payload.get("gps") or ""
+        photos = payload.get("photos")
+        guards = payload.get("guards")
+        checklist = payload.get("checklist")
+        observations = payload.get("observations")
+        suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
+        attachments = payload.get("attachments")
+        status = payload.get("status") or "Completed"
+        created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
+        lecture_details = payload.get("lectureDetails") or payload.get("lecture_details") or ""
+        random_checking = payload.get("randomChecking") or payload.get("random_checking") or ""
+        overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
+
+        if not payload.get("reportNo") and not payload.get("reportId") and not payload.get("report_id"):
+            try:
+                dt = datetime.strptime(str(visit_date), "%Y-%m-%d")
+                date_fmt = dt.strftime("%d/%m/%y")
+            except Exception:
+                date_fmt = datetime.now().strftime("%d/%m/%y")
+
+            c_name = "Client"
+            s_name = unit or "Site"
+            if client_id:
+                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
+                cr = cursor.fetchone()
+                if cr and cr.get("name"): c_name = cr["name"]
+            if site_id:
+                cursor.execute("SELECT name FROM SITE WHERE oid = %s", (site_id,))
+                sr = cursor.fetchone()
+                if sr and sr.get("name"): s_name = sr["name"]
+
+            report_id = f"01-{c_name}-{s_name}-ODV-{date_fmt}"
+        else:
+            report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
+
         cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
 
@@ -693,28 +786,28 @@ def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = He
                 WHERE oid = %s
             """
             query_params = (
-                payload.get("reportNo") or payload.get("reportId"),
-                payload.get("unit"),
-                payload.get("clientId"),
-                payload.get("siteId"),
-                payload.get("visitDate"),
-                payload.get("visitType"),
+                report_id,
+                unit,
+                client_id,
+                site_id,
+                visit_date,
+                visit_type,
                 emp_name,
-                payload.get("shift"),
-                payload.get("startTime"),
-                payload.get("endTime"),
-                payload.get("gps"),
-                serialize_field(payload.get("photos")),
-                serialize_field(payload.get("guards")),
-                serialize_field(payload.get("checklist")),
-                serialize_field(payload.get("observations")),
-                payload.get("suggestions"),
-                serialize_field(payload.get("attachments")),
-                payload.get("status"),
-                payload.get("createdOn"),
-                payload.get("lectureDetails"),
-                payload.get("randomChecking"),
-                payload.get("overallRemarks"),
+                shift,
+                start_time,
+                end_time,
+                gps,
+                serialize_field(photos),
+                serialize_field(guards),
+                serialize_field(checklist),
+                serialize_field(observations),
+                suggestions,
+                serialize_field(attachments),
+                status,
+                created_on,
+                lecture_details,
+                random_checking,
+                overall_remarks,
                 emp_oid,
                 oid
             )
@@ -730,57 +823,58 @@ def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = He
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             query_params = (
-                payload.get("reportNo") or payload.get("reportId"),
-                payload.get("unit"),
-                payload.get("clientId"),
-                payload.get("siteId"),
-                payload.get("visitDate"),
-                payload.get("visitType"),
+                report_id,
+                unit,
+                client_id,
+                site_id,
+                visit_date,
+                visit_type,
                 emp_name,
-                payload.get("shift"),
-                payload.get("startTime"),
-                payload.get("endTime"),
-                payload.get("gps"),
-                serialize_field(payload.get("photos")),
-                serialize_field(payload.get("guards")),
-                serialize_field(payload.get("checklist")),
-                serialize_field(payload.get("observations")),
-                payload.get("suggestions"),
-                serialize_field(payload.get("attachments")),
-                payload.get("status"),
-                payload.get("createdOn"),
-                payload.get("lectureDetails"),
-                payload.get("randomChecking"),
-                payload.get("overallRemarks"),
+                shift,
+                start_time,
+                end_time,
+                gps,
+                serialize_field(photos),
+                serialize_field(guards),
+                serialize_field(checklist),
+                serialize_field(observations),
+                suggestions,
+                serialize_field(attachments),
+                status,
+                created_on,
+                lecture_details,
+                random_checking,
+                overall_remarks,
                 emp_oid,
                 oid
             )
             cursor.execute(sql, query_params)
 
-            # Insert into VISIT_REPORT_METADATA
+            # Insert or update into VISIT_REPORT_METADATA
             metadata_sql = """
                 INSERT INTO VISIT_REPORT_METADATA (
                     employee_oid, officer, report_type, report_oid, site_id, visit_date
                 ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
             """
             metadata_params = (
                 emp_oid,
                 emp_name,
                 "DAY",
                 oid,
-                payload.get("siteId"),
-                payload.get("visitDate")
+                site_id,
+                visit_date
             )
             cursor.execute(metadata_sql, metadata_params)
         
         conn.commit()
-        return {"success": True, "message": "Report saved successfully"}
+        return {"success": True, "message": "Report saved successfully", "id": oid, "report_id": report_id}
     except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
-        raise e
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         cursor.close()
         conn.close()
@@ -1038,13 +1132,18 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
         emp_name = emp.get("name")
 
         init_general_visits_table(cursor)
-        oid = payload.get("id") or str(int(time.time() * 1000))
-        
+        if not payload.get("id") and not payload.get("oid"):
+            cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
+            max_r = cursor.fetchone()
+            next_num = (int(max_r["oid"]) + 1) if max_r and max_r.get("oid") else 108
+            oid = str(next_num)
+        else:
+            oid = str(payload.get("id") or payload.get("oid"))
+
         site_id = payload.get("siteId") or payload.get("site_id")
         client_id = payload.get("clientId") or payload.get("client_id")
         site_name = payload.get("siteName") or payload.get("site_name")
         client_name = payload.get("clientName") or payload.get("client_name")
-        report_id = payload.get("reportId") or payload.get("report_id") or f"GVR-{oid}"
 
         if not site_name and site_id:
             cursor.execute("SELECT name, CLIENTT FROM SITE WHERE oid = %s", (site_id,))
@@ -1059,6 +1158,20 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
             c_row = cursor.fetchone()
             if c_row:
                 client_name = c_row["name"]
+
+        if not payload.get("reportId") and not payload.get("report_id"):
+            v_date_raw = str(payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat())
+            try:
+                dt = datetime.strptime(v_date_raw, "%Y-%m-%d")
+                date_fmt = dt.strftime("%d/%m/%y")
+            except Exception:
+                date_fmt = datetime.now().strftime("%d/%m/%y")
+
+            c_str = client_name or "Client"
+            s_str = site_name or "Site"
+            report_id = f"01-{c_str}-{s_str}-OGV-{date_fmt}"
+        else:
+            report_id = str(payload.get("reportId") or payload.get("report_id"))
 
         cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()

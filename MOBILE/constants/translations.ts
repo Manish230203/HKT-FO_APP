@@ -4,7 +4,7 @@ export const translations = {
   en: {
     // Language Selection
     select_language: 'Select Preferred Language',
-    choose_language_desc: 'Choose your language to continue with PatrolSync Field Officer App',
+    choose_language_desc: 'Choose your language to continue with Field Officer App',
     continue: 'Continue',
     
     // Login
@@ -150,7 +150,7 @@ export const translations = {
   hi: {
     // Language Selection
     select_language: 'अपनी पसंदीदा भाषा चुनें',
-    choose_language_desc: 'पेट्रोलसिंक फील्ड ऑफिसर ऐप जारी रखने के लिए अपनी भाषा चुनें',
+    choose_language_desc: 'फील्ड ऑफिसर ऐप जारी रखने के लिए अपनी भाषा चुनें',
     continue: 'आगे बढ़ें',
     
     // Login
@@ -296,7 +296,7 @@ export const translations = {
   mr: {
     // Language Selection
     select_language: 'आपली आवडती भाषा निवडा',
-    choose_language_desc: 'पेट्रोलसिंक फील्ड ऑफिसर ॲप वापरण्यासाठी भाषा निवडा',
+    choose_language_desc: 'फील्ड ऑफिसर ॲप वापरण्यासाठी भाषा निवडा',
     continue: 'पुढे जा',
     
     // Login

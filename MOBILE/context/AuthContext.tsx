@@ -38,6 +38,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const empId = session.user.employee_id || session.user.id || session.user.username;
         const savedImage = await getProfileImage(empId);
         setProfileImage(savedImage);
+
+        // Re-sync latest DB profile metadata (company, site) from server
+        try {
+          const freshUser = await getAuthenticatedUser();
+          if (freshUser) {
+            const updatedUser = { ...session.user, ...freshUser };
+            setUser(updatedUser);
+            await saveUserSession(updatedUser, session.token);
+          }
+        } catch (syncErr) {
+          // Fallback to cached session if offline
+        }
       } else {
         setProfileImage(null);
       }

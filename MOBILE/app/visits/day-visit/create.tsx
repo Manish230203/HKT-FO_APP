@@ -120,10 +120,18 @@ export default function CreateDayVisitReportScreen() {
         if (foundSite) {
           setSiteId(String(foundSite.id));
           setSiteName(foundSite.name);
-          if (foundSite.client_id) {
-            setClientId(String(foundSite.client_id));
-            setClientName(foundSite.client_name || '');
+          const cId = foundSite.client_id || params.clientId;
+          if (cId) {
+            setClientId(String(cId));
+            const foundClient = (clientData || []).find((c) => String(c.id) === String(cId));
+            setClientName(foundClient?.name || foundSite.client_name || '');
           }
+        }
+      } else if (params.clientId && clientData) {
+        const foundClient = (clientData || []).find((c) => String(c.id) === String(params.clientId));
+        if (foundClient) {
+          setClientId(String(foundClient.id));
+          setClientName(foundClient.name);
         }
       }
     } catch (e) {
@@ -139,7 +147,7 @@ export default function CreateDayVisitReportScreen() {
   );
 
   const filteredSites = sites.filter((s) => {
-    const matchesClient = (!clientId || clientId === 'ALL') ? true : String(s.client_id) === String(clientId);
+    const matchesClient = !clientId ? true : String(s.client_id) === String(clientId);
     const matchesSearch = s.name.toLowerCase().includes(siteSearchQuery.toLowerCase()) ||
                           (s.client_name && s.client_name.toLowerCase().includes(siteSearchQuery.toLowerCase()));
     return matchesClient && matchesSearch;
@@ -391,28 +399,26 @@ export default function CreateDayVisitReportScreen() {
             />
 
             <FlatList
-              data={[{ id: 'ALL', name: 'All Clients (Show All Sites)' }, ...filteredClients]}
+              data={filteredClients}
               keyExtractor={(item) => String(item.id)}
+              ListEmptyComponent={
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No clients found.</Text>
+                </View>
+              }
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.modalItem}
                   onPress={() => {
-                    if (item.id === 'ALL') {
-                      setClientId('ALL');
-                      setClientName('All Clients');
-                    } else {
-                      setClientId(String(item.id));
-                      setClientName(item.name);
-                    }
+                    setClientId(String(item.id));
+                    setClientName(item.name);
                     setSiteId('');
                     setSiteName('');
                     setClientModalVisible(false);
                   }}
                 >
-                  <Building color={item.id === 'ALL' ? '#10B981' : '#3B82F6'} size={18} style={{ marginRight: 10 }} />
-                  <Text style={[styles.modalItemText, item.id === 'ALL' && { color: '#10B981', fontWeight: '700' }]}>
-                    {item.name}
-                  </Text>
+                  <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
+                  <Text style={styles.modalItemText}>{item.name}</Text>
                 </TouchableOpacity>
               )}
             />

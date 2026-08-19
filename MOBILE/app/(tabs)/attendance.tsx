@@ -23,6 +23,8 @@ import {
   LogOut,
   User,
   Building,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
@@ -51,6 +53,39 @@ export default function AttendanceScreen() {
   const [searchLogs, setSearchLogs] = useState('');
   const [logFilter, setLogFilter] = useState<'week' | 'month' | 'prev'>('week');
   const [missedFilter, setMissedFilter] = useState<'weekly' | 'monthly' | 'custom'>('weekly');
+  const [viewMonthOffset, setViewMonthOffset] = useState<number>(0);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  // Generate days array for the active view month
+  const daysInViewMonth = useMemo(() => {
+    const now = new Date();
+    const targetDate = new Date(now.getFullYear(), now.getMonth() + viewMonthOffset, 1);
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+
+    const days = [];
+    for (let d = 1; d <= totalDays; d++) {
+      const dateObj = new Date(year, month, d);
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+      days.push({
+        dateStr,
+        dayName,
+        dayNum: dd,
+        dayNumber: d,
+      });
+    }
+    return {
+      year,
+      month,
+      monthName: targetDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      days,
+    };
+  }, [viewMonthOffset]);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,7 +97,7 @@ export default function AttendanceScreen() {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const empId = user?.employee_id || user?.id || user?.username;
+      const empId = user?.employee_id || (user?.id ? String(user.id) : '') || (user as any)?.username;
       const records = await getPunchRecords(empId);
       setPunchRecords(records || []);
     } catch (e) {
@@ -132,6 +167,34 @@ export default function AttendanceScreen() {
   // Filtered Dynamic Logs
   const filteredLogs = useMemo(() => {
     let list = punchRecords;
+
+    if (logFilter === 'week') {
+      const now = new Date();
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      list = list.filter((r) => !r.date || new Date(r.date) >= oneWeekAgo);
+    } else if (logFilter === 'month') {
+      const now = new Date();
+      const currentY = now.getFullYear();
+      const currentM = now.getMonth();
+      list = list.filter((r) => {
+        if (!r.date) return true;
+        const d = new Date(r.date);
+        return d.getFullYear() === currentY && d.getMonth() === currentM;
+      });
+    } else if (logFilter === 'prev') {
+      if (selectedDate) {
+        list = list.filter((r) => r.date === selectedDate);
+      } else {
+        const targetYear = daysInViewMonth.year;
+        const targetMonth = daysInViewMonth.month;
+        list = list.filter((r) => {
+          if (!r.date) return true;
+          const d = new Date(r.date);
+          return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+        });
+      }
+    }
+
     if (searchLogs) {
       const q = searchLogs.toLowerCase();
       list = list.filter(
@@ -139,16 +202,47 @@ export default function AttendanceScreen() {
           r.dayTitle?.toLowerCase().includes(q) ||
           r.siteName?.toLowerCase().includes(q) ||
           r.punchInTime?.toLowerCase().includes(q) ||
-          r.status?.toLowerCase().includes(q)
+          r.status?.toLowerCase().includes(q) ||
+          r.date?.includes(q)
       );
     }
+
     return list;
-  }, [punchRecords, searchLogs]);
+  }, [punchRecords, searchLogs, logFilter, selectedDate, daysInViewMonth]);
 
   // Dynamic Missed Punch Logs
   const missedLogs = useMemo(() => {
-    return punchRecords.filter((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
-  }, [punchRecords]);
+    let list = punchRecords.filter((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
+
+    if (missedFilter === 'weekly') {
+      const now = new Date();
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      list = list.filter((r) => !r.date || new Date(r.date) >= oneWeekAgo);
+    } else if (missedFilter === 'monthly') {
+      const now = new Date();
+      const currentY = now.getFullYear();
+      const currentM = now.getMonth();
+      list = list.filter((r) => {
+        if (!r.date) return true;
+        const d = new Date(r.date);
+        return d.getFullYear() === currentY && d.getMonth() === currentM;
+      });
+    } else if (missedFilter === 'custom') {
+      if (selectedDate) {
+        list = list.filter((r) => r.date === selectedDate);
+      } else {
+        const targetYear = daysInViewMonth.year;
+        const targetMonth = daysInViewMonth.month;
+        list = list.filter((r) => {
+          if (!r.date) return true;
+          const d = new Date(r.date);
+          return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+        });
+      }
+    }
+
+    return list;
+  }, [punchRecords, missedFilter, selectedDate, daysInViewMonth]);
 
   const latestPunch = punchRecords.length > 0 ? punchRecords[0] : null;
 
@@ -320,7 +414,11 @@ export default function AttendanceScreen() {
             {/* Time Filter Tabs */}
             <View style={styles.filterPillsContainer}>
               <TouchableOpacity
-                onPress={() => setLogFilter('week')}
+                onPress={() => {
+                  setLogFilter('week');
+                  setViewMonthOffset(0);
+                  setSelectedDate(null);
+                }}
                 style={[styles.filterPillBtn, logFilter === 'week' && styles.filterPillActive]}
               >
                 <Text style={[styles.filterPillText, logFilter === 'week' && styles.filterPillTextActive]}>
@@ -329,7 +427,11 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setLogFilter('month')}
+                onPress={() => {
+                  setLogFilter('month');
+                  setViewMonthOffset(0);
+                  setSelectedDate(null);
+                }}
                 style={[styles.filterPillBtn, logFilter === 'month' && styles.filterPillActive]}
               >
                 <Text style={[styles.filterPillText, logFilter === 'month' && styles.filterPillTextActive]}>
@@ -338,7 +440,11 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setLogFilter('prev')}
+                onPress={() => {
+                  setLogFilter('prev');
+                  setViewMonthOffset(-1);
+                  setSelectedDate(null);
+                }}
                 style={[styles.filterPillBtn, logFilter === 'prev' && styles.filterPillActive]}
               >
                 <Text style={[styles.filterPillText, logFilter === 'prev' && styles.filterPillTextActive]}>
@@ -346,6 +452,85 @@ export default function AttendanceScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Dynamic Date Selector Strip - ONLY shown when Previous Month tab is active */}
+            {logFilter === 'prev' && (
+              <View style={styles.dateStripCard}>
+                <View style={styles.monthNavHeader}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setViewMonthOffset((prev) => prev - 1);
+                      setSelectedDate(null);
+                    }}
+                    style={styles.navArrowBtn}
+                  >
+                    <ChevronLeft color="#94A3B8" size={20} />
+                  </TouchableOpacity>
+
+                  <Text style={styles.monthNavTitle}>{daysInViewMonth.monthName.toUpperCase()}</Text>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setViewMonthOffset((prev) => Math.min(0, prev + 1));
+                      setSelectedDate(null);
+                    }}
+                    style={styles.navArrowBtn}
+                  >
+                    <ChevronRight color="#94A3B8" size={20} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.dateStripScroll}
+                >
+                  {daysInViewMonth.days.map((item) => {
+                    const isSelected = selectedDate === item.dateStr;
+                    const hasRecord = punchRecords.some((r) => r.date === item.dateStr);
+
+                    return (
+                      <TouchableOpacity
+                        key={item.dateStr}
+                        activeOpacity={0.8}
+                        onPress={() => setSelectedDate(isSelected ? null : item.dateStr)}
+                        style={[
+                          styles.dayPillBtn,
+                          isSelected && styles.dayPillActive,
+                          hasRecord && !isSelected && styles.dayPillHasRecord,
+                        ]}
+                      >
+                        <Text style={[styles.dayNameLabel, isSelected && styles.dayNameActive]}>
+                          {item.dayName}
+                        </Text>
+                        <Text style={[styles.dayNumDigits, isSelected && styles.dayNumActive]}>
+                          {item.dayNum}
+                        </Text>
+                        {hasRecord && (
+                          <View
+                            style={[
+                              styles.recordIndicatorDot,
+                              isSelected && { backgroundColor: '#FFFFFF' },
+                            ]}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {selectedDate && (
+                  <View style={styles.selectedDateBanner}>
+                    <Text style={styles.selectedDateText}>
+                      Filtered by date: <Text style={{ color: '#3B82F6', fontWeight: '800' }}>{selectedDate}</Text>
+                    </Text>
+                    <TouchableOpacity onPress={() => setSelectedDate(null)}>
+                      <Text style={styles.clearFilterText}>Clear Filter</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Dynamic Log Cards List */}
             {filteredLogs.length === 0 ? (
@@ -433,7 +618,11 @@ export default function AttendanceScreen() {
             {/* Range Filter Tabs */}
             <View style={styles.rangeFilterContainer}>
               <TouchableOpacity
-                onPress={() => setMissedFilter('weekly')}
+                onPress={() => {
+                  setMissedFilter('weekly');
+                  setViewMonthOffset(0);
+                  setSelectedDate(null);
+                }}
                 style={[styles.rangePillBtn, missedFilter === 'weekly' && styles.rangePillActive]}
               >
                 <Text style={[styles.rangePillText, missedFilter === 'weekly' && styles.rangePillTextActive]}>
@@ -442,7 +631,11 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setMissedFilter('monthly')}
+                onPress={() => {
+                  setMissedFilter('monthly');
+                  setViewMonthOffset(0);
+                  setSelectedDate(null);
+                }}
                 style={[styles.rangePillBtn, missedFilter === 'monthly' && styles.rangePillActive]}
               >
                 <Text style={[styles.rangePillText, missedFilter === 'monthly' && styles.rangePillTextActive]}>
@@ -451,7 +644,11 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setMissedFilter('custom')}
+                onPress={() => {
+                  setMissedFilter('custom');
+                  setViewMonthOffset(-1);
+                  setSelectedDate(null);
+                }}
                 style={[styles.rangePillBtn, missedFilter === 'custom' && styles.rangePillActive]}
               >
                 <Text style={[styles.rangePillText, missedFilter === 'custom' && styles.rangePillTextActive]}>
@@ -459,6 +656,87 @@ export default function AttendanceScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Dynamic Date Selector Strip - ONLY shown when CUSTOM RANGE / PREVIOUS MONTH tab is active */}
+            {missedFilter === 'custom' && (
+              <View style={styles.dateStripCard}>
+                <View style={styles.monthNavHeader}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setViewMonthOffset((prev) => prev - 1);
+                      setSelectedDate(null);
+                    }}
+                    style={styles.navArrowBtn}
+                  >
+                    <ChevronLeft color="#94A3B8" size={20} />
+                  </TouchableOpacity>
+
+                  <Text style={styles.monthNavTitle}>{daysInViewMonth.monthName.toUpperCase()}</Text>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setViewMonthOffset((prev) => Math.min(0, prev + 1));
+                      setSelectedDate(null);
+                    }}
+                    style={styles.navArrowBtn}
+                  >
+                    <ChevronRight color="#94A3B8" size={20} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.dateStripScroll}
+                >
+                  {daysInViewMonth.days.map((item) => {
+                    const isSelected = selectedDate === item.dateStr;
+                    const hasRecord = punchRecords.some(
+                      (r) => (r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--') && r.date === item.dateStr
+                    );
+
+                    return (
+                      <TouchableOpacity
+                        key={item.dateStr}
+                        activeOpacity={0.8}
+                        onPress={() => setSelectedDate(isSelected ? null : item.dateStr)}
+                        style={[
+                          styles.dayPillBtn,
+                          isSelected && styles.dayPillActive,
+                          hasRecord && !isSelected && styles.dayPillHasRecord,
+                        ]}
+                      >
+                        <Text style={[styles.dayNameLabel, isSelected && styles.dayNameActive]}>
+                          {item.dayName}
+                        </Text>
+                        <Text style={[styles.dayNumDigits, isSelected && styles.dayNumActive]}>
+                          {item.dayNum}
+                        </Text>
+                        {hasRecord && (
+                          <View
+                            style={[
+                              styles.recordIndicatorDot,
+                              isSelected && { backgroundColor: '#FFFFFF' },
+                            ]}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {selectedDate && (
+                  <View style={styles.selectedDateBanner}>
+                    <Text style={styles.selectedDateText}>
+                      Filtered by date: <Text style={{ color: '#3B82F6', fontWeight: '800' }}>{selectedDate}</Text>
+                    </Text>
+                    <TouchableOpacity onPress={() => setSelectedDate(null)}>
+                      <Text style={styles.clearFilterText}>Clear Filter</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Dynamic Missed Punch Record Cards */}
             {missedLogs.length === 0 ? (
@@ -984,5 +1262,104 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#EF4444',
+  },
+
+  /* DYNAMIC DATE SELECTOR STRIP STYLES */
+  dateStripCard: {
+    backgroundColor: '#131C33',
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  monthNavHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  navArrowBtn: {
+    padding: 6,
+    borderRadius: 10,
+    backgroundColor: '#1E293B',
+  },
+  monthNavTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  dateStripScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  dayPillBtn: {
+    width: 58,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  dayPillActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#60A5FA',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  dayPillHasRecord: {
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    backgroundColor: '#1A2438',
+  },
+  dayNameLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  dayNameActive: {
+    color: '#E0F2FE',
+  },
+  dayNumDigits: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  dayNumActive: {
+    color: '#FFFFFF',
+  },
+  recordIndicatorDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#3B82F6',
+    marginTop: 4,
+  },
+  selectedDateBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  selectedDateText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  clearFilterText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '700',
   },
 });
