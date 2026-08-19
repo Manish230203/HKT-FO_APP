@@ -1,7 +1,8 @@
 import api from './api';
 
-export const getDayVisitReports = async () => {
-  const response = await api.get('/officer-visits/reports');
+export const getDayVisitReports = async (empOid?: number | string) => {
+  const url = empOid ? `/officer-visits/reports?empOid=${empOid}` : '/officer-visits/reports';
+  const response = await api.get(url);
   return response.data || [];
 };
 
@@ -10,8 +11,9 @@ export const submitDayVisitReport = async (payload: any) => {
   return response.data;
 };
 
-export const getNightVisitReports = async () => {
-  const response = await api.get('/officer-rounds/reports');
+export const getNightVisitReports = async (empOid?: number | string) => {
+  const url = empOid ? `/officer-rounds/reports?empOid=${empOid}` : '/officer-rounds/reports';
+  const response = await api.get(url);
   return response.data || [];
 };
 
@@ -20,12 +22,23 @@ export const submitNightVisitReport = async (payload: any) => {
   return response.data;
 };
 
-export const getGeneralVisits = async () => {
-  const response = await api.get('/general-visits');
+export const getGeneralVisits = async (empOid?: number | string) => {
+  const url = empOid ? `/general-visits?empOid=${empOid}` : '/general-visits';
+  const response = await api.get(url);
   return response.data || [];
 };
 
 export const submitGeneralVisit = async (payload: any) => {
   const response = await api.post('/general-visits', payload);
   return response.data;
+};
+
+export const getDayVisitTemplates = async () => {
+  const response = await api.get('/officer-visits/templates');
+  return response.data || [];
+};
+
+export const getNightVisitTemplates = async () => {
+  const response = await api.get('/officer-rounds/templates');
+  return response.data || [];
 };

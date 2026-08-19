@@ -33,17 +33,34 @@ export interface PlannedVisit {
   status?: string;
 }
 
-export const getClients = async (): Promise<Client[]> => {
-  const response = await api.get('/assessments/clients');
+export const getClients = async (empOid?: number | string): Promise<Client[]> => {
+  const url = empOid ? `/assessments/clients?empOid=${empOid}` : '/assessments/clients';
+  const response = await api.get(url);
   return response.data || [];
 };
 
-export const getSites = async (): Promise<Site[]> => {
-  const response = await api.get('/assessments/sites');
+export const getSites = async (empOid?: number | string): Promise<Site[]> => {
+  const url = empOid ? `/assessments/sites?empOid=${empOid}` : '/assessments/sites';
+  const response = await api.get(url);
   return response.data || [];
 };
 
-export const getPlannedVisits = async (): Promise<PlannedVisit[]> => {
-  const response = await api.get('/planned-visits');
+export const getPlannedVisits = async (empOid?: number | string): Promise<PlannedVisit[]> => {
+  const url = empOid ? `/planned-visits?empOid=${empOid}` : '/planned-visits';
+  const response = await api.get(url);
   return response.data || [];
 };
+
+export const createPlannedVisit = async (payload: {
+  planningType?: string;
+  siteId: number;
+  officerId: number | string;
+  visitFrequency?: number;
+  visitDate?: string;
+  weekStartDate?: string;
+  weekEndDate?: string;
+}) => {
+  const response = await api.post('/planned-visits', payload);
+  return response.data;
+};
+

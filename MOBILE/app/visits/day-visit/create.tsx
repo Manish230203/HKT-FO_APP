@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sun, Plus, Trash2, CheckCircle2 } from 'lucide-react-native';
+import { Sun, Plus, Trash2, CheckCircle2, ChevronDown, Building, X, Clock } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
-import { getSites, Site } from '../../../services/siteService';
-import { submitDayVisitReport } from '../../../services/visitService';
+import { getSites, getClients, Site, Client } from '../../../services/siteService';
+import { submitDayVisitReport, getDayVisitTemplates } from '../../../services/visitService';
 import { THEME } from '../../../constants/theme';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
@@ -13,19 +13,9 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { StepIndicator } from '../../../components/ui/StepIndicator';
 import { CustomAlertModal } from '../../../components/ui/CustomAlertModal';
+import { TimePicker24Modal } from '../../../components/ui/TimePicker24Modal';
 
 const STEPS = ['General Info', 'Guards', 'Checklist', 'Feedback', 'Suggestions', 'Review'];
-
-const PRE_DEFINED_QUESTIONS = [
-  'Security manpower available as per deployment',
-  'Guards in proper uniform, ID card & grooming',
-  'Attendance & biometric verified',
-  'All security posts properly manned',
-  'Gate frisking carried out as per SOP',
-  'CCTV cameras functioning properly',
-  'Fire extinguishers available and valid',
-  'Daily occurrence book updated',
-];
 
 export default function CreateDayVisitReportScreen() {
   const { user } = useAuth();
@@ -38,11 +28,36 @@ export default function CreateDayVisitReportScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   // Form State
-  const [clientId, setClientId] = useState(params.clientId || '1');
-  const [siteId, setSiteId] = useState(params.siteId || '1');
+  const [clients, setClients] = useState<Client[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [clientId, setClientId] = useState(params.clientId || '');
+  const [clientName, setClientName] = useState('');
+  const [siteId, setSiteId] = useState(params.siteId || '');
   const [siteName, setSiteName] = useState('');
   const [shift, setShift] = useState('Morning');
   const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
+
+  // Dynamic Template Questions from DB (FIELD_OFFICER_DAY_VISIT_TEMPLATES)
+  const [templateQuestions, setTemplateQuestions] = useState<Array<{ id: string; section?: string; question: string }>>([]);
+
+  // Time Picker 24h State
+  const [timePickerConfig, setTimePickerConfig] = useState<{
+    visible: boolean;
+    mode: 'start' | 'end';
+    title: string;
+    value: string;
+  }>({
+    visible: false,
+    mode: 'start',
+    title: '',
+    value: '09:00',
+  });
+
+  // Modal selector states
+  const [clientModalVisible, setClientModalVisible] = useState(false);
+  const [siteModalVisible, setSiteModalVisible] = useState(false);
 
   // Guards List
   const [guards, setGuards] = useState<Array<{ name: string; empCode: string; dutyType: string; rating: string }>>([
@@ -52,11 +67,7 @@ export default function CreateDayVisitReportScreen() {
   const [newGuardCode, setNewGuardCode] = useState('');
 
   // Checklist
-  const [checklist, setChecklist] = useState<Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'>>(() => {
-    const init: Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'> = {};
-    PRE_DEFINED_QUESTIONS.forEach((q) => (init[q] = 'Satisfactory'));
-    return init;
-  });
+  const [checklist, setChecklist] = useState<Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'>>({});
 
   // Observations
   const [overallRemarks, setOverallRemarks] = useState('');
@@ -76,23 +87,63 @@ export default function CreateDayVisitReportScreen() {
   });
 
   useEffect(() => {
-    loadSitesData();
+    loadClientsAndSites();
   }, []);
 
-  const loadSitesData = async () => {
+  const loadClientsAndSites = async () => {
     try {
-      const data = await getSites();
-      if (data && data.length > 0) {
-        const found = data.find((s) => String(s.id) === String(params.siteId));
-        if (found) {
-          setSiteName(found.name);
-          setClientId(String(found.client_id || params.clientId || 1));
+      const empOidVal = user?.id || user?.empOid || user?.employee_id || 7558;
+      const [clientData, siteData, templates] = await Promise.all([
+        getClients(),
+        getSites(),
+        getDayVisitTemplates(),
+      ]);
+      setClients(clientData || []);
+      setSites(siteData || []);
+
+      // Load DB template questions from FIELD_OFFICER_DAY_VISIT_TEMPLATES
+      if (templates && templates.length > 0) {
+        const qList = templates[0].questions || [];
+        if (qList.length > 0) {
+          setTemplateQuestions(qList);
+          const initChecklist: Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'> = {};
+          qList.forEach((qItem: any) => {
+            const text = qItem.question || String(qItem);
+            initChecklist[text] = 'Satisfactory';
+          });
+          setChecklist(initChecklist);
+        }
+      }
+
+      if (params.siteId && siteData) {
+        const foundSite = siteData.find((s) => String(s.id) === String(params.siteId));
+        if (foundSite) {
+          setSiteId(String(foundSite.id));
+          setSiteName(foundSite.name);
+          if (foundSite.client_id) {
+            setClientId(String(foundSite.client_id));
+            setClientName(foundSite.client_name || '');
+          }
         }
       }
     } catch (e) {
-      console.error('Error loading site info', e);
+      console.error('Error loading client & site info', e);
     }
   };
+
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [siteSearchQuery, setSiteSearchQuery] = useState('');
+
+  const filteredClients = clients.filter((c) =>
+    c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())
+  );
+
+  const filteredSites = sites.filter((s) => {
+    const matchesClient = (!clientId || clientId === 'ALL') ? true : String(s.client_id) === String(clientId);
+    const matchesSearch = s.name.toLowerCase().includes(siteSearchQuery.toLowerCase()) ||
+                          (s.client_name && s.client_name.toLowerCase().includes(siteSearchQuery.toLowerCase()));
+    return matchesClient && matchesSearch;
+  });
 
   const handleAddGuard = () => {
     if (!newGuardName) return;
@@ -136,15 +187,15 @@ export default function CreateDayVisitReportScreen() {
       await submitDayVisitReport(payload);
       setAlertInfo({
         visible: true,
-        title: 'Day Visit Submitted',
-        message: 'Day Visit Report has been successfully submitted.',
+        title: t('day_visit_submitted'),
+        message: t('day_visit_success_desc'),
         type: 'success',
       });
     } catch (e: any) {
       console.error('Day visit submit failed', e);
       setAlertInfo({
         visible: true,
-        title: 'Submission Error',
+        title: t('missing_fields'),
         message: e.response?.data?.detail || 'Failed to submit Day Visit Report.',
         type: 'error',
       });
@@ -162,11 +213,58 @@ export default function CreateDayVisitReportScreen() {
         {currentStep === 0 && (
           <Card style={styles.stepCard}>
             <Text style={styles.stepTitle}>General Information</Text>
-            <Input label="Client ID" value={clientId} onChangeText={setClientId} />
-            <Input label="Site ID" value={siteId} onChangeText={setSiteId} />
-            <Input label="Site Name" value={siteName} onChangeText={setSiteName} placeholder="e.g. Eagle HQ" />
+
+            {/* Client Selector Dropdown */}
+            <Text style={styles.fieldLabel}>SELECT CLIENT</Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setClientModalVisible(true)}
+              style={styles.pickerButton}
+            >
+              <Text style={styles.pickerButtonText}>
+                {clientName || clients.find((c) => String(c.id) === String(clientId))?.name || 'Select Client...'}
+              </Text>
+              <ChevronDown color={THEME.textVariant} size={20} />
+            </TouchableOpacity>
+
+            {/* Site Selector Dropdown */}
+            <Text style={styles.fieldLabel}>SELECT SITE</Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setSiteModalVisible(true)}
+              style={styles.pickerButton}
+            >
+              <Text style={styles.pickerButtonText}>
+                {siteName || sites.find((s) => String(s.id) === String(siteId))?.name || 'Select Site...'}
+              </Text>
+              <ChevronDown color={THEME.textVariant} size={20} />
+            </TouchableOpacity>
+
             <Input label="Shift" value={shift} onChangeText={setShift} />
             <Input label="Visit Date" value={visitDate} onChangeText={setVisitDate} />
+            
+            {/* Start Time 24h Selector */}
+            <Text style={styles.fieldLabel}>START TIME (24-HR CLOCK)</Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setTimePickerConfig({ visible: true, mode: 'start', title: 'Select Start Time (24-Hour Clock)', value: startTime })}
+              style={styles.pickerButton}
+            >
+              <Text style={styles.pickerButtonText}>{startTime} (HH:mm)</Text>
+              <Clock color={THEME.primary} size={20} />
+            </TouchableOpacity>
+
+            {/* End Time 24h Selector */}
+            <Text style={styles.fieldLabel}>END TIME (24-HR CLOCK)</Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setTimePickerConfig({ visible: true, mode: 'end', title: 'Select End Time (24-Hour Clock)', value: endTime })}
+              style={styles.pickerButton}
+            >
+              <Text style={styles.pickerButtonText}>{endTime} (HH:mm)</Text>
+              <Clock color={THEME.primary} size={20} />
+            </TouchableOpacity>
+
             <Input label="Submitting Officer" value={user?.name || 'Field Officer'} editable={false} />
           </Card>
         )}
@@ -197,13 +295,31 @@ export default function CreateDayVisitReportScreen() {
         {/* STEP 2: Checklist */}
         {currentStep === 2 && (
           <Card style={styles.stepCard}>
-            <Text style={styles.stepTitle}>Checklist & Observations</Text>
-            {PRE_DEFINED_QUESTIONS.map((q) => {
-              const status = checklist[q];
+            <Text style={styles.stepTitle}>Officer Day Visit Checklist ({templateQuestions.length} Items)</Text>
+            {templateQuestions.map((item, idx) => {
+              const qText = item.question || String(item);
+              const status = checklist[qText] || 'Satisfactory';
               const isSat = status === 'Satisfactory';
               return (
-                <TouchableOpacity key={q} activeOpacity={0.8} onPress={() => toggleChecklistQuestion(q)} style={styles.checkRow}>
-                  <Text style={styles.checkQuestion}>{q}</Text>
+                <TouchableOpacity
+                  key={item.id || idx}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    setChecklist((prev) => ({
+                      ...prev,
+                      [qText]: prev[qText] === 'Satisfactory' ? 'Unsatisfactory' : 'Satisfactory',
+                    }))
+                  }
+                  style={styles.checkRow}
+                >
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    {item.section ? (
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: THEME.primary, marginBottom: 2 }}>
+                        {item.section.toUpperCase()}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.checkQuestion}>{qText}</Text>
+                  </View>
                   <Badge label={status} variant={isSat ? 'success' : 'danger'} />
                 </TouchableOpacity>
               );
@@ -256,6 +372,107 @@ export default function CreateDayVisitReportScreen() {
         )}
       </View>
 
+      {/* Client Selection Modal */}
+      <Modal visible={clientModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Client</Text>
+              <TouchableOpacity onPress={() => setClientModalVisible(false)}>
+                <X color="#94A3B8" size={24} />
+              </TouchableOpacity>
+            </View>
+
+            <Input
+              placeholder="Search Client..."
+              value={clientSearchQuery}
+              onChangeText={setClientSearchQuery}
+              style={{ marginTop: 12, marginBottom: 12 }}
+            />
+
+            <FlatList
+              data={[{ id: 'ALL', name: 'All Clients (Show All Sites)' }, ...filteredClients]}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => {
+                    if (item.id === 'ALL') {
+                      setClientId('ALL');
+                      setClientName('All Clients');
+                    } else {
+                      setClientId(String(item.id));
+                      setClientName(item.name);
+                    }
+                    setSiteId('');
+                    setSiteName('');
+                    setClientModalVisible(false);
+                  }}
+                >
+                  <Building color={item.id === 'ALL' ? '#10B981' : '#3B82F6'} size={18} style={{ marginRight: 10 }} />
+                  <Text style={[styles.modalItemText, item.id === 'ALL' && { color: '#10B981', fontWeight: '700' }]}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Site Selection Modal */}
+      <Modal visible={siteModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Site</Text>
+              <TouchableOpacity onPress={() => setSiteModalVisible(false)}>
+                <X color="#94A3B8" size={24} />
+              </TouchableOpacity>
+            </View>
+
+            <Input
+              placeholder="Search Site by Name..."
+              value={siteSearchQuery}
+              onChangeText={setSiteSearchQuery}
+              style={{ marginTop: 12, marginBottom: 12 }}
+            />
+
+            <FlatList
+              data={filteredSites}
+              keyExtractor={(item) => String(item.id)}
+              ListEmptyComponent={
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No sites found for this selection.</Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setSiteId(String(item.id));
+                    setSiteName(item.name);
+                    if (item.client_id) {
+                      setClientId(String(item.client_id));
+                      setClientName(item.client_name || '');
+                    }
+                    setSiteModalVisible(false);
+                  }}
+                >
+                  <Building color="#10B981" size={18} style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalItemText}>{item.name}</Text>
+                    {item.client_name ? (
+                      <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>{item.client_name}</Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
       <CustomAlertModal
         visible={alertInfo.visible}
         title={alertInfo.title}
@@ -266,6 +483,17 @@ export default function CreateDayVisitReportScreen() {
           if (alertInfo.type === 'success') router.replace('/(tabs)/dashboard');
         }}
       />
+
+      <TimePicker24Modal
+        visible={timePickerConfig.visible}
+        title={timePickerConfig.title}
+        initialValue={timePickerConfig.value}
+        onConfirm={(val) => {
+          if (timePickerConfig.mode === 'start') setStartTime(val);
+          else setEndTime(val);
+        }}
+        onClose={() => setTimePickerConfig((prev) => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }
@@ -274,6 +502,69 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: THEME.background,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  pickerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F8FAFC',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: '#0F172A',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#F8FAFC',
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B',
+  },
+  modalItemText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F8FAFC',
   },
   scrollContent: {
     padding: 16,

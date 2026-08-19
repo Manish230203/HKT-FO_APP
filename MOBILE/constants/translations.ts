@@ -8,23 +8,29 @@ export const translations = {
     continue: 'Continue',
     
     // Login
-    login_title: 'PatrolSync FO',
+    login_title: 'F.O. Mobile App',
     login_subtitle: 'Field Officer Sign In',
-    emp_id_or_mobile: 'Employee ID / Mobile Number',
-    emp_id_placeholder: 'e.g., EMP001 or 9876543210',
-    password: 'Password',
-    password_placeholder: 'Enter password',
+    mobile_number: 'Mobile Number',
+    mobile_placeholder: 'Enter 10-digit mobile number',
     sign_in: 'Sign In',
     authenticating: 'Authenticating...',
-    invalid_credentials: 'Invalid credentials. Please check Employee ID/Mobile or password.',
+    invalid_credentials: 'User not found for this mobile number. Please check your registered mobile number.',
+    invalid_mobile: 'Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9).',
+    no_account_found: 'No account found for this mobile number. Please check your mobile number or contact your administrator.',
+    access_restricted_fo: 'Access Restricted: Security Guards and non-Field Officer staff cannot log in. This app is for Field Officers only.',
+    network_error: 'Unable to connect to server. Please check your internet connection and try again.',
 
     // Navigation & Tabs
     dashboard: 'Dashboard',
     my_sites: 'My Sites',
     attendance: 'Attendance',
     profile: 'Profile',
+    settings: 'Settings',
 
-    // Dashboard
+    // Dashboard & Greetings
+    good_morning: 'Good Morning,',
+    good_afternoon: 'Good Afternoon,',
+    good_evening: 'Good Evening,',
     welcome_back: 'Welcome back,',
     field_officer: 'Field Officer',
     quick_actions: 'Quick Actions',
@@ -34,6 +40,54 @@ export const translations = {
     planned_visits: 'Planned Visits Today',
     no_planned_visits: 'No planned visits scheduled for today.',
     recent_activity: 'Recent Activity',
+    search_placeholder: 'Search records, tasks, or sites...',
+    active_session: 'Active Session',
+    no_active_session: 'No Active Session',
+    pending_visits: 'Pending Visits',
+    completed_visits: 'Completed Visits',
+    my_base_site: 'My Base Site',
+    add_visit: 'Add Visit',
+
+    // Assign Visit Plan Modal
+    assign_visit_plan: 'Assign New Visit Plan',
+    select_client: 'SELECT CLIENT',
+    select_site: 'SELECT SITE',
+    planning_type: 'PLANNING TYPE',
+    visit_frequency: 'VISIT FREQUENCY',
+    visit_date: 'VISIT DATE (YYYY-MM-DD)',
+    start_date: 'START DATE',
+    end_date: 'END DATE',
+    assigned_officer: 'ASSIGNED OFFICER',
+    select_site_alert: 'Please select a site to assign visit.',
+    failed_assign_visit: 'Failed to assign visit.',
+    failed_assign_visit_db: 'Failed to assign visit to DB.',
+    search_client: 'Search Client...',
+    search_site: 'Search Site by Name...',
+    no_sites_found: 'No sites found for this selection.',
+    all_clients: 'All Clients (Show All Sites)',
+
+    // Visits List Screen
+    field_officer_visits: 'Field Officer Visits',
+    all_clear: 'All Clear!',
+    no_pending_visits_desc: 'No pending visits scheduled.',
+    no_reports_yet: 'No Reports Yet',
+    no_completed_visits_desc: 'No completed visit reports submitted yet.',
+    visits_done: 'Visits Done',
+    start_visit_btn: 'Start Visit',
+    overdue: 'Overdue',
+    in_progress: 'In Progress',
+    pending: 'Pending',
+    completed: 'Completed',
+
+    // Visits Select Type Screen
+    select_visit_type: 'Select Visit Type',
+    choose_visit_type_subtitle: 'Select the type of visit report you want to conduct',
+    day_visit: 'Day Visit',
+    night_visit: 'Night Visit',
+    general_visit: 'General Visit',
+    day_visit_desc: 'Conduct a scheduled day visit report & guard inspection.',
+    night_visit_desc: 'Conduct a night round inspection & guard briefing.',
+    general_visit_desc: 'Conduct a general audit or surprise visit report.',
 
     // Attendance
     duty_status: 'Duty Status',
@@ -48,17 +102,14 @@ export const translations = {
     duty_type: 'Duty Type',
     remarks: 'Remarks',
     submit: 'Submit',
+    attendance_log: 'Attendance Log',
+    missed_punches: 'Missed Punches',
+    attendance_marked: 'Attendance Marked',
+    attendance_success_desc: 'Your attendance punch has been recorded successfully.',
 
-    // Sites & Visits
+    // Sites
     assigned_sites: 'Assigned Sites',
     search_sites: 'Search sites or clients...',
-    select_visit_type: 'Select Visit Type',
-    day_visit: 'Day Visit',
-    night_visit: 'Night Visit',
-    general_visit: 'General Visit',
-    day_visit_desc: 'Conduct a scheduled day visit report & guard inspection.',
-    night_visit_desc: 'Conduct a night round inspection & guard briefing.',
-    general_visit_desc: 'Conduct a general audit or surprise visit report.',
 
     // Form Steps
     step_general_info: 'General Info',
@@ -70,7 +121,19 @@ export const translations = {
     next: 'Next',
     previous: 'Previous',
 
-    // Profile & Logout
+    // Visit Form Fields & Alerts
+    person_visited: 'Person Visited',
+    reason_of_visit: 'Reason for Visit',
+    missing_fields: 'Missing Required Fields',
+    fill_person_and_reason: 'Please fill in Person Visited and Reason for Visit.',
+    general_visit_submitted: 'General Visit Submitted',
+    general_visit_success_desc: 'General Audit Visit Report has been successfully submitted.',
+    day_visit_submitted: 'Day Visit Report Submitted',
+    day_visit_success_desc: 'Day Visit Report has been successfully submitted.',
+    night_visit_submitted: 'Night Visit Report Submitted',
+    night_visit_success_desc: 'Night Round Inspection Report has been successfully submitted.',
+
+    // Profile, Settings & Alerts
     profile_info: 'Officer Information',
     employee_code: 'Employee Code',
     role: 'Role',
@@ -78,41 +141,99 @@ export const translations = {
     change_language: 'Change Language',
     logout: 'Log Out',
     confirm_logout: 'Are you sure you want to log out?',
+    photo_captured: 'Photo Captured',
+    photo_saved_desc: 'Profile photo has been updated and saved!',
+    camera_perm_req: 'Camera Permission Required',
+    camera_perm_desc: 'Camera permission is required to capture profile photo.',
   },
 
   hi: {
     // Language Selection
-    select_language: 'अपनी भाषा चुनें',
-    choose_language_desc: 'पेट्रोलसिंक फील्ड ऑफिसर ऐप का उपयोग करने के लिए भाषा चुनें',
+    select_language: 'अपनी पसंदीदा भाषा चुनें',
+    choose_language_desc: 'पेट्रोलसिंक फील्ड ऑफिसर ऐप जारी रखने के लिए अपनी भाषा चुनें',
     continue: 'आगे बढ़ें',
     
     // Login
-    login_title: 'पेट्रोलसिंक एफओ',
-    login_subtitle: 'फील्ड ऑफिसर लॉगिन',
-    emp_id_or_mobile: 'कर्मचारी आईडी / मोबाइल नंबर',
-    emp_id_placeholder: 'उदा. EMP001 या 9876543210',
-    password: 'पासवर्ड',
-    password_placeholder: 'पासवर्ड दर्ज करें',
-    sign_in: 'लॉग इन करें',
+    login_title: 'एफ.ओ. मोबाइल ॲप',
+    login_subtitle: 'फील्ड ऑफिसर साइन इन',
+    mobile_number: 'मोबाइल नंबर',
+    mobile_placeholder: '10-अंकों का मोबाइल नंबर दर्ज करें',
+    sign_in: 'साइन इन करें',
     authenticating: 'प्रमाणित हो रहा है...',
-    invalid_credentials: 'अमान्य क्रेडेंशियल। कृपया सही आईडी और पासवर्ड दर्ज करें।',
+    invalid_credentials: 'इस मोबाइल नंबर के लिए उपयोगकर्ता नहीं मिला। कृपया अपना पंजीकृत मोबाइल नंबर जांचें।',
+    invalid_mobile: 'कृपया एक मान्य 10-अंकों का भारतीय मोबाइल नंबर दर्ज करें (6, 7, 8, या 9 से शुरू)।',
+    no_account_found: 'इस मोबाइल नंबर के लिए कोई खाता नहीं मिला। कृपया अपना मोबाइल नंबर जांचें या प्रशासक से संपर्क करें।',
+    access_restricted_fo: 'पहुंच प्रतिबंधित: सुरक्षा गार्ड और गैर-फील्ड अधिकारी स्टाफ लॉगिन नहीं कर सकते। यह ऐप केवल फील्ड अधिकारियों के लिए है।',
+    network_error: 'सर्वर से कनेक्ट करने में असमर्थ। कृपया अपना नेटवर्क कनेक्शन जांचें और पुनः प्रयास करें।',
 
     // Navigation & Tabs
     dashboard: 'डैशबोर्ड',
     my_sites: 'मेरी साइटें',
     attendance: 'उपस्थिति',
     profile: 'प्रोफाइल',
+    settings: 'सेटिंग्स',
 
-    // Dashboard
+    // Dashboard & Greetings
+    good_morning: 'शुभ प्रभात,',
+    good_afternoon: 'शुभ दोपहर,',
+    good_evening: 'शुभ संध्या,',
     welcome_back: 'नमस्ते,',
     field_officer: 'फील्ड ऑफिसर',
     quick_actions: 'त्वरित कार्य',
     mark_attendance: 'उपस्थिति दर्ज करें',
     view_sites: 'आवंटित साइटें देखें',
-    start_visit: 'नई विज़िट शुरू करें',
+    start_visit: 'नई विज़िट शुरू करें',
     planned_visits: 'आज की योजनाबद्ध विज़िट',
     no_planned_visits: 'आज के लिए कोई योजनाबद्ध विज़िट नहीं है।',
     recent_activity: 'हाल की गतिविधि',
+    search_placeholder: 'रिकॉर्ड, कार्य या साइट खोजें...',
+    active_session: 'सक्रिय सत्र',
+    no_active_session: 'कोई सक्रिय सत्र नहीं',
+    pending_visits: 'लंबित विज़िट',
+    completed_visits: 'पूर्ण विज़िट',
+    my_base_site: 'मेरी मुख्य साइट',
+    add_visit: 'विज़िट जोड़ें',
+
+    // Assign Visit Plan Modal
+    assign_visit_plan: 'नयी विज़िट योजना असाइन करें',
+    select_client: 'क्लाइंट चुनें',
+    select_site: 'साइट चुनें',
+    planning_type: 'योजना का प्रकार',
+    visit_frequency: 'विज़िट की आवृत्ति',
+    visit_date: 'विज़िट की तारीख (YYYY-MM-DD)',
+    start_date: 'प्रारंभ तिथि',
+    end_date: 'समाप्ति तिथि',
+    assigned_officer: 'असाइन किए गए अधिकारी',
+    select_site_alert: 'कृपया विज़िट असाइन करने के लिए एक साइट चुनें।',
+    failed_assign_visit: 'विज़िट असाइन करने में विफल।',
+    failed_assign_visit_db: 'डेटाबेस में विज़िट असाइन करने में विफल।',
+    search_client: 'क्लाइंट खोजें...',
+    search_site: 'साइट का नाम खोजें...',
+    no_sites_found: 'इस चयन के लिए कोई साइट नहीं मिली।',
+    all_clients: 'सभी क्लाइंट (सभी साइटें देखें)',
+
+    // Visits List Screen
+    field_officer_visits: 'फील्ड ऑफिसर विज़िट',
+    all_clear: 'सब ठीक है!',
+    no_pending_visits_desc: 'कोई लंबित विज़िट निर्धारित नहीं है।',
+    no_reports_yet: 'अभी कोई रिपोर्ट नहीं',
+    no_completed_visits_desc: 'अभी तक कोई पूर्ण विज़िट रिपोर्ट जमा नहीं की गई है।',
+    visits_done: 'विज़िट पूर्ण',
+    start_visit_btn: 'विज़िट शुरू करें',
+    overdue: 'समय समाप्त',
+    in_progress: 'प्रगति पर',
+    pending: 'लंबित',
+    completed: 'पूर्ण',
+
+    // Visits Select Type Screen
+    select_visit_type: 'विज़िट प्रकार चुनें',
+    choose_visit_type_subtitle: 'उस विज़िट रिपोर्ट का प्रकार चुनें जिसे आप करना चाहते हैं',
+    day_visit: 'दिन की विज़िट',
+    night_visit: 'रात की विज़िट',
+    general_visit: 'सामान्य विज़िट',
+    day_visit_desc: 'दिन की शिफ्ट में विज़िट रिपोर्ट और गार्ड निरीक्षण करें।',
+    night_visit_desc: 'रात की राउंड निरीक्षण और गार्ड ब्रीफिंग करें।',
+    general_visit_desc: 'सामान्य ऑडिट या सरप्राइज विज़िट रिपोर्ट बनाएं।',
 
     // Attendance
     duty_status: 'ड्यूटी स्थिति',
@@ -127,17 +248,14 @@ export const translations = {
     duty_type: 'ड्यूटी का प्रकार',
     remarks: 'टिप्पणियाँ',
     submit: 'जमा करें',
+    attendance_log: 'उपस्थिति लॉग',
+    missed_punches: 'मिस पंच',
+    attendance_marked: 'उपस्थिति दर्ज की गई',
+    attendance_success_desc: 'आपकी उपस्थिति सफलतापूर्वक रिकॉर्ड हो गई है।',
 
-    // Sites & Visits
+    // Sites
     assigned_sites: 'आवंटित साइटें',
     search_sites: 'साइट या क्लाइंट खोजें...',
-    select_visit_type: 'विज़िट प्रकार चुनें',
-    day_visit: 'दिन की विज़िट',
-    night_visit: 'रात की विज़िट',
-    general_visit: 'सामान्य विज़िट',
-    day_visit_desc: 'दिन की शिफ्ट में विज़िट रिपोर्ट और गार्ड निरीक्षण करें।',
-    night_visit_desc: 'रात की राउंड निरीक्षण और गार्ड ब्रीफिंग करें।',
-    general_visit_desc: 'सामान्य ऑडिट या सरप्राइज विज़िट रिपोर्ट बनाएं।',
 
     // Form Steps
     step_general_info: 'सामान्य जानकारी',
@@ -149,7 +267,19 @@ export const translations = {
     next: 'आगे',
     previous: 'पीछे',
 
-    // Profile & Logout
+    // Visit Form Fields & Alerts
+    person_visited: 'मिले हुए व्यक्ति',
+    reason_of_visit: 'विज़िट का कारण',
+    missing_fields: 'आवश्यक फ़ील्ड गायब हैं',
+    fill_person_and_reason: 'कृपया मिलने वाले व्यक्ति का नाम और विज़िट का कारण भरें।',
+    general_visit_submitted: 'सामान्य विज़िट सबमिट हो गई',
+    general_visit_success_desc: 'सामान्य ऑडिट विज़िट रिपोर्ट सफलतापूर्वक सबमिट हो गई है।',
+    day_visit_submitted: 'दिन की विज़िट रिपोर्ट सबमिट हो गई',
+    day_visit_success_desc: 'दिन की विज़िट रिपोर्ट सफलतापूर्वक सबमिट हो गई है।',
+    night_visit_submitted: 'रात की विज़िट रिपोर्ट सबमिट हो गई',
+    night_visit_success_desc: 'रात के दौर का निरीक्षण रिपोर्ट सफलतापूर्वक सबमिट हो गया है।',
+
+    // Profile, Settings & Alerts
     profile_info: 'ऑफिसर की जानकारी',
     employee_code: 'कर्मचारी कोड',
     role: 'पद',
@@ -157,32 +287,42 @@ export const translations = {
     change_language: 'भाषा बदलें',
     logout: 'लॉग आउट',
     confirm_logout: 'क्या आप लॉग आउट करना चाहते हैं?',
+    photo_captured: 'फ़ोटो ली गई',
+    photo_saved_desc: 'प्रोफाइल फ़ोटो अपडेट और सहेजी गई!',
+    camera_perm_req: 'कैमरा अनुमति आवश्यक है',
+    camera_perm_desc: 'प्रोफाइल फोटो लेने के लिए कैमरा अनुमति आवश्यक है।',
   },
 
   mr: {
     // Language Selection
-    select_language: 'आपली भाषा निवडा',
+    select_language: 'आपली आवडती भाषा निवडा',
     choose_language_desc: 'पेट्रोलसिंक फील्ड ऑफिसर ॲप वापरण्यासाठी भाषा निवडा',
     continue: 'पुढे जा',
     
     // Login
-    login_title: 'पेट्रोलसिंक एफओ',
-    login_subtitle: 'फील्ड ऑफिसर लॉगिन',
-    emp_id_or_mobile: 'कर्मचारी आयडी / मोबाईल नंबर',
-    emp_id_placeholder: 'उदा. EMP001 किंवा 9876543210',
-    password: 'पासवर्ड',
-    password_placeholder: 'पासवर्ड प्रविष्ट करा',
-    sign_in: 'लॉग इन करा',
+    login_title: 'एफ.ओ. मोबाईल ॲप',
+    login_subtitle: 'फील्ड ऑफिसर साइन इन',
+    mobile_number: 'मोबाईल नंबर',
+    mobile_placeholder: '10-अंकी मोबाईल नंबर प्रविष्ट करा',
+    sign_in: 'साइन इन करा',
     authenticating: 'प्रमाणित करत आहे...',
-    invalid_credentials: 'अवैध माहिती. कृपया योग्य आयडी आणि पासवर्ड टाका.',
+    invalid_credentials: 'या मोबाईल नंबरसाठी वापरकर्ता सापडला नाही. कृपया नोंदणीकृत मोबाईल नंबर तपासा.',
+    invalid_mobile: 'कृपया एक वैध 10-अंकी भारतीय मोबाईल नंबर टाका (6, 7, 8, किंवा 9 ने सुरू होणारा).',
+    no_account_found: 'या मोबाईल नंबरसाठी खाते सापडले नाही. कृपया तुमचा मोबाईल नंबर तपासा किंवा प्रशासकाशी संपर्क साधा.',
+    access_restricted_fo: 'वापर नाकारला: सुरक्षा रक्षक आणि नॉन-फील्ड अधिकारी स्टाफ लॉगिन करू शकत नाहीत. हे ॲप फक्त फील्ड ऑफिसर्ससाठी आहे.',
+    network_error: 'सर्व्हरशी कनेक्ट करण्यात अक्षम. कृपया तुमचे नेटवर्क कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.',
 
     // Navigation & Tabs
     dashboard: 'डॅशबोर्ड',
     my_sites: 'माझ्या साइट्स',
     attendance: 'हजेरी',
     profile: 'प्रोफाइल',
+    settings: 'सेटिंग्ज',
 
-    // Dashboard
+    // Dashboard & Greetings
+    good_morning: 'शुभ सकाळ,',
+    good_afternoon: 'शुभ दुपार,',
+    good_evening: 'शुभ संध्याकाळ,',
     welcome_back: 'नमस्कार,',
     field_officer: 'फील्ड ऑफिसर',
     quick_actions: 'जलद कृती',
@@ -192,6 +332,54 @@ export const translations = {
     planned_visits: 'आजच्या नियोजित भेटी',
     no_planned_visits: 'आजसाठी कोणतीही नियोजित भेट नाही.',
     recent_activity: 'अलीकडील हालचाली',
+    search_placeholder: 'नोंदी, कामे किंवा साइट्स शोधा...',
+    active_session: 'सक्रिय सत्र',
+    no_active_session: 'सत्र सक्रिय नाही',
+    pending_visits: 'प्रलंबित भेटी',
+    completed_visits: 'पूर्ण झालेल्या भेटी',
+    my_base_site: 'माझी मुख्य साइट',
+    add_visit: 'भेट जोडा',
+
+    // Assign Visit Plan Modal
+    assign_visit_plan: 'नवीन भेट योजना नियुक्त करा',
+    select_client: 'क्लायंट निवडा',
+    select_site: 'साइट निवडा',
+    planning_type: 'योजनेचा प्रकार',
+    visit_frequency: 'भेटीची वारंवारता',
+    visit_date: 'भेटीची तारीख (YYYY-MM-DD)',
+    start_date: 'सुरू होण्याची तारीख',
+    end_date: 'शेवटची तारीख',
+    assigned_officer: 'नियुक्त अधिकारी',
+    select_site_alert: 'कृपया भेट नियुक्त करण्यासाठी साइट निवडा.',
+    failed_assign_visit: 'भेट नियुक्त करण्यात अयशस्वी.',
+    failed_assign_visit_db: 'डेटाबेसमध्ये भेट नियुक्त करण्यात अयशस्वी.',
+    search_client: 'क्लायंट शोधा...',
+    search_site: 'साइटचे नाव शोधा...',
+    no_sites_found: 'या निवडीसाठी कोणतीही साइट सापडली नाही.',
+    all_clients: 'सर्व क्लायंट (सर्व साइट्स पहा)',
+
+    // Visits List Screen
+    field_officer_visits: 'फील्ड ऑफिसर भेटी',
+    all_clear: 'सर्व व्यवस्थित!',
+    no_pending_visits_desc: 'कोणत्याही प्रलंबित भेटी नियोजित नाहीत.',
+    no_reports_yet: 'अद्याप कोणतेही अहवाल नाहीत',
+    no_completed_visits_desc: 'अद्याप कोणतेही पूर्ण अहवाल सबमिट केलेले नाहीत.',
+    visits_done: 'भेटी पूर्ण',
+    start_visit_btn: 'भेट सुरू करा',
+    overdue: 'मुदत संपली',
+    in_progress: 'सुरू आहे',
+    pending: 'प्रलंबित',
+    completed: 'पूर्ण',
+
+    // Visits Select Type Screen
+    select_visit_type: 'भेटीचा प्रकार निवडा',
+    choose_visit_type_subtitle: 'तुम्हाला सादर करावयाच्या भेटीच्या अहवालाचा प्रकार निवडा',
+    day_visit: 'दिवसाची भेट',
+    night_visit: 'रात्रीची भेट',
+    general_visit: 'सामान्य भेट',
+    day_visit_desc: 'दिवसाच्या शिफ्टमध्ये भेट आणि गार्ड तपासणी करा.',
+    night_visit_desc: 'रात्रीची गस्त आणि गार्ड ब्रीफिंग करा.',
+    general_visit_desc: 'सामान्य ऑडिट किंवा सरप्राइज भेट रिपोर्ट नोंदवा.',
 
     // Attendance
     duty_status: 'ड्यूटी स्थिती',
@@ -206,17 +394,14 @@ export const translations = {
     duty_type: 'ड्यूटी प्रकार',
     remarks: 'शेरा',
     submit: 'सबमिट करा',
+    attendance_log: 'हजेरी नोंद',
+    missed_punches: 'मागे पडलेले पंच',
+    attendance_marked: 'हजेरी नोंदवली',
+    attendance_success_desc: 'तुमची हजेरी यशस्वीरित्या नोंदवली गेली आहे.',
 
-    // Sites & Visits
+    // Sites
     assigned_sites: 'नियुक्त साइट्स',
     search_sites: 'साइट किंवा क्लायंट शोधा...',
-    select_visit_type: 'भेटीचा प्रकार निवडा',
-    day_visit: 'दिवसाची भेट',
-    night_visit: 'रात्रीची भेट',
-    general_visit: 'सामान्य भेट',
-    day_visit_desc: 'दिवसाच्या शिफ्टमध्ये भेट आणि गार्ड तपासणी करा.',
-    night_visit_desc: 'रात्रीची गस्त आणि गार्ड ब्रीफिंग करा.',
-    general_visit_desc: 'सामान्य ऑडिट किंवा सरप्राइज भेट रिपोर्ट नोंदवा.',
 
     // Form Steps
     step_general_info: 'सामान्य माहिती',
@@ -228,7 +413,19 @@ export const translations = {
     next: 'पुढे',
     previous: 'मागे',
 
-    // Profile & Logout
+    // Visit Form Fields & Alerts
+    person_visited: 'भेट घेतलेली व्यक्ती',
+    reason_of_visit: 'भेटीचे कारण',
+    missing_fields: 'आवश्यक माहिती अपूर्ण आहे',
+    fill_person_and_reason: 'कृपया भेट घेतलेल्या व्यक्तीचे नाव आणि भेटीचे कारण भरा.',
+    general_visit_submitted: 'सामान्य भेट सबमिट झाली',
+    general_visit_success_desc: 'सामान्य ऑडिट भेट अहवाल यशस्वीरित्या सबमिट केला गेला आहे.',
+    day_visit_submitted: 'दिवसाच्या भेटीचा अहवाल सबमिट झाला',
+    day_visit_success_desc: 'दिवसाच्या भेटीचा अहवाल यशस्वीरित्या सबमिट केला गेला आहे.',
+    night_visit_submitted: 'रात्रीच्या भेटीचा अहवाल सबमिट झाला',
+    night_visit_success_desc: 'रात्रीच्या गस्तीचा अहवाल यशस्वीरित्या सबमिट केला गेला आहे.',
+
+    // Profile, Settings & Alerts
     profile_info: 'ऑफिसर माहिती',
     employee_code: 'कर्मचारी कोड',
     role: 'पद',
@@ -236,5 +433,9 @@ export const translations = {
     change_language: 'भाषा बदला',
     logout: 'लॉग आऊट',
     confirm_logout: 'तुम्हाला नक्की लॉग आऊट करायचे आहे का?',
+    photo_captured: 'फोटो काढला',
+    photo_saved_desc: 'प्रोफाइल फोटो अपडेट आणि सेव्ह केला गेला आहे!',
+    camera_perm_req: 'कॅमेरा परवानगी आवश्यक आहे',
+    camera_perm_desc: 'प्रोफाइल फोटो काढण्यासाठी कॅमेरा परवानगी आवश्यक आहे.',
   },
 };

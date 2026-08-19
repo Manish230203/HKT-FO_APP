@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getUserSession, clearUserSession } from './db';
 
-let rawBaseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8002/api';
+let rawBaseUrl = process.env.EXPO_PUBLIC_API_URL || 'https://tarot-carrot-celery.ngrok-free.dev/api';
 rawBaseUrl = rawBaseUrl.trim().replace(/\/+$/, '');
 
 // Ensure /api suffix is present
@@ -13,6 +13,7 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
   },
   timeout: 15000,
 });

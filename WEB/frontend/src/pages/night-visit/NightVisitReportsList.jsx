@@ -92,10 +92,17 @@ export default function NightVisitReportsList() {
   const [bulkExporting, setBulkExporting] = useState(false);
   const [clients, setClients] = useState([]);
 
+  // Determine if current user is admin
+  const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const isAdmin = currentUser ? ["Admin", "ADMIN", "admin", "Super Admin"].includes(currentUser.role) : false;
+  const empOid = (!isAdmin && currentUser?.id) ? String(currentUser.id) : null;
+
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const res = await api.get("/assessments/clients");
+        const params = empOid ? `?empOid=${empOid}` : "";
+        const res = await api.get(`/assessments/clients${params}`);
         setClients(res.data || []);
       } catch (err) {
         console.error("Failed to fetch clients:", err);
@@ -106,7 +113,8 @@ export default function NightVisitReportsList() {
 
   const fetchReports = async () => {
     try {
-      const res = await api.get("/officer-rounds/reports");
+      const params = empOid ? `?empOid=${empOid}` : "";
+      const res = await api.get(`/officer-rounds/reports${params}`);
       const loadedReports = res.data;
       if (loadedReports && loadedReports.length > 0) {
         setReports(loadedReports);
@@ -129,7 +137,8 @@ export default function NightVisitReportsList() {
   useEffect(() => {
     const fetchSites = async () => {
       try {
-        const res = await api.get("/assessments/sites");
+        const params = empOid ? `?empOid=${empOid}` : "";
+        const res = await api.get(`/assessments/sites${params}`);
         setSites(res.data || []);
       } catch (error) {
         console.error("Failed to fetch sites:", error);

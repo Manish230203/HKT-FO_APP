@@ -12,6 +12,8 @@ export interface UserProfile {
   role: string;
   employee_id: string;
   site_id?: number | null;
+  company_id?: number | null;
+  company_name?: string | null;
 }
 
 export interface LoginResponse {

@@ -315,9 +315,10 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     # Try to find user by mobile, emp_code, or user_account
     try:
         sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, ua.password_hash
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, ua.password_hash
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
             LEFT JOIN USER_ACCOUNT ua ON ua.EMPLOYEE = e.oid
             WHERE e.mobile = :id OR e.emp_code = :id OR ua.username = :id
             LIMIT 1
@@ -326,9 +327,10 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     except Exception:
         # Fallback for backup.sql schema where USER_ACCOUNT uses user_name or doesn't have EMPLOYEE FK
         sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, 'password123' as password_hash
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, 'password123' as password_hash
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
             WHERE e.mobile = :id OR e.emp_code = :id
             LIMIT 1
         """)
@@ -2561,6 +2563,26 @@ def generate_bulk_pdf(
         headers={"Content-Disposition": f"attachment; filename=Bulk_Patrol_PDF_Reports_{datetime.now().strftime('%Y-%m-%d')}.zip"}
     )
 
+@router.get("/assessments/clients")
+def get_all_clients(db: Session = Depends(get_patrol_db)):
+    sql = text("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name")
+    rows = db.execute(sql).mappings().all()
+    return [{"id": r["id"], "name": r["name"], "code": r["code"] or ""} for r in rows]
+
+@router.get("/assessments/sites")
+def get_all_sites(client_id: Optional[int] = Query(None), db: Session = Depends(get_patrol_db)):
+    query = """
+        SELECT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name 
+        FROM SITE s 
+        LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid 
+        LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+    """
+    if client_id:
+        query += f" WHERE s.CLIENTT = {int(client_id)}"
+    query += " ORDER BY s.name"
+    rows = db.execute(text(query)).mappings().all()
+    return [{"id": r["id"], "name": r["name"], "client_id": r["client_id"], "client_name": r["client_name"], "branch_name": r["branch_name"]} for r in rows]
+
 @router.get("/assessments/guards")
 def get_guards_by_site(site_id: Optional[int] = Query(None), db: Session = Depends(get_patrol_db)):
     query = "SELECT oid, name, emp_code FROM EMPLOYEE"
@@ -2578,9 +2600,10 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     
     try:
         sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, ua.password_hash
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, ua.password_hash
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
             LEFT JOIN USER_ACCOUNT ua ON ua.EMPLOYEE = e.oid
             WHERE e.mobile = :id OR e.emp_code = :id OR ua.username = :id
             LIMIT 1
@@ -2588,9 +2611,10 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
         user = db.execute(sql, {"id": identifier}).mappings().first()
     except Exception:
         sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, 'password123' as password_hash
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, 'password123' as password_hash
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
             WHERE e.mobile = :id OR e.emp_code = :id
             LIMIT 1
         """)
@@ -2604,7 +2628,9 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
         "name": user["name"],
         "role": user["role_name"] or "Staff",
         "employee_id": user["emp_code"],
-        "site_id": user["site_id"]
+        "site_id": user["site_id"],
+        "company_id": user.get("company_id") or 1,
+        "company_name": user.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if user.get("company_id") == 4 else "Unique Delta Force")
     }
     
     import base64

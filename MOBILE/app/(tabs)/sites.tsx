@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Building, Shield, ChevronRight, ChevronDown } from 'lucide-react-native';
 import { getSites, Site } from '../../services/siteService';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../constants/theme';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
@@ -12,7 +14,10 @@ import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 
 export default function SitesScreen() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams<{ type?: string }>();
+  const isBaseSiteOnly = params.type === 'base';
 
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(false);
@@ -21,15 +26,16 @@ export default function SitesScreen() {
 
   useEffect(() => {
     fetchSitesData();
-  }, []);
+  }, [user]);
 
   const fetchSitesData = async () => {
     setLoading(true);
     try {
-      const data = await getSites();
+      const empOid = user?.id || user?.employee_id;
+      const data = await getSites(empOid);
       setSites(data || []);
       const initialExpanded: Record<string, boolean> = {};
-      data.forEach((item) => {
+      (data || []).forEach((item) => {
         const client = item.client_name || 'Assigned Client';
         initialExpanded[client] = true;
       });
@@ -41,15 +47,23 @@ export default function SitesScreen() {
     }
   };
 
+  const activeSites = useMemo(() => {
+    if (isBaseSiteOnly && sites.length > 0) {
+      const primarySite = sites.find((s) => String(s.id) === String(user?.site_id)) || sites[0];
+      return primarySite ? [primarySite] : [];
+    }
+    return sites;
+  }, [sites, isBaseSiteOnly, user]);
+
   const groupedSites = useMemo(() => {
     const groups: Record<string, Site[]> = {};
-    sites.forEach((site) => {
+    activeSites.forEach((site) => {
       const client = site.client_name || 'Assigned Client';
       if (!groups[client]) groups[client] = [];
       groups[client].push(site);
     });
     return groups;
-  }, [sites]);
+  }, [activeSites]);
 
   const filteredGroupedSites = useMemo(() => {
     if (!searchQuery) return groupedSites;
@@ -79,7 +93,7 @@ export default function SitesScreen() {
 
   return (
     <SwipeableBackWrapper>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.searchBar}>
           <Input
             placeholder={t('search_sites')}
@@ -152,7 +166,7 @@ export default function SitesScreen() {
             })
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </SwipeableBackWrapper>
   );
 }
@@ -164,7 +178,9 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: Platform.OS === 'ios' ? 20 : 16,
+    paddingBottom: 8,
+    marginTop: 8,
   },
   searchInput: {
     height: 44,

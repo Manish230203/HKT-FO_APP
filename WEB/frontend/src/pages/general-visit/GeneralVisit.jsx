@@ -92,17 +92,26 @@ export default function GeneralVisit() {
   const [bulkExporting, setBulkExporting] = useState(false);
   const [bulkVisitDetails, setBulkVisitDetails] = useState([]);
 
+  // Determine if current user is admin
+  const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const isAdmin = currentUser ? ["Admin", "ADMIN", "admin", "Super Admin"].includes(currentUser.role) : false;
+  const empOid = (!isAdmin && currentUser?.id) ? String(currentUser.id) : null;
+
   // Load General Visits and filters options
   const loadData = async () => {
     setLoading(true);
     try {
-      const visitsRes = await api.get("/general-visits");
+      const visitsParams = empOid ? `?empOid=${empOid}` : "";
+      const visitsRes = await api.get(`/general-visits${visitsParams}`);
       setVisits(visitsRes.data || []);
 
-      const clientsRes = await api.get("/assessments/clients");
+      const clientsParams = empOid ? `?empOid=${empOid}` : "";
+      const clientsRes = await api.get(`/assessments/clients${clientsParams}`);
       setClients(clientsRes.data || []);
 
-      const sitesRes = await api.get("/assessments/sites");
+      const sitesParams = empOid ? `?empOid=${empOid}` : "";
+      const sitesRes = await api.get(`/assessments/sites${sitesParams}`);
       setSites(sitesRes.data || []);
 
       const branchesRes = await api.get("/assessments/branches");

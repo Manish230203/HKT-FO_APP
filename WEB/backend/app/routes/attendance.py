@@ -98,3 +98,46 @@ def reject_regularization(id: int, user_name: str = Depends(get_current_user_nam
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("message"))
     return res
+
+# --- AIP Mobile Attendance Endpoints ---
+
+from fastapi import File, UploadFile, Form
+from app.models.attendance_models import AttendanceRequest
+from app.services.attendance_service import (
+    mark_attendance_logic,
+    get_attendance_logs_logic,
+    get_today_status_logic,
+    get_monthly_stats_logic,
+    get_profile_logic,
+    validate_selfie,
+    detect_shift_logic
+)
+
+@router.post("/_AIP_markAttendance")
+def mark_attendance(data: AttendanceRequest):
+    return mark_attendance_logic(data)
+
+@router.post("/selfieValidation")
+async def selfie_validation_endpoint(empOid: int = Form(...), file: UploadFile = File(...)):
+    return await validate_selfie(empOid, file)
+
+@router.get("/_AIP_getAttendanceLogs")
+def get_attendance_logs(empOid: int = Query(...)):
+    return get_attendance_logs_logic(empOid)
+
+@router.get("/_AIP_getTodayStatus")
+def get_today_status(empOid: int = Query(...)):
+    return get_today_status_logic(empOid)
+
+@router.get("/_AIP_getMonthlyStats")
+def get_monthly_stats(empOid: int = Query(...)):
+    return get_monthly_stats_logic(empOid)
+
+@router.get("/_AIP_getProfile")
+def get_profile(empOid: int = Query(...)):
+    return get_profile_logic(empOid)
+
+@router.get("/_AIP_detectShift")
+def detect_shift(empOid: int = Query(...), punch_type: str = Query("IN")):
+    return detect_shift_logic(empOid, punch_type)
+

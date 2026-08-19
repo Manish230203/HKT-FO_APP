@@ -16,10 +16,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routes under prefix /api
+# Include routes under prefix /api and root
 app.include_router(officer_router, prefix="/api")
 app.include_router(attendance_router, prefix="/api")
 app.include_router(admin_routes.router, prefix="/api")
+app.include_router(attendance_router) # Support root-level _AIP_ endpoints
 
 @app.get("/")
 def read_root():

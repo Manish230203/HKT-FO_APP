@@ -25,7 +25,7 @@ export default function SelectVisitTypeScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.headerTitle}>{t('select_visit_type')}</Text>
-      <Text style={styles.headerSubtitle}>Select the type of report you wish to conduct for this site.</Text>
+      <Text style={styles.headerSubtitle}>{t('choose_visit_type_subtitle')}</Text>
 
       {/* Day Visit Card */}
       <Card onPress={() => handleSelect('day')} style={styles.typeCard}>

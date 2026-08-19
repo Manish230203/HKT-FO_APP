@@ -58,6 +58,8 @@ export default function Dashboard() {
   const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const isAdmin = currentUser ? ["Admin", "ADMIN", "admin", "Super Admin"].includes(currentUser.role) : false;
+  // empOid for scoped API calls (Field Officers only)
+  const empOid = (!isAdmin && currentUser?.id) ? String(currentUser.id) : null;
 
   // Filters state
   const [filterClient, setFilterClient] = useState("all");
@@ -69,7 +71,7 @@ export default function Dashboard() {
       }
       if (currentUser.name) return currentUser.name;
     }
-    return "PAPPU KUMAR"; // Default for non-admin field officer
+    return "all";
   });
   const [filterStatus, setFilterStatus] = useState("all");
   const [dateFilterType, setDateFilterType] = useState("today");
@@ -84,37 +86,43 @@ export default function Dashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch clients
-        const clientRes = await api.get("/assessments/clients");
+        // Fetch clients — scoped to officer's assigned clients if non-admin
+        const clientParams = empOid ? `?empOid=${empOid}` : "";
+        const clientRes = await api.get(`/assessments/clients${clientParams}`);
         setClients(clientRes.data || []);
 
-        // Fetch sites
-        const siteRes = await api.get("/assessments/sites");
+        // Fetch sites — scoped to officer's assigned sites if non-admin
+        const siteParams = empOid ? `?empOid=${empOid}` : "";
+        const siteRes = await api.get(`/assessments/sites${siteParams}`);
         setSites(siteRes.data || []);
 
         // Fetch branches
         const branchRes = await api.get("/assessments/branches");
         setBranches(branchRes.data || []);
 
-        // Fetch round reports
-        const roundRes = await api.get("/officer-rounds/reports");
+        // Fetch round reports — scoped to officer if non-admin
+        const roundParams = empOid ? `?empOid=${empOid}` : "";
+        const roundRes = await api.get(`/officer-rounds/reports${roundParams}`);
         setRoundReports(roundRes.data || []);
 
-        // Fetch visit reports
-        const visitRes = await api.get("/officer-visits/reports");
+        // Fetch visit reports — scoped to officer if non-admin
+        const visitParams = empOid ? `?empOid=${empOid}` : "";
+        const visitRes = await api.get(`/officer-visits/reports${visitParams}`);
         setVisitReports(visitRes.data || []);
 
-        // Fetch general visit reports
+        // Fetch general visit reports — scoped to officer if non-admin
         try {
-          const generalRes = await api.get("/general-visits");
+          const generalParams = empOid ? `?empOid=${empOid}` : "";
+          const generalRes = await api.get(`/general-visits${generalParams}`);
           setGeneralReports(generalRes.data || []);
         } catch (e) {
           console.error("Failed to load general visits", e);
         }
 
-        // Fetch dynamic planned visits from database tables FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY
+        // Fetch dynamic planned visits — scoped to officer if non-admin
         try {
-          const plannedRes = await api.get("/planned-visits");
+          const plannedParams = empOid ? `?empOid=${empOid}` : "";
+          const plannedRes = await api.get(`/planned-visits${plannedParams}`);
           if (plannedRes.data && Array.isArray(plannedRes.data)) {
             setPlannedVisits(plannedRes.data);
           }
@@ -153,11 +161,11 @@ export default function Dashboard() {
     }
     setIsSuddenVisitModalOpen(false);
 
-    if (suddenVisitType === "night_visit") {
+    if (suddenVisitType === "night_round") {
       navigate(
         `/officer-rounds/create?clientId=${suddenClient}&siteId=${suddenSite}&date=${suddenDate}&remark=${encodeURIComponent(suddenRemark)}`
       );
-    } else if (suddenVisitType === "day_visit") {
+    } else if (suddenVisitType === "day_round") {
       navigate(
         `/officer-visits/create?clientId=${suddenClient}&siteId=${suddenSite}&date=${suddenDate}&remark=${encodeURIComponent(suddenRemark)}`
       );
@@ -620,7 +628,7 @@ export default function Dashboard() {
                 </SelectTrigger>
                 <SelectContent className="bg-background border-input text-foreground text-xs">
                   {sites
-                    .filter((s) => !suddenClient || s.client_name === clients.find((c) => c.id.toString() === suddenClient)?.name)
+                    .filter((s) => !suddenClient || s.client_id?.toString() === suddenClient)
                     .map((s) => (
                       <SelectItem key={s.id} value={s.id.toString()} className="focus:bg-accent focus:text-accent-foreground">
                         {s.name}

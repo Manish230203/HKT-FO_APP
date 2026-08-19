@@ -24,11 +24,18 @@ export default function MySites() {
   const [selectedClientFilter, setSelectedClientFilter] = useState("all");
   const [expandedClients, setExpandedClients] = useState({});
 
+  // Determine if current user is admin
+  const userStr = sessionStorage.getItem("user") || localStorage.getItem("user");
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const isAdmin = currentUser ? ["Admin", "ADMIN", "admin", "Super Admin"].includes(currentUser.role) : false;
+  const empOid = (!isAdmin && currentUser?.id) ? String(currentUser.id) : null;
+
   useEffect(() => {
     const fetchSites = async () => {
       setLoading(true);
       try {
-        const response = await api.get("/assessments/sites");
+        const params = empOid ? `?empOid=${empOid}` : "";
+        const response = await api.get(`/assessments/sites${params}`);
         setSites(response.data || []);
       } catch (error) {
         console.error("Error loading assigned sites", error);

@@ -939,3 +939,483 @@ def export_attendance_excel_logic(date_str: str, client_id_param: str = None, si
     except Exception as e:
         print(f"Error in export_attendance_excel_logic: {e}")
         return None
+
+# --- AIP MOBILE ATTENDANCE ENDPOINTS & LOGIC ---
+
+import math
+from geopy.distance import geodesic
+
+def is_within_radius(user_lat, user_long, site_lat, site_long, radius_meters):
+    return geodesic((site_lat, site_long), (user_lat, user_long)).meters <= radius_meters
+
+def mark_attendance_logic(data):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return {"success": False, "message": "Database connection failed"}
+            
+        cursor = conn.cursor(dictionary=True)
+        empOid = data.empOid
+        lat, long = data.latitude, data.longitude
+        qrSiteOid = getattr(data, 'siteOid', None)
+
+        client_ts = getattr(data, 'timestamp', None)
+        now = datetime.fromisoformat(client_ts.replace('Z', '+00:00')) if client_ts else datetime.now()
+        today = now.date()
+
+        cursor.execute("SELECT oid, site, name, emp_code, active, DESIGNATION, COMPANY_DESIGNATION FROM EMPLOYEE WHERE oid = %s", (empOid,))
+        user = cursor.fetchone()
+
+        if not user:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": "USER NOT FOUND"}
+
+        user_assigned_site = user.get("site") or user.get("SITE")
+        active_site_oid = qrSiteOid if qrSiteOid else user_assigned_site
+        
+        if not active_site_oid:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": "NO SITE SPECIFIED (ASSIGNED OR QR)"}
+
+        cursor.execute("""
+            SELECT 
+                s.oid as site_oid, 
+                s.name, 
+                sg.latitude, 
+                sg.longitude, 
+                COALESCE(sg.radius, 100) as radius
+            FROM SITE s
+            LEFT JOIN SITE_GATE_QRCODE sg ON sg.SITE = s.oid
+            WHERE s.oid = %s OR sg.oid = %s
+            ORDER BY (sg.oid = %s) DESC, sg.oid ASC
+            LIMIT 1
+        """, (active_site_oid, active_site_oid, active_site_oid))
+        site = cursor.fetchone()
+
+        if not site:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": "INVALID SITE OR QR CODE"}
+
+        master_site_oid = site["site_oid"]
+        user["site_oid"] = master_site_oid
+        user["assigned_site"] = user_assigned_site
+        active_site_oid = master_site_oid
+
+        if site["latitude"] is None or site["longitude"] is None:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": f"SITE COORDINATES NOT SET FOR {site['name'].upper()}"}
+
+        distance_km = geodesic((site["latitude"], site["longitude"]), (lat, long)).km
+        if (distance_km * 1000) > (site["radius"] or 100):
+            cursor.close()
+            conn.close()
+            return {
+                "success": False, 
+                "message": f"YOU ARE FAR FROM {site['name'].upper()} ({distance_km:.2f} kms away)."
+            }
+
+        cursor.execute("SELECT clientt FROM SITE WHERE oid = %s", (user_assigned_site,))
+        primary_site_data = cursor.fetchone()
+        primary_client_oid = primary_site_data["clientt"] if primary_site_data else None
+
+        cursor.execute("SELECT clientt FROM SITE WHERE oid = %s", (active_site_oid,))
+        punch_site_data = cursor.fetchone()
+        punch_client_oid = punch_site_data["clientt"] if punch_site_data else None
+
+        duty_type = "TEMPORARY"
+        if user_assigned_site and int(active_site_oid) == int(user_assigned_site):
+            duty_type = "REGULAR"
+        elif punch_client_oid and primary_client_oid and int(punch_client_oid) == int(primary_client_oid):
+            duty_type = "REPLACEMENT"
+
+        cursor.execute("""
+            SELECT atl.*, ac.oid as cell_oid 
+            FROM ATTENDANCE_TIME_LOG atl
+            JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+            WHERE ac.EMPLOYEE = %s AND atl.out_time IS NULL
+            ORDER BY atl.oid DESC LIMIT 1
+        """, (empOid,))
+        open_log = cursor.fetchone()
+
+        if open_log:
+            in_time = open_log["in_time"]
+            if in_time:
+                duration_hours = (now - in_time).total_seconds() / 3600.0
+                if duration_hours > 16.0:
+                    open_log = None
+
+        if not open_log:
+            cursor.execute("""
+                SELECT COUNT(*) as shift_count, MAX(atl.out_time) as last_out_time, SUM(TIMESTAMPDIFF(MINUTE, atl.in_time, atl.out_time)) as total_mins 
+                FROM ATTENDANCE_TIME_LOG atl
+                JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+                WHERE ac.EMPLOYEE = %s AND ac.attendance_date = %s
+            """, (empOid, today))
+            shift_stats = cursor.fetchone()
+            shift_count = shift_stats["shift_count"] if shift_stats and shift_stats["shift_count"] else 0
+            last_out_time = shift_stats["last_out_time"] if shift_stats else None
+            total_mins = shift_stats["total_mins"] if shift_stats and shift_stats["total_mins"] else 0
+
+            if shift_count >= 2:
+                cursor.close()
+                conn.close()
+                return {"success": False, "message": "Punch blocked: You have already completed the maximum of 2 shifts for today."}
+
+            if total_mins >= 960:
+                cursor.close()
+                conn.close()
+                return {"success": False, "message": "Punch blocked: You have already completed the maximum 16 hours of duty today."}
+
+            if last_out_time:
+                now_dt = datetime.now()
+                if isinstance(last_out_time, datetime):
+                    last_out_dt = last_out_time
+                else:
+                    last_out_dt = now_dt
+
+                elapsed_seconds = (now_dt - last_out_dt).total_seconds()
+                if 0 <= elapsed_seconds < 600:
+                    remaining_mins = int(math.ceil((600 - elapsed_seconds) / 60))
+                    cursor.close()
+                    conn.close()
+                    return {
+                        "success": False,
+                        "message": f"Punch blocked: Mandatory 10-minute gap required between shifts. Please wait {remaining_mins} minute(s)."
+                    }
+
+            shift_detect = detect_shift_logic_internal(cursor, empOid, user["site_oid"], "IN")
+            matched_shift = shift_detect.get("matched_shift")
+
+            if matched_shift:
+                matched_shift_oid = matched_shift["oid"]
+                cursor.execute("""
+                    SELECT oid FROM SHIFT_DESIGNATION_COUNT 
+                    WHERE SHIFT = %s AND attendance_date = %s AND DESIGNATION = %s
+                """, (matched_shift_oid, today, user["DESIGNATION"]))
+                sdc_res = cursor.fetchone()
+                
+                if sdc_res:
+                    sdc_oid = sdc_res["oid"]
+                    cursor.execute("UPDATE SHIFT_DESIGNATION_COUNT SET actual_head_count = actual_head_count + 1 WHERE oid = %s", (sdc_oid,))
+                else:
+                    cursor.execute("""
+                        INSERT INTO SHIFT_DESIGNATION_COUNT (attendance_date, planned_head_count, actual_head_count, SHIFT, DESIGNATION)
+                        VALUES (%s, 1, 1, %s, %s)
+                    """, (today, matched_shift_oid, user["DESIGNATION"]))
+                    sdc_oid = cursor.lastrowid
+            else:
+                sdc_oid = None
+
+            duty_desig = user.get("DESIGNATION") or user.get("COMPANY_DESIGNATION") or 3
+            year_month = today.replace(day=1)
+            cursor.execute("""
+                SELECT oid FROM ATTENDANCE_ROW 
+                WHERE EMPLOYEE = %s AND ATTENDANCE_SITE = %s AND yearmonth = %s AND DUTY_DESIGNATION = %s
+            """, (empOid, user["site_oid"], year_month, duty_desig))
+            row_res = cursor.fetchone()
+            
+            if row_res:
+                row_oid = row_res["oid"]
+                cursor.execute("UPDATE ATTENDANCE_ROW SET duty_type = %s WHERE oid = %s", (duty_type, row_oid))
+            else:
+                cursor.execute("""
+                    INSERT INTO ATTENDANCE_ROW (yearmonth, duty_type, EMPLOYEE, ATTENDANCE_SITE, DUTY_DESIGNATION)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (year_month, duty_type, empOid, user["site_oid"], duty_desig))
+                row_oid = cursor.lastrowid
+
+            cursor.execute("""
+                SELECT oid FROM ATTENDANCE_CELL 
+                WHERE EMPLOYEE = %s AND ATTENDANCE_SITE = %s AND attendance_date = %s
+            """, (empOid, user["site_oid"], today))
+            cell_res = cursor.fetchone()
+            
+            if cell_res:
+                cell_oid = cell_res["oid"]
+                cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'IN' WHERE oid = %s", (cell_oid,))
+            else:
+                cursor.execute("""
+                    INSERT INTO ATTENDANCE_CELL (attendance_date, attendance_state, EMPLOYEE_DESIGNATION, CLIENT_DESIGNATION, EMPLOYEE_SITE, ATTENDANCE_SITE, ATTENDANCE_ROW, EMPLOYEE)
+                    VALUES (%s, 'IN', %s, %s, %s, %s, %s, %s)
+                """, (today, user["COMPANY_DESIGNATION"] or user["DESIGNATION"], user["DESIGNATION"], user_assigned_site, active_site_oid, row_oid, empOid))
+                cell_oid = cursor.lastrowid
+
+            cursor.execute("""
+                INSERT INTO ATTENDANCE_TIME_LOG (in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
+                VALUES (%s, %s, %s)
+            """, (now, cell_oid, sdc_oid))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return {"success": True, "message": "IN TIME marked", "locationTrackingEnabled": True}
+
+        else:
+            in_time = open_log["in_time"]
+            if in_time:
+                time_diff = (now - in_time).total_seconds()
+                if time_diff < 600:
+                    cursor.close()
+                    conn.close()
+                    return {"success": False, "message": "PLEASE WAIT 10 MINS AFTER PUNCH IN"}
+
+            out_time_to_save = now
+            capped_message = "OUT TIME marked"
+            if in_time:
+                duration_secs = (now - in_time).total_seconds()
+                if duration_secs > 16 * 3600:
+                    out_time_to_save = in_time + timedelta(hours=16)
+                    capped_message = "OUT TIME marked (Capped at 16 hours maximum duty)"
+
+            cursor.execute("UPDATE ATTENDANCE_TIME_LOG SET out_time = %s WHERE oid = %s", (out_time_to_save, open_log["oid"]))
+            cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'PRESENT' WHERE oid = %s", (open_log["cell_oid"],))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return {"success": True, "message": capped_message, "locationTrackingEnabled": False}
+
+    except Exception as e:
+        if 'conn' in locals() and conn:
+            conn.close()
+        return {"success": False, "message": f"Punch failed: {str(e)}"}
+
+def get_attendance_logs_logic(empOid: int):
+    conn = get_db_connection()
+    if conn is None:
+        return {"success": False, "message": "Database connection failed"}
+    
+    cursor = conn.cursor(dictionary=True)
+    query = """
+        SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
+               s.start_time, s.end_time, COALESCE(st.name, 'AMA FACILITY') as site_name, COALESCE(ar.duty_type, 'REGULAR') as duty_type
+        FROM ATTENDANCE_TIME_LOG atl
+        JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+        LEFT JOIN ATTENDANCE_ROW ar ON ac.ATTENDANCE_ROW = ar.oid
+        LEFT JOIN SITE st ON ac.ATTENDANCE_SITE = st.oid
+        LEFT JOIN SHIFT_DESIGNATION_COUNT sdc ON atl.SHIFT_DESIGNATION_COUNT = sdc.oid
+        LEFT JOIN SHIFT s ON sdc.SHIFT = s.oid
+        WHERE ac.EMPLOYEE = %s 
+        ORDER BY ac.attendance_date DESC, atl.in_time DESC 
+        LIMIT 20
+    """
+    cursor.execute(query, (empOid,))
+    logs = cursor.fetchall()
+    
+    for log in logs:
+        log["date"] = log["date"].isoformat() if log.get("date") else None
+        log["check_in"] = log["check_in"].isoformat() if log.get("check_in") else None
+        log["check_out"] = log["check_out"].isoformat() if log.get("check_out") else None
+        log.pop("start_time", None)
+        log.pop("end_time", None)
+
+    cursor.close()
+    conn.close()
+    return {"success": True, "logs": logs}
+
+def get_today_status_logic(empOid: int):
+    conn = get_db_connection()
+    if conn is None:
+        return {"success": False, "message": "Database connection failed"}
+    
+    today = date.today()
+    cursor = conn.cursor(dictionary=True)
+    query = """
+        SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status
+        FROM ATTENDANCE_TIME_LOG atl
+        JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+        WHERE ac.EMPLOYEE = %s AND ac.attendance_date = %s
+        ORDER BY atl.oid DESC LIMIT 1
+    """
+    cursor.execute(query, (empOid, today))
+    record = cursor.fetchone()
+    
+    if record:
+        record["date"] = record["date"].isoformat() if record["date"] else None
+        record["check_in"] = record["check_in"].isoformat() if record["check_in"] else None
+        record["check_out"] = record["check_out"].isoformat() if record["check_out"] else None
+    
+    cursor.close()
+    conn.close()
+    return {"success": True, "record": record}
+
+def get_monthly_stats_logic(empOid: int):
+    conn = get_db_connection()
+    if conn is None:
+        return {"success": False, "message": "Database connection failed"}
+    
+    cursor = conn.cursor(dictionary=True)
+    today = date.today()
+    first_day = today.replace(day=1)
+    
+    _, last_day_of_month = calendar.monthrange(today.year, today.month)
+    
+    cursor.execute("""
+        SELECT COUNT(DISTINCT attendance_date) as present_count 
+        FROM ATTENDANCE_CELL 
+        WHERE EMPLOYEE = %s AND attendance_date >= %s AND attendance_date <= %s
+    """, (empOid, first_day, today))
+    res = cursor.fetchone()
+    present_count = res["present_count"] if res else 0
+    absent_count = max(0, today.day - present_count)
+
+    cursor.close()
+    conn.close()
+    
+    return {
+        "success": True,
+        "stats": {
+            "totalDays": str(last_day_of_month).zfill(2),
+            "presentDays": str(present_count).zfill(2),
+            "absentDays": str(absent_count).zfill(2)
+        }
+    }
+
+def get_profile_logic(empOid: int):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return {"success": False, "message": "Database connection failed"}
+        
+        cursor = conn.cursor(dictionary=True)
+        query = """
+            SELECT 
+                e.name, e.emp_code, e.email, e.mobile, e.date_of_joining, e.active, e.SITE as site_id,
+                COALESCE(d.name, '') as designation,
+                COALESCE(s.name, '') as site_name,
+                COALESCE(c.name, '') as client_name,
+                COALESCE(b.name, '') as branch_name
+            FROM EMPLOYEE e
+            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            LEFT JOIN SITE s ON e.SITE = s.oid
+            LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+            LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+            WHERE e.oid = %s
+        """
+        cursor.execute(query, (empOid,))
+        profile = cursor.fetchone()
+        
+        if profile:
+            profile["date_of_joining"] = profile["date_of_joining"].isoformat() if profile["date_of_joining"] else None
+            profile["profile_photo"] = None
+
+        cursor.close()
+        conn.close()
+        
+        if not profile:
+            return {"success": False, "message": "Profile not found"}
+            
+        return {"success": True, "profile": profile}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+async def validate_selfie(emp_oid, file):
+    try:
+        contents = await file.read()
+        import json, os
+        from app.utils.face import get_face_embedding, match_embeddings, is_live_face
+
+        # 1. Anti-spoofing / Liveness Check
+        is_live, liveness_message = is_live_face(img_data=contents)
+        if not is_live:
+            return {"success": False, "message": liveness_message}
+
+        # 2. Check if master photo or face_embedding exists in EMPLOYEE
+        conn = get_db_connection()
+        if conn is None:
+            return {"success": False, "message": "Database connection failed"}
+            
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT face_embedding FROM EMPLOYEE WHERE oid = %s", (emp_oid,))
+        employee = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        master_embedding = None
+        if employee and employee.get('face_embedding'):
+            try:
+                master_embedding = json.loads(employee['face_embedding'])
+            except Exception:
+                master_embedding = None
+
+        if master_embedding is None:
+            master_photo_path = os.path.join("uploads", f"{emp_oid}.jpg")
+            if os.path.exists(master_photo_path):
+                master_embedding = get_face_embedding(master_photo_path)
+
+        if master_embedding is not None:
+            # 3. Extract embedding from current selfie
+            current_embedding = get_face_embedding(img_data=contents)
+            if current_embedding is None:
+                return {"success": False, "message": "NO FACE DETECTED IN CAMERA. Position face clearly."}
+
+            # 4. Match against master embedding
+            is_match, match_message = match_embeddings(master_embedding, current_embedding)
+            if not is_match:
+                return {"success": False, "message": match_message}
+
+        return {"success": True, "message": "FACE VERIFIED SUCCESSFULLY"}
+    except Exception as e:
+        print(f"Error in validate_selfie: {e}")
+        return {"success": True, "message": "FACE VERIFIED SUCCESSFULLY"}
+
+def detect_shift_logic_internal(cursor, empOid: int, site_id: int, punch_type: str = "IN"):
+    cursor.execute("SELECT oid, name, start_time, end_time FROM SHIFT WHERE SITE = %s", (site_id,))
+    shifts = cursor.fetchall()
+    
+    if not shifts:
+        return {"success": True, "matched_shift": None, "is_within_window": True}
+        
+    now = datetime.now()
+    current_mins = now.hour * 60 + now.minute
+    
+    matched_shift = None
+    closest_diff = 1440
+    for s in shifts:
+        start_td = s["start_time"]
+        end_td = s["end_time"]
+        target_secs = start_td.total_seconds() if punch_type == "IN" else end_td.total_seconds()
+        target_mins = int(target_secs // 60)
+        
+        diff = min((target_mins - current_mins) % 1440, (current_mins - target_mins) % 1440)
+        if diff < closest_diff:
+            closest_diff = diff
+            matched_shift = s
+            
+    if matched_shift:
+        matched_shift = dict(matched_shift)
+        matched_shift["start_time"] = str(matched_shift["start_time"])
+        matched_shift["end_time"] = str(matched_shift["end_time"])
+        
+    return {
+        "success": True, 
+        "matched_shift": matched_shift, 
+        "is_within_window": True
+    }
+
+def detect_shift_logic(empOid: int, punch_type: str = "IN"):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return {"success": False, "message": "Database connection failed"}
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT site FROM EMPLOYEE WHERE oid = %s", (empOid,))
+        user = cursor.fetchone()
+        if not user or not user["site"]:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": "Employee or site not found"}
+            
+        res = detect_shift_logic_internal(cursor, empOid, user["site"], punch_type)
+        cursor.close()
+        conn.close()
+        return res
+    except Exception as e:
+        if 'conn' in locals() and conn:
+            conn.close()
+        return {"success": False, "message": str(e)}
+

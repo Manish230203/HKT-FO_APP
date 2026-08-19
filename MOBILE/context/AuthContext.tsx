@@ -2,12 +2,17 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, loginOfficer } from '../services/authService';
 import { getUserSession, saveUserSession, clearUserSession, getProfileImage, saveProfileImage } from '../services/db';
 
+export interface LoginResult {
+  success: boolean;
+  errorType?: 'NO_ACCOUNT' | 'RESTRICTED_ROLE' | 'NETWORK_ERROR';
+}
+
 interface AuthContextType {
   user: UserProfile | null;
   token: string | null;
   profileImage: string | null;
   isLoading: boolean;
-  login: (identifier: string, password?: string) => Promise<boolean>;
+  login: (identifier: string, password?: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   updateProfileImage: (uri: string) => Promise<void>;
 }
@@ -43,24 +48,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (identifier: string, password?: string): Promise<boolean> => {
+  const login = async (identifier: string, password?: string): Promise<LoginResult> => {
     try {
       setIsLoading(true);
       const res = await loginOfficer({ identifier, password });
       if (res && res.access_token && res.user) {
+        // Validate Field Officer role permission (restrict Security Guards and non-FO staff)
+        const role = (res.user.role || '').toUpperCase().trim();
+        const restrictedRoles = [
+          'S/G',
+          'GUARD',
+          'SUPER GUARD',
+          'LS/G',
+          'L/SG',
+          'ESM S/G',
+          'ESCO/G',
+          'H/G',
+          'BOUNCER',
+          'GUN MAN',
+          'HK BOY',
+          'HK LADY',
+          'HK/SUP',
+          'MALI',
+          'PLUMBER',
+          'ELECTRICIAN',
+          'CARPENTER',
+          'HELPER',
+          'LOADER',
+          'RECEP',
+          'RECEPTIONIST',
+          'FITTER/WELDER',
+          'DRIVER',
+          'LMV DRIVER',
+          'HMV DRIVER',
+          'PEON',
+          'HOUSEKEEPING',
+          'ACCOUNTANT',
+          'OFFI BOY',
+          'OFFI LADY',
+        ];
+
+        if (restrictedRoles.includes(role)) {
+          return { success: false, errorType: 'RESTRICTED_ROLE' };
+        }
+
         setUser(res.user);
         setToken(res.access_token);
         await saveUserSession(res.user, res.access_token);
 
-        const empId = res.user.employee_id || res.user.id || res.user.username;
+        const empId = res.user.employee_id || res.user.id || (res.user as any).username;
         const savedImage = await getProfileImage(empId);
         setProfileImage(savedImage);
-        return true;
+        return { success: true };
       }
-      return false;
-    } catch (e) {
-      console.error('Login failed', e);
-      throw e;
+      return { success: false, errorType: 'NO_ACCOUNT' };
+    } catch (e: any) {
+      if (e.response?.status === 401 || e.response?.status === 404) {
+        return { success: false, errorType: 'NO_ACCOUNT' };
+      }
+      if (e.response?.status === 403) {
+        return { success: false, errorType: 'RESTRICTED_ROLE' };
+      }
+      return { success: false, errorType: 'NETWORK_ERROR' };
     } finally {
       setIsLoading(false);
     }

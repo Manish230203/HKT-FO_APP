@@ -25,12 +25,14 @@ import {
   Building,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 import { getPunchRecords } from '../../services/db';
 
 export default function AttendanceScreen() {
   const { user, profileImage } = useAuth();
+  const { todayRecord, attendanceLogs, monthlyStats: apiMonthlyStats, refreshStatus } = useAttendance();
   const { t } = useLanguage();
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -52,6 +54,7 @@ export default function AttendanceScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      refreshStatus();
       fetchLogs();
     }, [])
   );
@@ -74,10 +77,20 @@ export default function AttendanceScreen() {
     let timer: NodeJS.Timeout;
     const activePunch = punchRecords.find((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
 
-    if (activePunch) {
-      const punchMs = activePunch.timestamp || Date.now();
+    let checkInMs = Date.now();
+    let hasActive = false;
+
+    if (todayRecord && todayRecord.check_in && !todayRecord.check_out) {
+      hasActive = true;
+      checkInMs = new Date(todayRecord.check_in).getTime();
+    } else if (activePunch) {
+      hasActive = true;
+      checkInMs = activePunch.timestamp || Date.now();
+    }
+
+    if (hasActive) {
       timer = setInterval(() => {
-        const diff = Math.max(0, Math.floor((Date.now() - punchMs) / 1000));
+        const diff = Math.max(0, Math.floor((Date.now() - checkInMs) / 1000));
         const hrs = String(Math.floor(diff / 3600)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
         const secs = String(diff % 60).padStart(2, '0');
@@ -88,7 +101,7 @@ export default function AttendanceScreen() {
     }
 
     return () => clearInterval(timer);
-  }, [punchRecords]);
+  }, [punchRecords, todayRecord]);
 
   // Sync view from route parameters
   useEffect(() => {
@@ -99,6 +112,13 @@ export default function AttendanceScreen() {
 
   // Compute Dynamic Monthly Stats
   const monthlyStats = useMemo(() => {
+    if (apiMonthlyStats) {
+      return {
+        totalDays: parseInt(apiMonthlyStats.totalDays || '30'),
+        present: parseInt(apiMonthlyStats.presentDays || '0'),
+        absent: parseInt(apiMonthlyStats.absentDays || '0'),
+      };
+    }
     const totalDaysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     const daysPresentCount = new Set(punchRecords.map((r) => r.date)).size;
     const daysAbsentCount = Math.max(0, totalDaysInMonth - daysPresentCount);
@@ -107,7 +127,7 @@ export default function AttendanceScreen() {
       present: daysPresentCount,
       absent: daysAbsentCount,
     };
-  }, [punchRecords]);
+  }, [punchRecords, apiMonthlyStats]);
 
   // Filtered Dynamic Logs
   const filteredLogs = useMemo(() => {

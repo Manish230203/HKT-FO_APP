@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import JSONResponse
 from app.database import get_db_connection
 import json
@@ -9,18 +9,18 @@ router = APIRouter()
 
 def get_authenticated_employee(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     import base64
-    if authorization and authorization.startswith("Bearer "):
+    if authorization and isinstance(authorization, str) and authorization.startswith("Bearer "):
         try:
             token = authorization.split(" ")[1]
             return json.loads(base64.b64decode(token.encode()).decode())
         except Exception:
             pass
     return {
-        "id": 1,
-        "name": "Administrator",
-        "role": "Admin",
-        "employee_id": "ADM001",
-        "site_id": None
+        "id": 7558,
+        "name": "Amit Kulkarni",
+        "role": "FIELD OFFICER",
+        "employee_id": "EMP103",
+        "site_id": 191
     }
 
 
@@ -81,10 +81,133 @@ def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
     r["attachments"] = deserialize_field(r.get("attachments")) or []
     return r
 
+# --- ASSESSMENT CLIENTS & SITES ENDPOINTS ---
+
+@router.get("/assessments/clients")
+def get_assessments_clients(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    try:
+        cursor = conn.cursor(dictionary=True)
+        emp = get_authenticated_employee(authorization)
+        is_admin = emp.get("role") in ["Admin", "ADMIN", "admin", "Super Admin"]
+        target_emp = emp_oid or empOid
+        if not is_admin and not target_emp and emp.get("id"):
+            target_emp = str(emp.get("id"))
+
+        if target_emp:
+            cursor.execute("SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s", (target_emp, target_emp))
+            emp_row = cursor.fetchone()
+            emp_name = emp_row["name"] if emp_row else target_emp
+
+            query = """
+                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code
+                FROM CLIENTT cl
+                JOIN SITE s ON s.CLIENTT = cl.oid
+                WHERE (
+                    s.oid IN (
+                        SELECT f.site_oid 
+                        FROM FIELD_OFFICER_VISIT_FREQUENCY f 
+                        JOIN FIELD_OFFICER_ASSIGNED_VISITS a ON f.plan_oid = a.oid 
+                        LEFT JOIN EMPLOYEE e ON a.employee_oid = e.oid OR a.employee_oid = e.emp_code
+                        WHERE a.employee_oid = %s OR e.oid = %s OR e.emp_code = %s
+                    )
+                    OR s.oid IN (
+                        SELECT e.SITE FROM EMPLOYEE e WHERE (e.oid = %s OR e.emp_code = %s) AND e.SITE IS NOT NULL
+                    )
+                    OR s.oid IN (
+                        SELECT r.site_id FROM FIELD_OFFICER_DAY_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
+                    )
+                    OR s.oid IN (
+                        SELECT r.site_id FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
+                    )
+                )
+                ORDER BY cl.name
+            """
+            params = [target_emp, target_emp, target_emp, target_emp, target_emp, target_emp, emp_name, target_emp, emp_name]
+            cursor.execute(query, params)
+        else:
+            cursor.execute("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return JSONResponse(content=rows)
+    except Exception as e:
+        if 'conn' in locals() and conn:
+            conn.close()
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@router.get("/assessments/sites")
+def get_assessments_sites(client_id: Optional[int] = Query(None), company_id: Optional[int] = Query(None), emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    try:
+        cursor = conn.cursor(dictionary=True)
+        query = """
+            SELECT DISTINCT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name 
+            FROM SITE s 
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid 
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+        """
+        where_clauses = []
+        params = []
+
+        target_client = client_id or company_id
+        if target_client:
+            where_clauses.append("(s.CLIENTT = %s)")
+            params.append(target_client)
+
+        emp = get_authenticated_employee(authorization)
+        is_admin = emp.get("role") in ["Admin", "ADMIN", "admin", "Super Admin"]
+        target_emp = emp_oid or empOid
+        if not is_admin and not target_emp and emp.get("id"):
+            target_emp = str(emp.get("id"))
+
+        if target_emp:
+            cursor.execute("SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s", (target_emp, target_emp))
+            emp_row = cursor.fetchone()
+            emp_name = emp_row["name"] if emp_row else target_emp
+
+            where_clauses.append("""(
+                s.oid IN (
+                    SELECT f.site_oid 
+                    FROM FIELD_OFFICER_VISIT_FREQUENCY f 
+                    JOIN FIELD_OFFICER_ASSIGNED_VISITS a ON f.plan_oid = a.oid 
+                    LEFT JOIN EMPLOYEE e ON a.employee_oid = e.oid OR a.employee_oid = e.emp_code
+                    WHERE a.employee_oid = %s OR e.oid = %s OR e.emp_code = %s
+                )
+                OR s.oid IN (
+                    SELECT e.SITE FROM EMPLOYEE e WHERE (e.oid = %s OR e.emp_code = %s) AND e.SITE IS NOT NULL
+                )
+                OR s.oid IN (
+                    SELECT r.site_id FROM FIELD_OFFICER_DAY_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
+                )
+                OR s.oid IN (
+                    SELECT r.site_id FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r WHERE r.employee_oid = %s OR r.officer = %s
+                )
+            )""")
+            params.extend([target_emp, target_emp, target_emp, target_emp, target_emp, target_emp, emp_name, target_emp, emp_name])
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+
+        query += " ORDER BY s.name"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return JSONResponse(content=rows)
+    except Exception as e:
+        if 'conn' in locals() and conn:
+            conn.close()
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
 # --- PLANNED VISITS ENDPOINT (FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY) ---
 
 @router.get("/planned-visits")
-def get_planned_visits():
+def get_planned_visits(empOid: Optional[str] = Query(None)):
     import calendar
     from datetime import datetime
 
@@ -114,7 +237,13 @@ def get_planned_visits():
         except Exception as err:
             print("Error checking completed site counts:", err)
 
-        query = """
+        where_clause = ""
+        params = []
+        if empOid:
+            where_clause = " WHERE (av.employee_oid = %s OR e.oid = %s OR e.emp_code = %s) "
+            params = [empOid, empOid, empOid]
+
+        query = f"""
             SELECT 
                 av.oid as id,
                 av.plan_code as planCode,
@@ -137,9 +266,10 @@ def get_planned_visits():
             LEFT JOIN EMPLOYEE e ON av.employee_oid = e.oid
             LEFT JOIN SITE s ON vf.site_oid = s.oid
             LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            {where_clause}
             ORDER BY av.created_at DESC, av.oid DESC
         """
-        cursor.execute(query)
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         
         result = []
@@ -232,11 +362,65 @@ def get_planned_visits():
         print(f"Error in get_planned_visits: {e}")
         return JSONResponse(status_code=500, content={"message": f"Server error: {str(e)}"})
 
+@router.post("/planned-visits")
+def create_planned_visit(payload: dict):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    try:
+        cursor = conn.cursor(dictionary=True)
+        import random
+        from datetime import datetime
+        
+        plan_code = f"PV-{datetime.now().strftime('%Y')}-{random.randint(1000, 9999)}"
+        
+        planning_type = str(payload.get("planningType", "SINGLE")).upper()
+        if planning_type not in ["WEEKLY", "MONTHLY", "SINGLE"]:
+            planning_type = "SINGLE"
+            
+        emp_oid = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or 7558
+        site_oid = payload.get("siteId") or payload.get("site_oid") or 1
+        freq = int(payload.get("visitFrequency", 1))
+        visit_date = payload.get("visitDate") or datetime.now().strftime("%Y-%m-%d")
+        week_start_date = payload.get("weekStartDate") or payload.get("startDate") or visit_date
+        week_end_date = payload.get("weekEndDate") or payload.get("endDate") or visit_date
+
+        try:
+            start_dt = datetime.strptime(str(week_start_date), "%Y-%m-%d")
+            p_month = start_dt.month
+            p_year = start_dt.year
+        except Exception:
+            today_dt = datetime.now()
+            p_month = today_dt.month
+            p_year = today_dt.year
+        
+        cursor.execute("""
+            INSERT INTO FIELD_OFFICER_ASSIGNED_VISITS 
+            (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, employee_oid, planning_method, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'MANUAL', 'PUBLISHED')
+        """, (plan_code, planning_type, week_start_date, week_end_date, p_month, p_year, visit_date, emp_oid))
+        
+        plan_oid = cursor.lastrowid
+        
+        cursor.execute("""
+            INSERT INTO FIELD_OFFICER_VISIT_FREQUENCY (plan_oid, site_oid, visit_frequency)
+            VALUES (%s, %s, %s)
+        """, (plan_oid, site_oid, freq))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return JSONResponse(content={"success": True, "message": "Visit plan assigned successfully", "id": plan_oid, "planCode": plan_code})
+    except Exception as e:
+        if 'conn' in locals() and conn:
+            conn.close()
+        return JSONResponse(status_code=500, content={"message": f"Failed to create visit plan: {str(e)}"})
+
 
 # --- OFFICER ROUND REPORTS ---
 
 @router.get("/officer-rounds/reports")
-def get_round_reports():
+def get_round_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
     conn = get_db_connection()
     if conn is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
@@ -248,9 +432,17 @@ def get_round_reports():
             LEFT JOIN SITE s ON r.site_id = s.oid
             LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
             LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-            ORDER BY r.created_on DESC, r.oid DESC
         """
-        cursor.execute(query)
+        params = []
+        target_emp = emp_oid or empOid
+        if target_emp:
+            query += """ WHERE (
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY r.created_on DESC, r.oid DESC"
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         return [map_db_row_to_frontend(r) for r in rows]
     finally:
@@ -422,7 +614,7 @@ def delete_round_report(id: str):
 # --- OFFICER VISIT REPORTS ---
 
 @router.get("/officer-visits/reports")
-def get_visit_reports():
+def get_visit_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
     conn = get_db_connection()
     if conn is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
@@ -434,9 +626,17 @@ def get_visit_reports():
             LEFT JOIN SITE s ON r.site_id = s.oid
             LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
             LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-            ORDER BY r.created_on DESC, r.oid DESC
         """
-        cursor.execute(query)
+        params = []
+        target_emp = emp_oid or empOid
+        if target_emp:
+            query += """ WHERE (
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY r.created_on DESC, r.oid DESC"
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         return [map_db_row_to_frontend(r) for r in rows]
     finally:
@@ -788,14 +988,24 @@ def init_general_visits_table(cursor):
         pass
 
 @router.get("/general-visits")
-def get_general_visits():
+def get_general_visits(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
     conn = get_db_connection()
     if conn is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
     cursor = conn.cursor(dictionary=True)
     try:
         init_general_visits_table(cursor)
-        cursor.execute("SELECT * FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS ORDER BY created_on DESC")
+        query = "SELECT * FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS"
+        params = []
+        target_emp = emp_oid or empOid
+        if target_emp:
+            query += """ WHERE (
+                employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY created_on DESC"
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         for r in rows:
             r["id"] = r["oid"]
@@ -829,6 +1039,27 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
 
         init_general_visits_table(cursor)
         oid = payload.get("id") or str(int(time.time() * 1000))
+        
+        site_id = payload.get("siteId") or payload.get("site_id")
+        client_id = payload.get("clientId") or payload.get("client_id")
+        site_name = payload.get("siteName") or payload.get("site_name")
+        client_name = payload.get("clientName") or payload.get("client_name")
+        report_id = payload.get("reportId") or payload.get("report_id") or f"GVR-{oid}"
+
+        if not site_name and site_id:
+            cursor.execute("SELECT name, CLIENTT FROM SITE WHERE oid = %s", (site_id,))
+            s_row = cursor.fetchone()
+            if s_row:
+                site_name = s_row["name"]
+                if not client_id and s_row.get("CLIENTT"):
+                    client_id = s_row["CLIENTT"]
+
+        if not client_name and client_id:
+            cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
+            c_row = cursor.fetchone()
+            if c_row:
+                client_name = c_row["name"]
+
         cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
         
@@ -841,17 +1072,17 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                 WHERE oid = %s
             """
             query_params = (
-                payload.get("reportId"),
-                payload.get("clientId"),
-                payload.get("clientName"),
-                payload.get("siteId"),
-                payload.get("siteName"),
-                payload.get("personVisited"),
-                payload.get("reasonOfVisit"),
-                payload.get("visitDate"),
+                report_id,
+                client_id,
+                client_name,
+                site_id,
+                site_name,
+                payload.get("personVisited") or payload.get("person_visited"),
+                payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
+                payload.get("visitDate") or payload.get("visit_date"),
                 payload.get("remark"),
-                payload.get("startTime"),
-                payload.get("endTime"),
+                payload.get("startTime") or payload.get("start_time"),
+                payload.get("endTime") or payload.get("end_time"),
                 emp_oid,
                 emp_name,
                 oid
@@ -866,17 +1097,17 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             query_params = (
-                payload.get("reportId"),
-                payload.get("clientId"),
-                payload.get("clientName"),
-                payload.get("siteId"),
-                payload.get("siteName"),
-                payload.get("personVisited"),
-                payload.get("reasonOfVisit"),
-                payload.get("visitDate"),
+                report_id,
+                client_id,
+                client_name,
+                site_id,
+                site_name,
+                payload.get("personVisited") or payload.get("person_visited"),
+                payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
+                payload.get("visitDate") or payload.get("visit_date"),
                 payload.get("remark"),
-                payload.get("startTime"),
-                payload.get("endTime"),
+                payload.get("startTime") or payload.get("start_time"),
+                payload.get("endTime") or payload.get("end_time"),
                 emp_oid,
                 emp_name,
                 oid
@@ -894,8 +1125,8 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                 emp_name,
                 "GENERAL",
                 oid,
-                payload.get("siteId"),
-                payload.get("visitDate")
+                payload.get("siteId") or payload.get("site_id"),
+                payload.get("visitDate") or payload.get("visit_date")
             )
             cursor.execute(metadata_sql, metadata_params)
         

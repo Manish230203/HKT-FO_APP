@@ -80,7 +80,7 @@ export default function SettingsScreen() {
   const handleSignOut = async () => {
     setShowSignOutConfirm(false);
     await logout();
-    router.replace('/login');
+    router.replace('/lang/lang-selection');
   };
 
   return (

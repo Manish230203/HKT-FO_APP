@@ -5,10 +5,19 @@ import { useRouter } from 'expo-router';
 interface SwipeableBackWrapperProps {
   children: React.ReactNode;
   enabled?: boolean;
+  fallbackRoute?: string;
 }
 
-export function SwipeableBackWrapper({ children, enabled = true }: SwipeableBackWrapperProps) {
+export function SwipeableBackWrapper({ children, enabled = true, fallbackRoute }: SwipeableBackWrapperProps) {
   const router = useRouter();
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (fallbackRoute) {
+      router.replace(fallbackRoute as any);
+    }
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -24,16 +33,12 @@ export function SwipeableBackWrapper({ children, enabled = true }: SwipeableBack
       },
       onPanResponderRelease: (evt, gestureState) => {
         if (gestureState.dx > 30 && Math.abs(gestureState.dy) < 90) {
-          if (router.canGoBack()) {
-            router.back();
-          }
+          handleBack();
         }
       },
       onPanResponderTerminate: (evt, gestureState) => {
         if (gestureState.dx > 30 && Math.abs(gestureState.dy) < 90) {
-          if (router.canGoBack()) {
-            router.back();
-          }
+          handleBack();
         }
       },
     })

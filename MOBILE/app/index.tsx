@@ -6,31 +6,21 @@ import { getLanguageSetting } from '../services/db';
 import { THEME } from '../constants/theme';
 
 export default function IndexScreen() {
-  const { user, isLoading } = useAuth();
+  const { isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     checkAppFlow();
-  }, [user, isLoading]);
+  }, [isLoading]);
 
   const checkAppFlow = async () => {
     if (isLoading) return;
 
     try {
-      const savedLang = await getLanguageSetting();
-      if (!savedLang) {
-        router.replace('/lang/lang-selection');
-        return;
-      }
-
-      if (user) {
-        router.replace('/(tabs)/dashboard');
-      } else {
-        router.replace('/login');
-      }
+      router.replace('/lang/lang-selection');
     } catch (e) {
       console.error('Error during initial navigation check', e);
-      router.replace('/login');
+      router.replace('/lang/lang-selection');
     }
   };
 

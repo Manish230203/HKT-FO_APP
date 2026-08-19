@@ -284,6 +284,13 @@ export default function CreateDayVisitReport() {
     const loggedInUser = userStr ? JSON.parse(userStr) : null;
     return loggedInUser ? loggedInUser.name : "";
   });
+  // Scoped API empOid for Field Officers
+  const empOidForApi = (() => {
+    const userStr = sessionStorage.getItem("user");
+    const loggedInUser = userStr ? JSON.parse(userStr) : null;
+    const isAdminUser = loggedInUser ? ["Admin", "ADMIN", "admin", "Super Admin"].includes(loggedInUser.role) : false;
+    return (!isAdminUser && loggedInUser?.id) ? String(loggedInUser.id) : null;
+  })();
   const [shift, setShift] = useState("Morning");
   const [startTime, setStartTime] = useState(() => getCurrentTimeFormatted());
   const [endTime, setEndTime] = useState(() => getCurrentTimeFormatted(480)); // default +8 hours
@@ -375,7 +382,8 @@ export default function CreateDayVisitReport() {
   useEffect(() => {
     const loadCompanies = async () => {
       try {
-        const compRes = await api.get("/assessments/clients");
+        const params = empOidForApi ? `?empOid=${empOidForApi}` : "";
+        const compRes = await api.get(`/assessments/clients${params}`);
         setCompanies(compRes.data || []);
       } catch (error) {
         console.error("Failed to load clients", error);
@@ -389,8 +397,9 @@ export default function CreateDayVisitReport() {
     const loadSites = async () => {
       if (clientId) {
         try {
+          const empParam = empOidForApi ? `&empOid=${empOidForApi}` : "";
           const siteRes = await api.get(
-            `/assessments/sites?company_id=${clientId}&all_sites=true`,
+            `/assessments/sites?client_id=${clientId}${empParam}`,
           );
           setSites(siteRes.data || []);
         } catch (error) {

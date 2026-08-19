@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Shield, Check, Globe } from 'lucide-react-native';
+import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { LanguageCode } from '../../constants/translations';
 import { THEME } from '../../constants/theme';
@@ -10,12 +11,22 @@ import { Card } from '../../components/ui/Card';
 
 export default function LanguageSelectionScreen() {
   const { language, setLanguage, t } = useLanguage();
+  const { user } = useAuth();
   const [selectedLang, setSelectedLang] = useState<LanguageCode>(language);
   const router = useRouter();
 
+  const handleSelectLang = async (langCode: LanguageCode) => {
+    setSelectedLang(langCode);
+    await setLanguage(langCode);
+  };
+
   const handleContinue = async () => {
     await setLanguage(selectedLang);
-    router.replace('/login');
+    if (user) {
+      router.replace('/(tabs)/dashboard');
+    } else {
+      router.replace('/login');
+    }
   };
 
   const languages: { code: LanguageCode; name: string; nativeName: string }[] = [
@@ -41,7 +52,7 @@ export default function LanguageSelectionScreen() {
             return (
               <Card
                 key={lang.code}
-                onPress={() => setSelectedLang(lang.code)}
+                onPress={() => handleSelectLang(lang.code)}
                 style={[
                   styles.langCard,
                   isSelected && styles.selectedCard,

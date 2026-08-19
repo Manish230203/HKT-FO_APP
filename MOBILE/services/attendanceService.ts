@@ -2,7 +2,8 @@ import api from './api';
 import { getPunchRecords, savePunchRecord as dbSavePunchRecord } from './db';
 
 export interface AttendanceParams {
-  date: string;
+  empOid?: number | string;
+  date?: string;
   client_id?: number;
   site_id?: number;
   branch_id?: number;
@@ -13,13 +14,40 @@ export interface AttendanceParams {
 
 export const getAttendanceRecords = async (params: AttendanceParams) => {
   try {
-    const response = await api.get('/attendance/records', { params });
-    const remoteData = response.data || [];
-    const localLogs = await getPunchRecords();
-    return [...localLogs, ...remoteData];
+    const empOid = params.empOid;
+    if (empOid) {
+      const response = await api.get('/_AIP_getAttendanceLogs', { params: { empOid } });
+      if (response.data && response.data.success) {
+        return response.data.logs;
+      }
+    }
+    return await getPunchRecords(empOid ? String(empOid) : undefined);
   } catch (e) {
-    return await getPunchRecords();
+    return await getPunchRecords(params.empOid ? String(params.empOid) : undefined);
   }
+};
+
+export const getTodayStatus = async (empOid: number | string) => {
+  try {
+    const response = await api.get('/_AIP_getTodayStatus', { params: { empOid } });
+    return response.data;
+  } catch (e) {
+    return { success: false, message: 'Failed to fetch today status' };
+  }
+};
+
+export const getMonthlyStats = async (empOid: number | string) => {
+  try {
+    const response = await api.get('/_AIP_getMonthlyStats', { params: { empOid } });
+    return response.data;
+  } catch (e) {
+    return { success: false, message: 'Failed to fetch monthly stats' };
+  }
+};
+
+export const markAttendanceApi = async (payload: { empOid: number | string; latitude: number; longitude: number; siteOid?: number; timestamp?: string }) => {
+  const response = await api.post('/_AIP_markAttendance', payload);
+  return response.data;
 };
 
 export const getAttendanceShifts = async (client_id?: string, site_id?: string) => {
@@ -43,8 +71,5 @@ export const getRegularizations = async (status?: string) => {
 };
 
 export const savePunchRecord = async (record: any) => {
-  try {
-    await api.post('/attendance/check-in', record).catch(() => {});
-  } catch (e) {}
   await dbSavePunchRecord(record);
 };
