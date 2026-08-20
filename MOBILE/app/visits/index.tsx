@@ -508,7 +508,7 @@ export default function VisitsScreen() {
                             <Text style={[styles.tdCell, { flex: 1, color: '#94A3B8' }]}>{g.empCode || g.employeeId || g.emp_code || 'G'}</Text>
                             <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
                               <View style={[styles.statusBadgePill, g.present !== false && g.status !== 'Absent' ? styles.statusBadgeSuccess : styles.statusBadgeDanger]}>
-                                <Text style={styles.statusBadgeText}>{g.status || (g.present !== false ? 'Present' : 'Absent')}</Text>
+                                <Text style={styles.statusBadgePillText}>{g.status || (g.present !== false ? 'Present' : 'Absent')}</Text>
                               </View>
                             </View>
                           </View>
@@ -549,7 +549,7 @@ export default function VisitsScreen() {
                                 ) : null}
                               </View>
                               <View style={[styles.statusBadgePill, !isNegative ? styles.statusBadgeSuccess : styles.statusBadgeDanger]}>
-                                <Text style={styles.statusBadgeText}>{statusStr}</Text>
+                                <Text style={styles.statusBadgePillText}>{statusStr}</Text>
                               </View>
                             </View>
                           );
@@ -1054,7 +1054,7 @@ const styles = StyleSheet.create({
   statusBadgeDanger: {
     backgroundColor: 'rgba(239,68,68,0.15)',
   },
-  statusBadgeText: {
+  statusBadgePillText: {
     fontSize: 10,
     fontWeight: '800',
     color: '#F8FAFC',

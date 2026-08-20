@@ -11,6 +11,8 @@ export interface UserProfile {
   name: string;
   role: string;
   employee_id: string;
+  empOid?: number | string;
+  username?: string;
   site_id?: number | null;
   company_id?: number | null;
   company_name?: string | null;

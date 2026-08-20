@@ -14,11 +14,11 @@ export default function SelectVisitTypeScreen() {
   const handleSelect = (type: 'day' | 'night' | 'general') => {
     const qp = `clientId=${params.clientId || ''}&siteId=${params.siteId || ''}&plannedId=${params.plannedId || ''}`;
     if (type === 'day') {
-      router.push(`/visits/day-visit/create?${qp}`);
+      router.push(`/visits/day-visit/day-visit-create?${qp}`);
     } else if (type === 'night') {
-      router.push(`/visits/night-visit/create?${qp}`);
+      router.push(`/visits/night-visit/night-visit-create?${qp}`);
     } else if (type === 'general') {
-      router.push(`/visits/general-visit/create?${qp}`);
+      router.push(`/visits/general-visit/general-visit-create?${qp}`);
     }
   };
 

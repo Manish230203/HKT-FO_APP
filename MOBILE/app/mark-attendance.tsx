@@ -86,7 +86,7 @@ export default function MarkAttendanceScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const empId = user?.employee_id || user?.id || user?.username;
+        const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
 
         // REQUIREMENT: If Profile Photo is NOT registered, BLOCK attendance marking!
         if (!profileImage) {
@@ -231,7 +231,7 @@ export default function MarkAttendanceScreen() {
     try {
       const todayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const empId = user?.employee_id || user?.id || user?.username;
+      const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
 
       const lat = location?.latitude || 18.605555;
       const long = location?.longitude || 73.827115;

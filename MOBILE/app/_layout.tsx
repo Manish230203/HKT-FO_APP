@@ -47,15 +47,15 @@ export default function RootLayout() {
                 options={{ title: 'Select Visit Type', gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
               <Stack.Screen
-                name="visits/day-visit/create"
+                name="visits/day-visit/day-visit-create"
                 options={{ title: 'Day Visit Report', gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
               <Stack.Screen
-                name="visits/night-visit/create"
+                name="visits/night-visit/night-visit-create"
                 options={{ title: 'Night Visit Report', gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
               <Stack.Screen
-                name="visits/general-visit/create"
+                name="visits/general-visit/general-visit-create"
                 options={{ title: 'General Visit Report', gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
             </Stack>

@@ -2,15 +2,17 @@ import React from 'react';
 import { View, Text, TextInput, StyleSheet, TextInputProps, ViewStyle } from 'react-native';
 import { THEME } from '../../constants/theme';
 
-interface InputProps extends TextInputProps {
+export interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
+  leftIcon?: React.ReactNode;
   containerStyle?: ViewStyle;
 }
 
 export const Input: React.FC<InputProps> = ({
   label,
   error,
+  leftIcon,
   containerStyle,
   style,
   ...props
@@ -18,15 +20,14 @@ export const Input: React.FC<InputProps> = ({
   return (
     <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <TextInput
-        style={[
-          styles.input,
-          error ? styles.inputError : null,
-          style,
-        ]}
-        placeholderTextColor="#64748B"
-        {...props}
-      />
+      <View style={[styles.inputWrapper, error ? styles.inputError : null]}>
+        {leftIcon && <View style={styles.leftIconContainer}>{leftIcon}</View>}
+        <TextInput
+          style={[styles.input, style]}
+          placeholderTextColor="#64748B"
+          {...props}
+        />
+      </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
@@ -44,13 +45,24 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  input: {
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     height: 48,
     backgroundColor: '#1E293B',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: THEME.border,
     paddingHorizontal: 14,
+  },
+  leftIconContainer: {
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  input: {
+    flex: 1,
+    height: '100%',
     color: THEME.text,
     fontSize: THEME.typography.sm,
   },

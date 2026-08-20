@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserProfile, loginOfficer } from '../services/authService';
+import { UserProfile, loginOfficer, getAuthenticatedUser } from '../services/authService';
 import { getUserSession, saveUserSession, clearUserSession, getProfileImage, saveProfileImage } from '../services/db';
 
 export interface LoginResult {
@@ -129,8 +129,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfileImage = async (uri: string) => {
     setProfileImage(uri);
-    const empId = user?.employee_id || user?.id || user?.username;
-    await saveProfileImage(uri, empId);
+    const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username;
+    await saveProfileImage(uri, empId ? String(empId) : undefined);
   };
 
   const logout = async () => {

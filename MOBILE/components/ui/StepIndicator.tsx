@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
   stepsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'between',
+    justifyContent: 'space-between',
     paddingHorizontal: 8,
   },
   circle: {
