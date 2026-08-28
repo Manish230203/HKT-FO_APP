@@ -9,9 +9,12 @@ import {
   Image,
   RefreshControl,
   StatusBar,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
   Search,
@@ -48,6 +51,66 @@ export default function AttendanceScreen() {
   const [sessionTime, setSessionTime] = useState('00:00:00');
   const [loading, setLoading] = useState(false);
   const [punchRecords, setPunchRecords] = useState<any[]>([]);
+
+  // Live pulse animation for Active Session card
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const pulseOpacity = React.useRef(new Animated.Value(0.8)).current;
+
+  // Glowing top-to-bottom scan line animation for active session
+  const scanAnim = React.useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (sessionTime !== '00:00:00') {
+      const pulseLoop = Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 2.4,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 0,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.timing(pulseOpacity, {
+              toValue: 0,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseOpacity, {
+              toValue: 0.8,
+              duration: 0,
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      );
+
+      const scanLoop = Animated.loop(
+        Animated.timing(scanAnim, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        })
+      );
+
+      pulseLoop.start();
+      scanLoop.start();
+      return () => {
+        pulseLoop.stop();
+        scanLoop.stop();
+      };
+    } else {
+      pulseAnim.setValue(1);
+      pulseOpacity.setValue(0);
+      scanAnim.setValue(0);
+    }
+  }, [sessionTime]);
 
   // Search & Filter States
   const [searchLogs, setSearchLogs] = useState('');
@@ -107,17 +170,31 @@ export default function AttendanceScreen() {
     }
   };
 
+  useEffect(() => {
+    fetchLogs();
+  }, [attendanceLogs]);
+
   // Digital Live Timer calculating elapsed time from Punch In timestamp
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    const activePunch = punchRecords.find((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
+    const nowMs = Date.now();
+    const activePunch = punchRecords.find((r) => {
+      const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+      const punchMs = r.timestamp || 0;
+      const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
+      return isPunchedIn && isWithin16Hours;
+    });
 
     let checkInMs = Date.now();
     let hasActive = false;
 
-    if (todayRecord && todayRecord.check_in && !todayRecord.check_out) {
-      hasActive = true;
-      checkInMs = new Date(todayRecord.check_in).getTime();
+    if (todayRecord) {
+      if (todayRecord.check_in && !todayRecord.check_out) {
+        hasActive = true;
+        checkInMs = new Date(todayRecord.check_in).getTime();
+      } else {
+        hasActive = false;
+      }
     } else if (activePunch) {
       hasActive = true;
       checkInMs = activePunch.timestamp || Date.now();
@@ -145,6 +222,52 @@ export default function AttendanceScreen() {
     }
   }, [params.view]);
 
+  // Single Source of Truth for Logs: Merge live server context attendanceLogs with local punchRecords
+  const allLogs = useMemo(() => {
+    const empIdStr = String(user?.id || '');
+    const serverLogs = (attendanceLogs || []).map((l: any, index: number) => {
+      let titleDate = l.date || 'Today';
+      if (l.date && /^\d{4}-\d{2}-\d{2}/.test(l.date)) {
+        const [y, m, d] = l.date.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        titleDate = `${dt.toLocaleDateString('en-US', { weekday: 'long' })}, ${dt.getDate()} ${dt.toLocaleDateString('en-US', { month: 'short' })}`;
+      }
+      return {
+        id: `server_${index}_${l.date}_${l.check_in}`,
+        employee_id: empIdStr,
+        employeeId: user?.employee_id || empIdStr,
+        timestamp: l.check_in ? new Date(l.check_in).getTime() : Date.now(),
+        date: l.date,
+        dayTitle: titleDate,
+        punchInTime: l.check_in ? new Date(l.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
+        punchOutTime: l.check_out ? new Date(l.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
+        check_in_lat: l.check_in_lat,
+        check_in_long: l.check_in_long,
+        check_out_lat: l.check_out_lat,
+        check_out_long: l.check_out_long,
+        siteName: l.site_name || null,
+        clientName: 'Client',
+        status: l.check_out ? 'PRESENT' : l.check_in ? 'PUNCHED-IN' : 'MISSED',
+        officerName: user?.name || 'Officer',
+      };
+    });
+
+    const merged = [...serverLogs];
+    punchRecords.forEach((pr) => {
+      const prTime = pr.timestamp || 0;
+      const existsInServer = serverLogs.some((sl) => {
+        if (sl.date && pr.date && sl.date === pr.date) return true;
+        if (sl.timestamp && Math.abs(sl.timestamp - prTime) < 120000) return true;
+        return false;
+      });
+      if (!existsInServer) {
+        merged.push(pr);
+      }
+    });
+
+    return merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  }, [attendanceLogs, punchRecords, user]);
+
   // Compute Dynamic Monthly Stats
   const monthlyStats = useMemo(() => {
     if (apiMonthlyStats) {
@@ -155,30 +278,41 @@ export default function AttendanceScreen() {
       };
     }
     const totalDaysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const daysPresentCount = new Set(punchRecords.map((r) => r.date)).size;
+    const daysPresentCount = new Set(allLogs.map((r) => r.date)).size;
     const daysAbsentCount = Math.max(0, totalDaysInMonth - daysPresentCount);
     return {
       totalDays: totalDaysInMonth,
       present: daysPresentCount,
       absent: daysAbsentCount,
     };
-  }, [punchRecords, apiMonthlyStats]);
+  }, [allLogs, apiMonthlyStats]);
+
+  const parseRecordDate = (r: any): Date => {
+    if (r.timestamp) return new Date(r.timestamp);
+    if (!r.date) return new Date();
+    if (/^\d{4}-\d{2}-\d{2}/.test(r.date)) {
+      const [y, m, d] = r.date.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    }
+    const dt = new Date(r.date);
+    return isNaN(dt.getTime()) ? new Date() : dt;
+  };
 
   // Filtered Dynamic Logs
   const filteredLogs = useMemo(() => {
-    let list = punchRecords;
+    let list = allLogs;
 
     if (logFilter === 'week') {
       const now = new Date();
       const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      list = list.filter((r) => !r.date || new Date(r.date) >= oneWeekAgo);
+      list = list.filter((r) => !r.date || parseRecordDate(r) >= oneWeekAgo);
     } else if (logFilter === 'month') {
       const now = new Date();
       const currentY = now.getFullYear();
       const currentM = now.getMonth();
       list = list.filter((r) => {
         if (!r.date) return true;
-        const d = new Date(r.date);
+        const d = parseRecordDate(r);
         return d.getFullYear() === currentY && d.getMonth() === currentM;
       });
     } else if (logFilter === 'prev') {
@@ -189,7 +323,7 @@ export default function AttendanceScreen() {
         const targetMonth = daysInViewMonth.month;
         list = list.filter((r) => {
           if (!r.date) return true;
-          const d = new Date(r.date);
+          const d = parseRecordDate(r);
           return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
         });
       }
@@ -208,23 +342,23 @@ export default function AttendanceScreen() {
     }
 
     return list;
-  }, [punchRecords, searchLogs, logFilter, selectedDate, daysInViewMonth]);
+  }, [allLogs, searchLogs, logFilter, selectedDate, daysInViewMonth]);
 
   // Dynamic Missed Punch Logs
   const missedLogs = useMemo(() => {
-    let list = punchRecords.filter((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
+    let list = allLogs.filter((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
 
     if (missedFilter === 'weekly') {
       const now = new Date();
       const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      list = list.filter((r) => !r.date || new Date(r.date) >= oneWeekAgo);
+      list = list.filter((r) => !r.date || parseRecordDate(r) >= oneWeekAgo);
     } else if (missedFilter === 'monthly') {
       const now = new Date();
       const currentY = now.getFullYear();
       const currentM = now.getMonth();
       list = list.filter((r) => {
         if (!r.date) return true;
-        const d = new Date(r.date);
+        const d = parseRecordDate(r);
         return d.getFullYear() === currentY && d.getMonth() === currentM;
       });
     } else if (missedFilter === 'custom') {
@@ -235,16 +369,16 @@ export default function AttendanceScreen() {
         const targetMonth = daysInViewMonth.month;
         list = list.filter((r) => {
           if (!r.date) return true;
-          const d = new Date(r.date);
+          const d = parseRecordDate(r);
           return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
         });
       }
     }
 
     return list;
-  }, [punchRecords, missedFilter, selectedDate, daysInViewMonth]);
+  }, [allLogs, missedFilter, selectedDate, daysInViewMonth]);
 
-  const latestPunch = punchRecords.length > 0 ? punchRecords[0] : null;
+  const latestPunch = allLogs.length > 0 ? allLogs[0] : null;
 
   return (
     <SwipeableBackWrapper>
@@ -286,15 +420,55 @@ export default function AttendanceScreen() {
             </View>
 
             {/* 2. Vibrant Live Session Active Card */}
-            <View style={styles.liveSessionCard}>
+            <LinearGradient
+              colors={['#00599B', '#008BD3']}
+              start={{ x: 0, y: 0.2 }}
+              end={{ x: 1, y: 0.8 }}
+              style={styles.liveSessionCard}
+            >
+              <View style={styles.cardCirclePattern1} />
+              <View style={styles.cardCirclePattern2} />
+
+              {/* Glowing Live Scan Line Running Top to Bottom when Punched In */}
+              {sessionTime !== '00:00:00' && (
+                <Animated.View
+                  style={[
+                    styles.scanLine,
+                    {
+                      transform: [
+                        {
+                          translateY: scanAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-10, 140],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              )}
+
               <View style={styles.liveHeaderRow}>
-                <View style={[styles.liveDot, sessionTime !== '00:00:00' ? styles.liveGreenDot : styles.liveRedDot]} />
+                <View style={styles.pulseDotContainer}>
+                  {sessionTime !== '00:00:00' && (
+                    <Animated.View
+                      style={[
+                        styles.pulseRing,
+                        {
+                          transform: [{ scale: pulseAnim }],
+                          opacity: pulseOpacity,
+                        },
+                      ]}
+                    />
+                  )}
+                  <View style={[styles.liveDot, sessionTime !== '00:00:00' ? styles.liveGreenDot : styles.liveRedDot]} />
+                </View>
                 <Text style={styles.liveSessionTitle}>
-                  {sessionTime !== '00:00:00' ? 'LIVE SESSION ACTIVE' : 'NO ACTIVE SESSION'}
+                  {sessionTime !== '00:00:00' ? (t('active_session') || 'LIVE SESSION ACTIVE') : (t('no_active_session') || 'NO ACTIVE SESSION')}
                 </Text>
               </View>
               <Text style={styles.liveTimerDigits}>{sessionTime}</Text>
-            </View>
+            </LinearGradient>
 
             {/* 3. Mark Attendance Big Card */}
             <TouchableOpacity
@@ -360,15 +534,15 @@ export default function AttendanceScreen() {
                   </View>
                   <View style={styles.activityTextCol}>
                     <Text style={styles.activityMainText}>
-                      {latestPunch.status === 'COMPLETED' ? 'Punch Out' : 'Punch In'}
+                      {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? 'Punch Out' : 'Punch In'}
                     </Text>
                     <Text style={styles.activitySubText}>
-                      {latestPunch.date}, {latestPunch.status === 'COMPLETED' ? latestPunch.punchOutTime : latestPunch.punchInTime}
+                      {latestPunch.date}, {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? latestPunch.punchOutTime : latestPunch.punchInTime}
                     </Text>
                   </View>
                   <View style={styles.successBadge}>
                     <Text style={styles.successText}>
-                      {latestPunch.status === 'COMPLETED' ? 'COMPLETED' : 'SUCCESS'}
+                      {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? 'PRESENT' : 'SUCCESS'}
                     </Text>
                   </View>
                 </View>
@@ -546,24 +720,24 @@ export default function AttendanceScreen() {
                     <View
                       style={[
                         styles.punchedInBadge,
-                        log.status === 'COMPLETED' && {
+                        (log.status === 'COMPLETED' || log.status === 'PRESENT') && {
                           backgroundColor: 'rgba(16, 185, 129, 0.15)',
                           borderColor: 'rgba(16, 185, 129, 0.3)',
                         },
                       ]}
                     >
                       <Clock
-                        color={log.status === 'COMPLETED' ? '#10B981' : '#F59E0B'}
+                        color={log.status === 'COMPLETED' || log.status === 'PRESENT' ? '#10B981' : '#F59E0B'}
                         size={14}
                         style={{ marginRight: 4 }}
                       />
                       <Text
                         style={[
                           styles.punchedInText,
-                          log.status === 'COMPLETED' && { color: '#10B981' },
+                          (log.status === 'COMPLETED' || log.status === 'PRESENT') && { color: '#10B981' },
                         ]}
                       >
-                        {log.status === 'COMPLETED' ? 'COMPLETED' : 'PUNCHED-IN'}
+                        {log.status === 'COMPLETED' || log.status === 'PRESENT' ? 'PRESENT' : 'PUNCHED-IN'}
                       </Text>
                     </View>
                   </View>
@@ -572,15 +746,29 @@ export default function AttendanceScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.fieldSubLabel}>PUNCH IN</Text>
                       <Text style={styles.timeValText}>{log.punchInTime || '11:00'}</Text>
+                      {log.check_in_lat != null && log.check_in_long != null && (
+                        <Text style={{ color: '#94A3B8', fontSize: 11, marginTop: 2 }}>
+                          📍 {Number(log.check_in_lat).toFixed(4)}, {Number(log.check_in_long).toFixed(4)}
+                        </Text>
+                      )}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.fieldSubLabel}>PUNCH OUT</Text>
                       <Text style={styles.timeValText}>{log.punchOutTime || '--:--'}</Text>
+                      {log.check_out_lat != null && log.check_out_long != null && (
+                        <Text style={{ color: '#94A3B8', fontSize: 11, marginTop: 2 }}>
+                          📍 {Number(log.check_out_lat).toFixed(4)}, {Number(log.check_out_long).toFixed(4)}
+                        </Text>
+                      )}
                     </View>
                   </View>
 
                   <Text style={[styles.fieldSubLabel, { marginTop: 10 }]}>SITE</Text>
-                  <Text style={styles.siteValText}>{log.siteName || 'Humankind Technology'}</Text>
+                  <Text style={styles.siteValText}>
+                    {log.siteName || (log.check_in_lat != null && log.check_in_long != null
+                      ? `📍 ${Number(log.check_in_lat).toFixed(4)}, ${Number(log.check_in_long).toFixed(4)}`
+                      : 'Coordinates Only')}
+                  </Text>
                 </View>
               ))
             )}
@@ -854,41 +1042,95 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  /* LIVE SESSION CARD */
+  /* LIVE SESSION CARD - MATCHING USER SCREENSHOT EXACTLY */
   liveSessionCard: {
-    backgroundColor: '#0284C7',
     borderRadius: 24,
-    padding: 22,
+    paddingVertical: 24,
+    paddingHorizontal: 24,
     marginBottom: 16,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  scanLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 2.5,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 8,
+    opacity: 0.85,
+    elevation: 8,
+    zIndex: 10,
+  },
+  cardCirclePattern1: {
+    position: 'absolute',
+    right: -25,
+    top: -25,
+    width: 165,
+    height: 165,
+    borderRadius: 82.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  cardCirclePattern2: {
+    position: 'absolute',
+    right: 40,
+    bottom: -45,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
   liveHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 6,
+  },
+  pulseDotContainer: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    position: 'relative',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#34D399',
   },
   liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   liveGreenDot: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#34D399',
   },
   liveRedDot: {
-    backgroundColor: '#EF4444',
+    backgroundColor: '#FFFFFF',
+    opacity: 0.9,
   },
   liveSessionTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   liveTimerDigits: {
     color: '#FFFFFF',
-    fontSize: 44,
-    fontWeight: '800',
-    marginTop: 8,
-    letterSpacing: 1,
+    fontSize: 54,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginTop: 2,
+    textAlign: 'left',
   },
 
   /* MARK ATTENDANCE BIG CARD */
@@ -903,9 +1145,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   bigFingerprintBox: {
-    width: 76,
-    height: 76,
-    borderRadius: 24,
+    width: 88,
+    height: 88,
+    borderRadius: 28,
     backgroundColor: 'rgba(59, 130, 246, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',

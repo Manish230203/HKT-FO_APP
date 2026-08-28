@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, Image, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Moon, Plus, Trash2, ChevronDown, Building, X, Clock } from 'lucide-react-native';
+import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
+import { Moon, Plus, Trash2, ChevronDown, Building, X, Clock, MapPin, Camera } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
-import { getSites, getClients, Site, Client } from '../../../services/siteService';
+import { getSites, getClients, getSiteGuards, Site, Client, checkOutSiteVisit } from '../../../services/siteService';
 import { submitNightVisitReport, getNightVisitTemplates } from '../../../services/visitService';
+import { clearActiveCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
@@ -17,11 +20,19 @@ import { TimePicker24Modal } from '../../../components/ui/TimePicker24Modal';
 
 const STEPS = ['General Info', 'Guards', 'Night Checklist', 'Briefing', 'Suggestions', 'Review'];
 
+const DEFAULT_NIGHT_MANDATORY_QUESTIONS = [
+  { id: 'nq1', section: 'Night Guard Alertness', question: 'Are night duty security guards alert, awake, and in proper uniform?' },
+  { id: 'nq2', section: 'Perimeter & Gate Security', question: 'Are perimeter fences, main entry gates, and access points locked & secured?' },
+  { id: 'nq3', section: 'Patrol & Register Log', question: 'Is patrol tracking / torch light / night patrol register being updated properly?' },
+  { id: 'nq4', section: 'Critical Areas Lock & Key', question: 'Are key rooms, server rooms, and high-value storage areas locked & verified?' },
+  { id: 'nq5', section: 'Random Checking & Briefing', question: 'Were random night checks performed and guard briefing delivered?' },
+];
+
 export default function CreateNightVisitReportScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
-  const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string }>();
+  const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string; checkInTime?: string; checkOutTime?: string }>();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -36,8 +47,47 @@ export default function CreateNightVisitReportScreen() {
   const [siteName, setSiteName] = useState('');
   const [shift, setShift] = useState('Night');
   const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState('22:00');
-  const [endTime, setEndTime] = useState('04:00');
+  const [startTime, setStartTime] = useState(
+    params.checkInTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  );
+  const [endTime, setEndTime] = useState(
+    params.checkOutTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  );
+
+  // Custom On-Spot Questions State
+  const [customQuestions, setCustomQuestions] = useState<Array<{ id: string; section?: string; question: string; isCustom?: boolean }>>([]);
+  const [newQuestionText, setNewQuestionText] = useState('');
+
+  const handleCheckInNow = () => {
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    setStartTime(now);
+  };
+
+  const handleCheckOutNow = () => {
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    setEndTime(now);
+  };
+
+  const getSiteDurationText = () => {
+    try {
+      const [sH, sM] = startTime.split(':').map(Number);
+      const [eH, eM] = endTime.split(':').map(Number);
+      if (isNaN(sH) || isNaN(sM) || isNaN(eH) || isNaN(eM)) return null;
+
+      let startMins = sH * 60 + sM;
+      let endMins = eH * 60 + eM;
+      if (endMins < startMins) endMins += 24 * 60;
+
+      const diff = endMins - startMins;
+      const hrs = Math.floor(diff / 60);
+      const mins = diff % 60;
+
+      if (hrs > 0) return `${hrs} hr ${mins} mins`;
+      return `${mins} mins`;
+    } catch {
+      return null;
+    }
+  };
 
   // Dynamic Template Questions from DB (FIELD_OFFICER_NIGHT_VISIT_TEMPLATES)
   const [templateQuestions, setTemplateQuestions] = useState<Array<{ id: string; section?: string; question: string }>>([]);
@@ -60,17 +110,95 @@ export default function CreateNightVisitReportScreen() {
   const [siteModalVisible, setSiteModalVisible] = useState(false);
 
   // Guards List
-  const [guards, setGuards] = useState<Array<{ name: string; empCode: string; status: string }>>([
-    { name: 'Suresh Patil', empCode: 'G005', status: 'Alert & Awake' },
-  ]);
+  const [guards, setGuards] = useState<Array<{ name: string; empCode: string; status: string; isTemporary?: boolean }>>([]);
   const [newGuardName, setNewGuardName] = useState('');
+  const [newGuardCode, setNewGuardCode] = useState('');
+
+  // Question Photo Capture State
+  const [questionPhotos, setQuestionPhotos] = useState<Record<string, string>>({});
+
+  const handleCaptureQuestionPhoto = async (qText: string) => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Camera permission is required to take question photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.5,
+        base64: true,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const photoUri = result.assets[0].uri;
+        setQuestionPhotos((prev) => ({ ...prev, [qText]: photoUri }));
+      }
+    } catch (e) {
+      console.warn('Error launching camera for question photo:', e);
+    }
+  };
 
   // Checklist
   const [checklist, setChecklist] = useState<Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'>>({});
 
+  // GPS Location State
+  const [gps, setGps] = useState('');
+  const [fetchingGps, setFetchingGps] = useState(false);
+
   useEffect(() => {
     loadClientsAndSites();
+    fetchCurrentLocation();
   }, []);
+
+  const fetchCurrentLocation = async (): Promise<string> => {
+    setFetchingGps(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        let loc = null;
+        try {
+          loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        } catch {
+          loc = await Location.getLastKnownPositionAsync();
+        }
+        if (loc && loc.coords) {
+          const coordsStr = `${loc.coords.latitude.toFixed(6)}, ${loc.coords.longitude.toFixed(6)}`;
+          setGps(coordsStr);
+          return coordsStr;
+        }
+      }
+    } catch (e) {
+      console.warn('GPS location fetch error:', e);
+    } finally {
+      setFetchingGps(false);
+    }
+    return '';
+  };
+
+  useEffect(() => {
+    if (siteId) {
+      fetchGuards(siteId, shift);
+    }
+  }, [siteId, shift]);
+
+  const fetchGuards = async (sId: string, sShift?: string) => {
+    try {
+      const fetched = await getSiteGuards(sId, sShift);
+      if (fetched && fetched.length > 0) {
+        setGuards((prev) => {
+          const tempGuards = prev.filter((g) => g.isTemporary);
+          const regularGuards = fetched.map((g) => ({
+            name: g.name,
+            empCode: g.empCode || `G${g.empOid || '001'}`,
+            status: g.status || 'Alert & Awake',
+            isTemporary: false,
+          }));
+          return [...regularGuards, ...tempGuards];
+        });
+      }
+    } catch (e) {
+      console.error('Failed to fetch site guards from DB', e);
+    }
+  };
 
   const loadClientsAndSites = async () => {
     try {
@@ -83,25 +211,27 @@ export default function CreateNightVisitReportScreen() {
       setClients(clientData || []);
       setSites(siteData || []);
 
-      // Load DB template questions from FIELD_OFFICER_NIGHT_VISIT_TEMPLATES
-      if (templates && templates.length > 0) {
-        const qList = templates[0].questions || [];
-        if (qList.length > 0) {
-          setTemplateQuestions(qList);
-          const initChecklist: Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'> = {};
-          qList.forEach((qItem: any) => {
-            const text = qItem.question || String(qItem);
-            initChecklist[text] = 'Satisfactory';
-          });
-          setChecklist(initChecklist);
-        }
+      // Load DB template questions from FIELD_OFFICER_NIGHT_VISIT_TEMPLATES or fallback to mandatory questions
+      let qList: any[] = [];
+      if (templates && templates.length > 0 && templates[0].questions?.length > 0) {
+        qList = templates[0].questions;
+      } else {
+        qList = DEFAULT_NIGHT_MANDATORY_QUESTIONS;
       }
+      setTemplateQuestions(qList);
+      const initChecklist: Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'> = {};
+      qList.forEach((qItem: any) => {
+        const text = qItem.question || String(qItem);
+        initChecklist[text] = 'Satisfactory';
+      });
+      setChecklist(initChecklist);
 
       if (params.siteId && siteData) {
         const foundSite = siteData.find((s) => String(s.id) === String(params.siteId));
         if (foundSite) {
           setSiteId(String(foundSite.id));
           setSiteName(foundSite.name);
+          fetchGuards(String(foundSite.id), shift);
           const cId = foundSite.client_id || params.clientId;
           if (cId) {
             setClientId(String(cId));
@@ -132,8 +262,48 @@ export default function CreateNightVisitReportScreen() {
     const matchesClient = !clientId ? true : String(s.client_id) === String(clientId);
     const matchesSearch = s.name.toLowerCase().includes(siteSearchQuery.toLowerCase()) ||
                           (s.client_name && s.client_name.toLowerCase().includes(siteSearchQuery.toLowerCase()));
-    return matchesClient && matchesSearch;
   });
+
+  // Handlers for Temporary Guards
+  const handleAddGuard = () => {
+    if (!newGuardName.trim()) return;
+    const tempGuard = {
+      name: newGuardName.trim(),
+      empCode: newGuardCode.trim() || `TEMP${Math.floor(1000 + Math.random() * 9000)}`,
+      status: 'Alert & Awake',
+      isTemporary: true,
+    };
+    setGuards([...guards, tempGuard]);
+    setNewGuardName('');
+    setNewGuardCode('');
+  };
+
+  const handleRemoveGuard = (idx: number) => {
+    setGuards(guards.filter((_, i) => i !== idx));
+  };
+
+  const handleAddCustomQuestion = () => {
+    if (!newQuestionText.trim()) return;
+    const qText = newQuestionText.trim();
+    const newQ = {
+      id: `spot_${Date.now()}`,
+      section: 'On-Spot Inspection',
+      question: qText,
+      isCustom: true,
+    };
+    setCustomQuestions((prev) => [...prev, newQ]);
+    setChecklist((prev) => ({ ...prev, [qText]: 'Satisfactory' }));
+    setNewQuestionText('');
+  };
+
+  const handleRemoveCustomQuestion = (qText: string) => {
+    setCustomQuestions((prev) => prev.filter((q) => (q.question || String(q)) !== qText));
+    setChecklist((prev) => {
+      const updated = { ...prev };
+      delete updated[qText];
+      return updated;
+    });
+  };
 
   // Briefing & Checking
   const [lectureDetails, setLectureDetails] = useState('');
@@ -148,45 +318,16 @@ export default function CreateNightVisitReportScreen() {
     type: 'success',
   });
 
-  useEffect(() => {
-    loadSitesData();
-  }, []);
-
-  const loadSitesData = async () => {
-    try {
-      const data = await getSites();
-      if (data && data.length > 0) {
-        const found = data.find((s) => String(s.id) === String(params.siteId));
-        if (found) {
-          setSiteName(found.name);
-          setClientId(String(found.client_id || params.clientId || 1));
-        }
-      }
-    } catch (e) {
-      console.error('Error loading site info', e);
-    }
-  };
-
-  const handleAddGuard = () => {
-    if (!newGuardName) return;
-    setGuards([...guards, { name: newGuardName, empCode: 'G' + Math.floor(100 + Math.random() * 900), status: 'Alert & Awake' }]);
-    setNewGuardName('');
-  };
-
-  const handleRemoveGuard = (idx: number) => {
-    setGuards(guards.filter((_, i) => i !== idx));
-  };
-
-  const toggleChecklistQuestion = (question: string) => {
-    setChecklist((prev) => ({
-      ...prev,
-      [question]: prev[question] === 'Satisfactory' ? 'Unsatisfactory' : 'Satisfactory',
-    }));
-  };
-
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      let currentGps = gps;
+      if (!currentGps) {
+        currentGps = await fetchCurrentLocation();
+      }
+
+      const capturedPhotos = Object.values(questionPhotos).filter((p) => p && typeof p === 'string');
+
       const payload = {
         client_id: parseInt(clientId, 10) || 1,
         site_id: parseInt(siteId, 10) || 1,
@@ -195,8 +336,27 @@ export default function CreateNightVisitReportScreen() {
         visit_type: 'Scheduled',
         shift: shift,
         officer: user?.name || 'Field Officer',
+        'check-in_time': startTime,
+        start_time: startTime,
+        startTime: startTime,
+        check_in_time: startTime,
+        'check-out_time': endTime,
+        end_time: endTime,
+        endTime: endTime,
+        check_out_time: endTime,
+        gps: currentGps,
         guards: guards,
-        checklist: Object.entries(checklist).map(([q, val]) => ({ question: q, status: val })),
+        checklist: [...templateQuestions, ...customQuestions].map((qItem: any) => {
+          const text = qItem.question || String(qItem);
+          return {
+            section: qItem.section || 'General',
+            question: text,
+            status: checklist[text] || 'Satisfactory',
+            isCustom: !!qItem.isCustom,
+            photo: questionPhotos[text] || null,
+          };
+        }),
+        photos: capturedPhotos,
         lecture_details: lectureDetails,
         random_checking: randomChecking,
         overall_remarks: overallRemarks,
@@ -204,10 +364,25 @@ export default function CreateNightVisitReportScreen() {
       };
 
       await submitNightVisitReport(payload);
+
+      // Trigger automatic Check-Out of the Site Visit Session
+      const empOid = user?.id || (user as any)?.oid || user?.employee_id || 7558;
+      try {
+        await checkOutSiteVisit({
+          employee_id: empOid,
+          site_id: parseInt(siteId, 10) || 187,
+        });
+      } catch (checkOutErr) {
+        console.warn('Auto check-out warning:', checkOutErr);
+      }
+
+      if (params.plannedId) {
+        await clearActiveCheckIn(params.plannedId);
+      }
       setAlertInfo({
         visible: true,
         title: t('night_visit_submitted'),
-        message: t('night_visit_success_desc'),
+        message: 'Night Visit Report submitted successfully and site visit session checked out.',
         type: 'success',
       });
     } catch (e: any) {
@@ -262,84 +437,264 @@ export default function CreateNightVisitReportScreen() {
             <Input label="Shift" value={shift} onChangeText={setShift} />
             <Input label="Visit Date" value={visitDate} onChangeText={setVisitDate} />
             
-            {/* Start Time 24h Selector */}
-            <Text style={styles.fieldLabel}>START TIME (24-HR CLOCK)</Text>
+            {/* Check-In Time 24h Selector + Check-In Now Button */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+              <Text style={styles.fieldLabel}>CHECK-IN TIME (START)</Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleCheckInNow}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}
+              >
+                <Clock color="#10B981" size={13} style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#10B981' }}>Check-In Now</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => setTimePickerConfig({ visible: true, mode: 'start', title: 'Select Start Time (24-Hour Clock)', value: startTime })}
+              onPress={() => setTimePickerConfig({ visible: true, mode: 'start', title: 'Select Check-In Time (24-Hour Clock)', value: startTime })}
               style={styles.pickerButton}
             >
               <Text style={styles.pickerButtonText}>{startTime} (HH:mm)</Text>
               <Clock color={THEME.primary} size={20} />
             </TouchableOpacity>
 
-            {/* End Time 24h Selector */}
-            <Text style={styles.fieldLabel}>END TIME (24-HR CLOCK)</Text>
+            {/* Check-Out Time 24h Selector + Check-Out Now Button */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+              <Text style={styles.fieldLabel}>CHECK-OUT TIME (END)</Text>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleCheckOutNow}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 158, 11, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)' }}
+              >
+                <Clock color="#F59E0B" size={13} style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#F59E0B' }}>Check-Out Now</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => setTimePickerConfig({ visible: true, mode: 'end', title: 'Select End Time (24-Hour Clock)', value: endTime })}
+              onPress={() => setTimePickerConfig({ visible: true, mode: 'end', title: 'Select Check-Out Time (24-Hour Clock)', value: endTime })}
               style={styles.pickerButton}
             >
               <Text style={styles.pickerButtonText}>{endTime} (HH:mm)</Text>
               <Clock color={THEME.primary} size={20} />
             </TouchableOpacity>
+
+            {/* Total Site Duration Banner */}
+            {getSiteDurationText() ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.12)', padding: 12, borderRadius: 10, marginTop: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.25)' }}>
+                <Clock color="#3B82F6" size={18} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#93C5FD' }}>
+                  Total Time Spent on Site: <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>{getSiteDurationText()}</Text>
+                </Text>
+              </View>
+            ) : null}
+
+            {/* GPS Location Status Banner */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: 12, borderRadius: 10, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MapPin color="#10B981" size={18} style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#6EE7B7' }}>GPS LOCATION</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF', marginTop: 2 }}>
+                    {fetchingGps ? 'Fetching GPS coordinates...' : gps || 'Acquiring GPS location...'}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={fetchCurrentLocation}
+                disabled={fetchingGps}
+                style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#10B981' }}>
+                  {fetchingGps ? 'Locating...' : 'Refresh GPS'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </Card>
         )}
 
         {/* STEP 1: Guards Inspection */}
         {currentStep === 1 && (
           <Card style={styles.stepCard}>
-            <Text style={styles.stepTitle}>Night Duty Guards Check</Text>
-            {guards.map((g, idx) => (
-              <View key={idx} style={styles.guardRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.guardName}>{g.name} ({g.empCode})</Text>
-                  <Text style={styles.guardMeta}>Status: {g.status}</Text>
+            <Text style={styles.stepTitle}>Night Duty Guards Check ({guards.length} Deployed)</Text>
+            {guards.length === 0 ? (
+              <Text style={{ fontSize: 13, color: '#94A3B8', marginVertical: 10 }}>
+                No active regular night guards found for this site in DB. You can add temporary guards below.
+              </Text>
+            ) : (
+              guards.map((g, idx) => (
+                <View key={idx} style={styles.guardRow}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.guardName}>{g.name} ({g.empCode})</Text>
+                      <View
+                        style={{
+                          backgroundColor: g.isTemporary ? 'rgba(245, 158, 11, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 4,
+                          marginLeft: 8,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '800',
+                            color: g.isTemporary ? '#F59E0B' : '#60A5FA',
+                          }}
+                        >
+                          {g.isTemporary ? 'TEMPORARY' : 'REGULAR'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.guardMeta}>Status: {g.status}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => handleRemoveGuard(idx)}>
+                    <Trash2 color={THEME.danger} size={18} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => handleRemoveGuard(idx)}>
-                  <Trash2 color={THEME.danger} size={18} />
-                </TouchableOpacity>
-              </View>
-            ))}
+              ))
+            )}
 
-            <Text style={[styles.stepTitle, { marginTop: 16 }]}>Add On-Duty Guard</Text>
-            <Input label="Guard Name" value={newGuardName} onChangeText={setNewGuardName} />
-            <Button title="Add Guard" variant="outline" onPress={handleAddGuard} icon={<Plus color={THEME.primary} size={18} />} />
+            <Text style={[styles.stepTitle, { marginTop: 16 }]}>Add Temporary On-Duty Guard</Text>
+            <Input label="Temporary Guard Name" value={newGuardName} onChangeText={setNewGuardName} placeholder="e.g. Suresh Patil" />
+            <Input label="Employee Code / ID" value={newGuardCode} onChangeText={setNewGuardCode} placeholder="e.g. EMP9120 or Temp ID" />
+            <Button title="Add Temporary Guard to Report" variant="outline" onPress={handleAddGuard} icon={<Plus color={THEME.primary} size={18} />} />
           </Card>
         )}
 
         {/* STEP 2: Night Checklist */}
         {currentStep === 2 && (
           <Card style={styles.stepCard}>
-            <Text style={styles.stepTitle}>Officer Night Round Checklist ({templateQuestions.length} Items)</Text>
-            {templateQuestions.map((item, idx) => {
+            <Text style={styles.stepTitle}>
+              Officer Night Round Checklist ({templateQuestions.length + customQuestions.length} Items)
+            </Text>
+
+            {[...templateQuestions, ...customQuestions].map((item: any, idx) => {
               const qText = item.question || String(item);
               const status = checklist[qText] || 'Satisfactory';
-              const isSat = status === 'Satisfactory';
+              const isCustom = !!item.isCustom;
+
               return (
-                <TouchableOpacity
-                  key={item.id || idx}
-                  activeOpacity={0.8}
-                  onPress={() =>
-                    setChecklist((prev) => ({
-                      ...prev,
-                      [qText]: prev[qText] === 'Satisfactory' ? 'Unsatisfactory' : 'Satisfactory',
-                    }))
-                  }
-                  style={styles.checkRow}
-                >
-                  <View style={{ flex: 1, paddingRight: 10 }}>
-                    {item.section ? (
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: '#3B82F6', marginBottom: 2 }}>
-                        {item.section.toUpperCase()}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.checkQuestion}>{qText}</Text>
+                <View key={item.id || idx} style={{ marginBottom: 16, backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      {item.section ? (
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: THEME.primary, marginBottom: 2 }}>
+                          {item.section.toUpperCase()}
+                        </Text>
+                      ) : null}
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>{qText}</Text>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View
+                        style={{
+                          backgroundColor: isCustom ? 'rgba(245, 158, 11, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 4,
+                          marginRight: isCustom ? 6 : 0,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '800',
+                            color: isCustom ? '#F59E0B' : '#60A5FA',
+                          }}
+                        >
+                          {isCustom ? 'ON SPOT' : 'MANDATORY'}
+                        </Text>
+                      </View>
+
+                      {isCustom ? (
+                        <TouchableOpacity onPress={() => handleRemoveCustomQuestion(qText)} style={{ padding: 4 }}>
+                          <Trash2 color={THEME.danger} size={16} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
                   </View>
-                  <Badge label={status} variant={isSat ? 'success' : 'danger'} />
-                </TouchableOpacity>
+
+                  {/* 3-Way Status Toggle Buttons */}
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                    {(['Satisfactory', 'Unsatisfactory', 'NA'] as const).map((val) => {
+                      const isSelected = status === val;
+                      let bg = 'rgba(255, 255, 255, 0.05)';
+                      let border = 'rgba(255, 255, 255, 0.15)';
+                      let color = '#94A3B8';
+                      if (isSelected) {
+                        if (val === 'Satisfactory') { bg = 'rgba(16, 185, 129, 0.25)'; border = '#10B981'; color = '#6EE7B7'; }
+                        else if (val === 'Unsatisfactory') { bg = 'rgba(239, 68, 68, 0.25)'; border = '#EF4444'; color = '#FCA5A5'; }
+                        else { bg = 'rgba(148, 163, 184, 0.25)'; border = '#94A3B8'; color = '#E2E8F0'; }
+                      }
+                      return (
+                        <TouchableOpacity
+                          key={val}
+                          activeOpacity={0.8}
+                          onPress={() => setChecklist((prev) => ({ ...prev, [qText]: val }))}
+                          style={{
+                            flex: 1,
+                            paddingVertical: 8,
+                            borderRadius: 6,
+                            borderWidth: 1,
+                            backgroundColor: bg,
+                            borderColor: border,
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: isSelected ? '800' : '600', color }}>{val}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Per-Question Photo Capture Button & Preview */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => handleCaptureQuestionPhoto(qText)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: questionPhotos[qText] ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)',
+                        borderColor: questionPhotos[qText] ? '#10B981' : '#3B82F6',
+                        borderWidth: 1,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 6,
+                      }}
+                    >
+                      <Camera size={14} color={questionPhotos[qText] ? '#10B981' : '#3B82F6'} style={{ marginRight: 6 }} />
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: questionPhotos[qText] ? '#10B981' : '#3B82F6' }}>
+                        {questionPhotos[qText] ? 'Change Photo' : 'Attach Photo'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {questionPhotos[qText] ? (
+                      <Image
+                        source={{ uri: questionPhotos[qText] }}
+                        style={{ width: 36, height: 36, borderRadius: 6, borderWidth: 1, borderColor: '#10B981' }}
+                      />
+                    ) : null}
+                  </View>
+                </View>
               );
             })}
+
+            <Text style={[styles.stepTitle, { marginTop: 16 }]}>Add On-Spot Inspection Question</Text>
+            <Input
+              label="On-Spot Question / Item"
+              value={newQuestionText}
+              onChangeText={setNewQuestionText}
+              placeholder="e.g. Is rear emergency fire exit clear of obstruction?"
+            />
+            <Button
+              title="Add On-Spot Question to Checklist"
+              variant="outline"
+              onPress={handleAddCustomQuestion}
+              icon={<Plus color={THEME.primary} size={18} />}
+            />
           </Card>
         )}
 

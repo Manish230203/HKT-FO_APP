@@ -14,8 +14,11 @@ export function NightVisitReportTemplate({ report, hideTitle = false, hideLogo =
   const clientName = report?.clientName || "N/A";
   const unit = report?.unit || "N/A";
   const visitDate = report?.visitDate || report?.createdOn || "";
-  const photosList = Array.isArray(report?.photos) ? report.photos : [];
+  const rawPhotos = report?.photos || report?.photo_evidence || report?.photoEvidence || [];
+  const photosList = Array.isArray(rawPhotos) ? rawPhotos : (typeof rawPhotos === "string" ? (JSON.parse(rawPhotos || "[]") || []) : []);
   const photoCount = photosList.length;
+  const startTime = report?.startTime || report?.start_time || report?.check_in_time || report?.['check-in_time'] || report?.checkInTime || "—";
+  const endTime = report?.endTime || report?.end_time || report?.check_out_time || report?.['check-out_time'] || report?.checkOutTime || "—";
 
   const formatDateToDMY = (dateStr) => {
     if (!dateStr) return "DD/MM/YY";
@@ -78,7 +81,7 @@ export function NightVisitReportTemplate({ report, hideTitle = false, hideLogo =
               {!hideTitle && <h1 className="text-sm font-black text-[#1e3a8a] leading-tight uppercase tracking-tight w-fit">FIELD OFFICER NIGHT VISIT REPORT</h1>}
               <span className="text-[10px] font-bold text-slate-800 mt-1 uppercase font-mono break-all">REPORT ID : {reportIdStr}</span>
             </div>
-            <div className="text-right text-[10px] font-bold text-slate-800 leading-normal uppercase font-mono shrink-0 whitespace-nowrap">DATE : {formatDateToDMY(visitDate)} {report?.startTime || "—"} - {report?.endTime || "—"}</div>
+            <div className="text-right text-[10px] font-bold text-slate-800 leading-normal uppercase font-mono shrink-0 whitespace-nowrap">DATE : {formatDateToDMY(visitDate)} {startTime} - {endTime}</div>
           </div>
         </div>
       )}
@@ -91,8 +94,8 @@ export function NightVisitReportTemplate({ report, hideTitle = false, hideLogo =
           <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Shift</label><span className="text-[13px] font-extrabold text-slate-900">{report?.shift || "Night Shift"}</span></div>
           <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Visit Type</label><span className="text-[13px] font-extrabold text-slate-900">Night Visit</span></div>
           <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Officer Name</label><span className="text-[13px] font-extrabold text-slate-900 break-words">{report?.officer || "—"}</span></div>
-          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Start Time</label><span className="text-[13px] font-extrabold text-slate-900">{report?.startTime || "—"}</span></div>
-          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">End Time</label><span className="text-[13px] font-extrabold text-slate-900">{report?.endTime || "—"}</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Start Time</label><span className="text-[13px] font-extrabold text-slate-900">{startTime}</span></div>
+          <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">End Time</label><span className="text-[13px] font-extrabold text-slate-900">{endTime}</span></div>
           <div><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">GPS Location</label><span className="text-[13px] font-extrabold text-slate-900 break-all">{report?.gps || "—"}</span></div>
           <div className="col-span-2 md:col-span-4"><label className="block text-[7px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Photo Evidence</label><span className="text-[13px] font-extrabold text-slate-900">{photoCount} {photoCount === 1 ? "Photo" : "Photos"}</span></div>
         </div>

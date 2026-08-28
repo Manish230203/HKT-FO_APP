@@ -10,7 +10,15 @@
       "backgroundColor": "#0A1128"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location"
+        ],
+        "NSLocationWhenInUseUsageDescription": "Allow PatrolSync FO to access your location for attendance and site visit verification.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow PatrolSync FO to access your location for background duty tracking.",
+        "NSLocationAlwaysUsageDescription": "Allow PatrolSync FO to access your location in the background while screen is locked."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +27,13 @@
       "permissions": [
         "CAMERA",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
       ]
     },
     "web": {
@@ -30,7 +44,17 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow PatrolSync FO to access your location for attendance and verification."
+          "locationWhenInUsePermission": "Allow PatrolSync FO to access your location for attendance and site visit verification.",
+          "locationAlwaysAndWhenInUsePermission": "Allow PatrolSync FO to access your location for background duty tracking.",
+          "locationAlwaysPermission": "Allow PatrolSync FO to access your location in the background while screen is locked.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "foregroundService": {
+            "notificationTitle": "PatrolSync FO Duty Active",
+            "notificationBody": "Location tracking is active for field officer verification.",
+            "notificationColor": "#00599B",
+            "foregroundServiceType": "location"
+          }
         }
       ],
       [

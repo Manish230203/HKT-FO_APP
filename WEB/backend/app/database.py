@@ -3,8 +3,12 @@ from mysql.connector import pooling
 import threading
 import time
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from app.config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 
+# --- RAW MYSQL CONNECTION POOL ---
 _db_pool = None
 _pool_lock = threading.Lock()
 _last_pool_attempt = 0
@@ -19,7 +23,6 @@ def get_db_pool():
             return _db_pool
 
         now = time.time()
-        # Cooldown of 5 seconds between failed pool creation attempts to prevent connection flooding
         if now - _last_pool_attempt < 5:
             return None
 
@@ -56,3 +59,24 @@ def get_db_connection():
     except mysql.connector.Error as err:
         print(f"Error connecting to database: {err}")
         return None
+
+
+# --- SQLALCHEMY ORM ENGINE & SESSIONS ---
+SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=3,
+    max_overflow=2,
+    pool_recycle=3600
+)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_patrol_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -31,6 +31,10 @@ import Login from "./pages/Login";
 import api from "./services/api";
 import SelectVisitType from "./pages/SelectVisitType";
 
+import LiveGPSTracking from "./pages/LiveGPSTracking";
+import TrackHistory from "./pages/TrackHistory";
+import PlannedVsActualVisits from "./pages/PlannedVsActualVisits";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -217,6 +221,20 @@ const App = () => {
                       <Route
                         path="/select-visit-type"
                         element={<SelectVisitType />}
+                      />
+
+                      {/* GPS & Site Visit Tracking Routes */}
+                      <Route
+                        path="/gps/live"
+                        element={<LiveGPSTracking />}
+                      />
+                      <Route
+                        path="/gps/history"
+                        element={<TrackHistory />}
+                      />
+                      <Route
+                        path="/gps/planned-vs-actual"
+                        element={<PlannedVsActualVisits />}
                       />
 
                       {/* Officer Night Round Routes */}

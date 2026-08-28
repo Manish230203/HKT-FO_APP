@@ -12,17 +12,18 @@ import {
   Image,
   Modal,
   FlatList,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Search,
   Fingerprint,
   LayoutGrid,
   CheckCircle2,
   Clock,
-  Building2,
-  MapPin,
   PlusCircle,
   User,
   Settings,
@@ -34,27 +35,23 @@ import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { getPlannedVisits, createPlannedVisit, getSites, getClients, Site, Client, PlannedVisit } from '../../services/siteService';
-import { getAttendanceRecords } from '../../services/attendanceService';
 import { getPunchRecords } from '../../services/db';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits } from '../../services/visitService';
 
 export default function DashboardScreen() {
   const { user, profileImage } = useAuth();
-  const { todayRecord, profileData, refreshStatus } = useAttendance();
+  const { todayRecord, attendanceLogs, profileData, refreshStatus } = useAttendance();
   const { t } = useLanguage();
   const router = useRouter();
 
-  const [greeting, setGreeting] = useState('Good Day');
+  const [greeting, setGreeting] = useState('Good Afternoon');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
 
   const getCompanyLogo = () => {
     const compId = user?.company_id || (profileData as any)?.company_id;
     const compName = (user?.company_name || (profileData as any)?.company_name || '').toLowerCase();
 
-    // Company OID 4 = Eagle Industrial Services Pvt. Ltd. (EISPL)
-    // Company OID 1 = Unique Delta Force (UDF)
     const isEagle = 
       compId === 4 || 
       Number(compId) === 4 ||
@@ -76,6 +73,66 @@ export default function DashboardScreen() {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [sessionTime, setSessionTime] = useState('00:00:00');
   const [sessionStart, setSessionStart] = useState<Date | null>(null);
+
+  // Live pulse animation for Active Session card
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const pulseOpacity = React.useRef(new Animated.Value(0.8)).current;
+
+  // Glowing top-to-bottom scan line animation for active session
+  const scanAnim = React.useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isCheckedIn) {
+      const pulseLoop = Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 2.4,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 0,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.timing(pulseOpacity, {
+              toValue: 0,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseOpacity, {
+              toValue: 0.8,
+              duration: 0,
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      );
+
+      const scanLoop = Animated.loop(
+        Animated.timing(scanAnim, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        })
+      );
+
+      pulseLoop.start();
+      scanLoop.start();
+      return () => {
+        pulseLoop.stop();
+        scanLoop.stop();
+      };
+    } else {
+      pulseAnim.setValue(1);
+      pulseOpacity.setValue(0);
+      scanAnim.setValue(0);
+    }
+  }, [isCheckedIn]);
 
   // Add Visit Modal State
   const [addVisitModalVisible, setAddVisitModalVisible] = useState(false);
@@ -136,21 +193,10 @@ export default function DashboardScreen() {
 
   // Visits Data
   const [plannedVisits, setPlannedVisits] = useState<PlannedVisit[]>([]);
-  const [completedVisits, setCompletedVisits] = useState<Array<{
-    id: string;
-    reportNo: string;
-    clientName: string;
-    siteName: string;
-    visitType: string;
-    date: string;
-    officer: string;
-    status: string;
-  }>>([]);
+  const [completedVisits, setCompletedVisits] = useState<Array<any>>([]);
 
   const loadClientsForModal = async () => {
     try {
-      // Fetch ALL clients and sites (no empOid filter) so the modal shows
-      // every available client/site that can be assigned to the employee.
       const [cList, sList] = await Promise.all([getClients(), getSites()]);
       setClients(cList || []);
       setModalSites(sList || []);
@@ -162,7 +208,6 @@ export default function DashboardScreen() {
   };
 
   const handleOpenAddVisitModal = () => {
-    // Reset all modal sub-states before opening
     setPickerClientVisible(false);
     setPickerSiteVisible(false);
     setModalClientSearch('');
@@ -174,7 +219,6 @@ export default function DashboardScreen() {
   };
 
   const handleCloseAddVisitModal = () => {
-    // Always reset sub-modal states to unblock touch events
     setPickerClientVisible(false);
     setPickerSiteVisible(false);
     setModalClientSearch('');
@@ -189,7 +233,7 @@ export default function DashboardScreen() {
     }
     setCreatingVisit(true);
     try {
-      const empOidVal = user?.id || user?.empOid || user?.employee_id || 7558;
+      const empOidVal = user?.empOid || user?.id || user?.employee_id || 7558;
       const payload: any = {
         planningType: newPlanningType,
         siteId: parseInt(newSiteId, 10),
@@ -224,7 +268,12 @@ export default function DashboardScreen() {
       }
     } catch (e: any) {
       console.error('Create visit error:', e);
-      alert(t('failed_assign_visit_db'));
+      const isTimeout = e?.code === 'ECONNABORTED' || (e?.message && e.message.toLowerCase().includes('timeout'));
+      if (isTimeout) {
+        alert('Network request timed out. Please check your connection and try again.');
+      } else {
+        alert(t('failed_assign_visit_db'));
+      }
     } finally {
       setCreatingVisit(false);
     }
@@ -237,6 +286,21 @@ export default function DashboardScreen() {
       fetchDashboardData();
     }, [])
   );
+
+  // Synchronize Active Session state whenever server todayRecord updates
+  useEffect(() => {
+    if (todayRecord) {
+      if (todayRecord.check_in && !todayRecord.check_out) {
+        setIsCheckedIn(true);
+        setSessionStart(new Date(todayRecord.check_in));
+      } else {
+        setIsCheckedIn(false);
+        setSessionStart(null);
+        setSessionTime('00:00:00');
+      }
+    }
+    fetchDashboardData();
+  }, [todayRecord, attendanceLogs]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -267,21 +331,37 @@ export default function DashboardScreen() {
       const today = new Date().toISOString().split('T')[0];
       const empOidVal = user?.id || user?.empOid || user?.employee_id || 7558;
 
-      // 1. Sites allocated to current Field Officer
-      const siteList = await getSites(empOidVal);
-      setSites(siteList || []);
-      if (siteList && siteList.length > 0) {
-        setBaseSiteName(siteList[0].name || 'Main Base HQ');
+      // 1. Fetch Sites safely
+      try {
+        const siteList = await getSites(empOidVal);
+        setSites(siteList || []);
+        if (siteList && siteList.length > 0) {
+          setBaseSiteName(siteList[0].name || 'Main Base HQ');
+        }
+      } catch (err) {
+        console.warn('Dashboard sites fetch warning:', err);
       }
 
-      // 2. Attendance (Check Active Punch-In from todayRecord or DB for current user)
-      if (todayRecord && todayRecord.check_in && !todayRecord.check_out) {
-        setIsCheckedIn(true);
-        setSessionStart(new Date(todayRecord.check_in));
+      // 2. Attendance & Punch Record Session state
+      if (todayRecord) {
+        if (todayRecord.check_in && !todayRecord.check_out) {
+          setIsCheckedIn(true);
+          setSessionStart(new Date(todayRecord.check_in));
+        } else {
+          setIsCheckedIn(false);
+          setSessionStart(null);
+          setSessionTime('00:00:00');
+        }
       } else {
         const empId = user?.employee_id || (user?.id ? String(user.id) : '');
         const punchLogs = await getPunchRecords(empId);
-        const activePunch = punchLogs.find((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
+        const nowMs = Date.now();
+        const activePunch = punchLogs.find((r) => {
+          const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+          const punchMs = r.timestamp || 0;
+          const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
+          return isPunchedIn && isWithin16Hours;
+        });
 
         if (activePunch) {
           setIsCheckedIn(true);
@@ -294,58 +374,93 @@ export default function DashboardScreen() {
         }
       }
 
-      // 3. Planned / Pending Visits from backend API (Allocated to current officer)
-      const planned = await getPlannedVisits(empOidVal);
-      setPlannedVisits(planned || []);
+      // 3. Fetch Planned Visits safely
+      try {
+        const planned = await getPlannedVisits(empOidVal);
+        setPlannedVisits(planned || []);
+      } catch (err) {
+        console.warn('Dashboard planned visits fetch warning:', err);
+      }
 
-      // 4. Completed Visit Reports from backend APIs (Submitted by current officer)
+      // 4. Fetch Completed Visit Reports safely
       const compiled: any[] = [];
+      const seenIds = new Set<string>();
 
-      const dayReps = await getDayVisitReports(empOidVal);
-      (dayReps || []).forEach((r: any) => {
-        compiled.push({
-          id: `day_${r.id}`,
-          reportNo: r.reportNo || `DVR-${r.id}`,
-          clientName: r.clientName || r.company || 'Client',
-          siteName: r.site_name || r.unit || 'Site',
-          visitType: 'Day Visit',
-          date: r.visitDate || r.createdOn || today,
-          officer: r.officer || user?.name || 'FO Officer',
-          status: 'Completed',
+      try {
+        const dayReps = await getDayVisitReports(empOidVal);
+        (dayReps || []).forEach((r: any, idx: number) => {
+          const rawOid = String(r.id || r.oid || idx);
+          const itemKey = rawOid.startsWith('day_') ? rawOid : `day_${rawOid}`;
+          if (!seenIds.has(itemKey)) {
+            seenIds.add(itemKey);
+            compiled.push({
+              id: itemKey,
+              reportNo: r.reportNo || r.report_id || `DVR-${rawOid}`,
+              clientName: r.client_name || r.clientName || r.company || 'Client',
+              siteName: r.site_name || r.unit || 'Site',
+              visitType: 'Day Visit',
+              date: r.visitDate || r.visit_date || r.createdOn || today,
+              officer: r.officer || user?.name || 'FO Officer',
+              status: 'Completed',
+              rawReport: r,
+            });
+          }
         });
-      });
+      } catch (err) {
+        console.warn('Day visit reports fetch warning:', err);
+      }
 
-      const nightReps = await getNightVisitReports(empOidVal);
-      (nightReps || []).forEach((r: any) => {
-        compiled.push({
-          id: `night_${r.id}`,
-          reportNo: r.reportNo || `NVR-${r.id}`,
-          clientName: r.clientName || r.company || 'Client',
-          siteName: r.site_name || r.unit || 'Site',
-          visitType: 'Night Round',
-          date: r.visitDate || r.createdOn || today,
-          officer: r.officer || user?.name || 'FO Officer',
-          status: 'Completed',
+      try {
+        const nightReps = await getNightVisitReports(empOidVal);
+        (nightReps || []).forEach((r: any, idx: number) => {
+          const rawOid = String(r.id || r.oid || idx);
+          const itemKey = rawOid.startsWith('night_') ? rawOid : `night_${rawOid}`;
+          if (!seenIds.has(itemKey)) {
+            seenIds.add(itemKey);
+            compiled.push({
+              id: itemKey,
+              reportNo: r.reportNo || r.report_id || `NVR-${rawOid}`,
+              clientName: r.client_name || r.clientName || r.company || 'Client',
+              siteName: r.site_name || r.unit || 'Site',
+              visitType: 'Night Round',
+              date: r.visitDate || r.visit_date || r.createdOn || today,
+              officer: r.officer || user?.name || 'FO Officer',
+              status: 'Completed',
+              rawReport: r,
+            });
+          }
         });
-      });
+      } catch (err) {
+        console.warn('Night visit reports fetch warning:', err);
+      }
 
-      const genReps = await getGeneralVisits(empOidVal);
-      (genReps || []).forEach((r: any) => {
-        compiled.push({
-          id: `gen_${r.id}`,
-          reportNo: r.report_no || `GVR-${r.id}`,
-          clientName: r.client_name || 'Client',
-          siteName: r.site_name || 'Site',
-          visitType: 'General Audit',
-          date: r.visit_date || today,
-          officer: r.officer || user?.name || 'FO Officer',
-          status: 'Completed',
+      try {
+        const genReps = await getGeneralVisits(empOidVal);
+        (genReps || []).forEach((r: any, idx: number) => {
+          const rawOid = String(r.id || r.oid || idx);
+          const itemKey = rawOid.startsWith('gen_') ? rawOid : `gen_${rawOid}`;
+          if (!seenIds.has(itemKey)) {
+            seenIds.add(itemKey);
+            compiled.push({
+              id: itemKey,
+              reportNo: r.report_id || r.report_no || r.reportNo || `GVR-${rawOid}`,
+              clientName: r.client_name || r.clientName || 'Client',
+              siteName: r.site_name || r.siteName || 'Site',
+              visitType: 'General Audit',
+              date: r.visit_date || r.visitDate || today,
+              officer: r.officer || user?.name || 'FO Officer',
+              status: 'Completed',
+              rawReport: r,
+            });
+          }
         });
-      });
+      } catch (err) {
+        console.warn('General visit reports fetch warning:', err);
+      }
 
       setCompletedVisits(compiled);
     } catch (e) {
-      console.error('Failed to fetch dashboard data', e);
+      console.warn('Dashboard global data error handled:', e);
     } finally {
       setLoading(false);
     }
@@ -359,7 +474,6 @@ export default function DashboardScreen() {
     return true;
   });
 
-
   return (
     <SafeAreaView style={styles.safeContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
@@ -368,7 +482,7 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchDashboardData} tintColor="#3B82F6" />}
       >
-        {/* 1. Header Profile Card */}
+        {/* 1. HEADER PROFILE CARD (CENTER ALIGNED) */}
         <View style={styles.standardCard}>
           <View style={styles.headerProfileCardContent}>
             <TouchableOpacity onPress={() => router.push('/profile')} style={styles.userProfileSection}>
@@ -380,7 +494,7 @@ export default function DashboardScreen() {
                 )}
               </View>
               <View style={styles.userTextCol}>
-                <Text style={styles.greetingText}>{greeting}</Text>
+                <Text style={styles.greetingText}>{greeting},</Text>
                 <Text style={styles.userNameText}>{user?.name || 'Field Officer'}</Text>
                 <Text style={styles.empIdText}>EMP ID: {user?.employee_id || 'EMP001'}</Text>
               </View>
@@ -392,38 +506,74 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* 2. Search Bar */}
-        <View style={styles.searchBarContainer}>
-          <Search color="#64748B" size={20} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={t('search_placeholder')}
-            placeholderTextColor="#64748B"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
 
-        {/* 3. Session Card */}
-        <View style={styles.standardCard}>
-          <View style={styles.sessionHeaderRow}>
-            <View style={[styles.dot, isCheckedIn ? styles.dotActive : styles.dotInactive]} />
-            <Text style={styles.sessionStatusText}>
-              {isCheckedIn ? t('active_session') : t('no_active_session')}
-            </Text>
-          </View>
-          <Text style={styles.timerDigits}>{sessionTime}</Text>
-        </View>
 
-        {/* 4. Action Cards (MANUAL ATTENDANCE & ADD VISIT) */}
+        {/* 3. SESSION CARD (BLUE GRADIENT - MATCHING USER SCREENSHOT EXACTLY) */}
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => router.push('/(tabs)/attendance')}
+        >
+          <LinearGradient
+            colors={['#00599B', '#008BD3']}
+            start={{ x: 0, y: 0.2 }}
+            end={{ x: 1, y: 0.8 }}
+            style={styles.sessionGradientCard}
+          >
+            {/* Background Overlapping Circle Patterns Matching Screenshot */}
+            <View style={styles.cardCirclePattern1} />
+            <View style={styles.cardCirclePattern2} />
+
+            {/* Glowing Live Scan Line Running Top to Bottom when Punched In */}
+            {isCheckedIn && (
+              <Animated.View
+                style={[
+                  styles.scanLine,
+                  {
+                    transform: [
+                      {
+                        translateY: scanAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [-10, 140],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+            )}
+
+            <View style={styles.sessionHeaderRow}>
+              <View style={styles.pulseDotContainer}>
+                {isCheckedIn && (
+                  <Animated.View
+                    style={[
+                      styles.pulseRing,
+                      {
+                        transform: [{ scale: pulseAnim }],
+                        opacity: pulseOpacity,
+                      },
+                    ]}
+                  />
+                )}
+                <View style={[styles.dot, isCheckedIn ? styles.dotActive : styles.dotInactive]} />
+              </View>
+              <Text style={styles.sessionStatusText}>
+                {isCheckedIn ? (t('active_session') || 'Active Session') : (t('no_active_session') || 'No Active Session')}
+              </Text>
+            </View>
+            <Text style={styles.timerDigits}>{sessionTime}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* 4. ACTION CARDS (MARK ATTENDANCE & ADD VISIT - CENTER ALIGNED) */}
         <View style={styles.actionCardsRow}>
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => router.push('/mark-attendance')}
             style={styles.actionCard}
           >
-            <View style={[styles.actionIconBox, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-              <Fingerprint color="#3B82F6" size={30} />
+            <View style={styles.actionIconBox}>
+              <Fingerprint color="#3B82F6" size={38} />
             </View>
             <Text style={styles.actionCardTitle}>{t('mark_attendance').toUpperCase().replace(' ', '\n')}</Text>
           </TouchableOpacity>
@@ -433,14 +583,14 @@ export default function DashboardScreen() {
             onPress={handleOpenAddVisitModal}
             style={styles.actionCard}
           >
-            <View style={[styles.actionIconBox, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-              <PlusCircle color="#10B981" size={30} />
+            <View style={styles.actionIconBox}>
+              <PlusCircle color="#10B981" size={38} />
             </View>
             <Text style={styles.actionCardTitle}>{t('add_visit').toUpperCase().replace(' ', '\n')}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 5. FIELD OFFICER VISITS SECTION */}
+        {/* 5. FIELD OFFICER VISITS SECTION (CENTER ALIGNED) */}
         <View style={styles.standardCard}>
           <Text style={styles.sectionTitle}>{t('field_officer_visits').toUpperCase()}</Text>
 
@@ -452,8 +602,8 @@ export default function DashboardScreen() {
               style={styles.gridItem}
             >
               <View style={styles.gridIconCircleWrapper}>
-                <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                  <Clock color="#3B82F6" size={24} />
+                <View style={styles.gridIconCircle}>
+                  <Clock color="#3B82F6" size={30} />
                 </View>
                 {onlyPendingPlannedVisits.length > 0 && (
                   <View style={styles.countBadge}>
@@ -471,8 +621,8 @@ export default function DashboardScreen() {
               style={styles.gridItem}
             >
               <View style={styles.gridIconCircleWrapper}>
-                <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                  <CheckCircle2 color="#10B981" size={24} />
+                <View style={styles.gridIconCircle}>
+                  <CheckCircle2 color="#10B981" size={30} />
                 </View>
                 {completedVisits.length > 0 && (
                   <View style={[styles.countBadge, { backgroundColor: '#10B981' }]}>
@@ -485,7 +635,7 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* 6. ATTENDANCE CARD */}
+        {/* 6. ATTENDANCE CARD (CENTER ALIGNED) */}
         <View style={styles.standardCard}>
           <Text style={styles.sectionTitle}>{t('attendance').toUpperCase()}</Text>
 
@@ -494,7 +644,7 @@ export default function DashboardScreen() {
               onPress={() => router.push('/attendance?view=dashboard')}
               style={styles.gridItem}
             >
-              <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
+              <View style={styles.gridIconCircle}>
                 <LayoutGrid color="#3B82F6" size={24} />
               </View>
               <Text style={styles.gridItemLabel}>{t('dashboard')}</Text>
@@ -504,7 +654,7 @@ export default function DashboardScreen() {
               onPress={() => router.push('/attendance?view=logs')}
               style={styles.gridItem}
             >
-              <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+              <View style={styles.gridIconCircle}>
                 <CheckCircle2 color="#10B981" size={24} />
               </View>
               <Text style={styles.gridItemLabel}>{t('attendance_log')}</Text>
@@ -514,7 +664,7 @@ export default function DashboardScreen() {
               onPress={() => router.push('/attendance?view=missed')}
               style={styles.gridItem}
             >
-              <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+              <View style={styles.gridIconCircle}>
                 <Clock color="#F59E0B" size={24} />
               </View>
               <Text style={styles.gridItemLabel}>{t('missed_punches')}</Text>
@@ -522,7 +672,7 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* 7. PROFILE & SETTINGS CARD */}
+        {/* 7. PROFILE & SETTINGS CARD (CENTER ALIGNED) */}
         <View style={styles.standardCard}>
           <Text style={styles.sectionTitle}>{`${t('profile')} & ${t('settings')}`.toUpperCase()}</Text>
 
@@ -531,7 +681,7 @@ export default function DashboardScreen() {
               onPress={() => router.push('/profile')}
               style={styles.gridItem}
             >
-              <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
+              <View style={styles.gridIconCircle}>
                 <User color="#EC4899" size={24} />
               </View>
               <Text style={styles.gridItemLabel}>{t('profile')}</Text>
@@ -541,7 +691,7 @@ export default function DashboardScreen() {
               onPress={() => router.push('/settings')}
               style={styles.gridItem}
             >
-              <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(148, 163, 184, 0.15)' }]}>
+              <View style={styles.gridIconCircle}>
                 <Settings color="#94A3B8" size={24} />
               </View>
               <Text style={styles.gridItemLabel}>{t('settings')}</Text>
@@ -549,43 +699,7 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* 8. SITES SECTION */}
-        <View style={styles.standardCard}>
-          <Text style={styles.sectionTitle}>{t('my_sites').toUpperCase()}</Text>
-
-          <View style={styles.gridItemsRow}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push('/sites?type=base')}
-              style={styles.gridItem}
-            >
-              <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                <Building2 color="#3B82F6" size={24} />
-              </View>
-              <Text style={styles.gridItemLabel}>{t('my_base_site')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push('/sites?type=allocated')}
-              style={styles.gridItem}
-            >
-              <View style={styles.gridIconCircleWrapper}>
-                <View style={[styles.gridIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                  <MapPin color="#10B981" size={24} />
-                </View>
-                {sites.length > 0 && (
-                  <View style={[styles.countBadge, { backgroundColor: '#10B981' }]}>
-                    <Text style={styles.countBadgeText}>{sites.length}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.gridItemLabel}>{t('assigned_sites')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <Text style={styles.copyrightText}>© 2026 HUMANKIND TECHNOLOGY</Text>
+        <Text style={styles.copyrightText}>❖ 2026 HUMANKIND TECHNOLOGY</Text>
       </ScrollView>
 
       {/* ADD VISIT / ASSIGN VISIT PLAN MODAL */}
@@ -618,7 +732,7 @@ export default function DashboardScreen() {
                   removeClippedSubviews
                   ListEmptyComponent={
                     <View style={{ padding: 20, alignItems: 'center' }}>
-                      <Text style={{ color: '#94A3B8', fontSize: 13 }}>No clients found.</Text>
+                      <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>No clients found.</Text>
                     </View>
                   }
                   renderItem={({ item }) => (
@@ -662,7 +776,7 @@ export default function DashboardScreen() {
                   removeClippedSubviews
                   ListEmptyComponent={
                     <View style={{ padding: 20, alignItems: 'center' }}>
-                      <Text style={{ color: '#94A3B8', fontSize: 13 }}>{t('no_sites_found')}</Text>
+                      <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>{t('no_sites_found')}</Text>
                     </View>
                   }
                   renderItem={({ item }) => (
@@ -694,7 +808,6 @@ export default function DashboardScreen() {
                 </View>
 
                 <ScrollView contentContainerStyle={{ paddingVertical: 10 }}>
-                  {/* Select Client */}
                   <Text style={styles.fieldLabel}>{t('select_client')}</Text>
                   <TouchableOpacity
                     style={styles.pickerBtn}
@@ -706,7 +819,6 @@ export default function DashboardScreen() {
                     <ChevronDown color="#94A3B8" size={20} />
                   </TouchableOpacity>
 
-                  {/* Select Site */}
                   <Text style={styles.fieldLabel}>{t('select_site')}</Text>
                   <TouchableOpacity
                     style={styles.pickerBtn}
@@ -718,7 +830,6 @@ export default function DashboardScreen() {
                     <ChevronDown color="#94A3B8" size={20} />
                   </TouchableOpacity>
 
-                  {/* Planning Type */}
                   <Text style={styles.fieldLabel}>{t('planning_type')}</Text>
                   <View style={styles.typeRow}>
                     {['SINGLE', 'WEEKLY', 'MONTHLY'].map((pt) => (
@@ -734,7 +845,6 @@ export default function DashboardScreen() {
                     ))}
                   </View>
 
-                  {/* Visit Frequency */}
                   <Text style={styles.fieldLabel}>{t('visit_frequency')}</Text>
                   <TextInput
                     style={styles.modalInput}
@@ -745,7 +855,6 @@ export default function DashboardScreen() {
                     placeholderTextColor="#64748B"
                   />
 
-                  {/* Date Selection: Single vs Range */}
                   {newPlanningType === 'SINGLE' ? (
                     <>
                       <Text style={styles.fieldLabel}>{t('visit_date')}</Text>
@@ -782,11 +891,10 @@ export default function DashboardScreen() {
                     </View>
                   )}
 
-                  {/* Assigning Officer */}
                   <Text style={styles.fieldLabel}>{t('assigned_officer')}</Text>
                   <TextInput
                     style={[styles.modalInput, { opacity: 0.7 }]}
-                    value={user?.name || 'Amit Kulkarni'}
+                    value={user?.name || 'Field Officer'}
                     editable={false}
                   />
 
@@ -810,117 +918,6 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  fieldLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 0.5,
-    marginTop: 10,
-    marginBottom: 6,
-  },
-  pickerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 10,
-  },
-  pickerBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#F8FAFC',
-  },
-  typeRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 10,
-  },
-  typePill: {
-    flex: 1,
-    paddingVertical: 10,
-    backgroundColor: '#1E293B',
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  typePillActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
-  },
-  typePillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
-  },
-  typePillTextActive: {
-    color: '#FFFFFF',
-  },
-  modalInput: {
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: '#FFFFFF',
-    fontSize: 13,
-    marginBottom: 10,
-  },
-  submitPlanBtn: {
-    backgroundColor: '#10B981',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 14,
-  },
-  submitPlanBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 14,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: '#0F172A',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    padding: 16,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#F8FAFC',
-  },
-  modalItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-  },
-  modalItemRowText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#F8FAFC',
-  },
   safeContainer: {
     flex: 1,
     backgroundColor: '#0A1128',
@@ -935,21 +932,23 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  /* UNIFIED STANDARD CARD DESIGN (Matching Attendance Container Card) */
+  /* DARK BLUISH SHADE CARD DESIGN (#131C33) */
   standardCard: {
     backgroundColor: '#131C33',
     borderRadius: 24,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
   },
 
-  /* Header Card Details */
+  /* Header Card Details - Original Left-Aligned Row Layout */
   headerProfileCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    width: '100%',
   },
   userProfileSection: {
     flexDirection: 'row',
@@ -957,21 +956,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatarWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
-    borderWidth: 2,
-    borderColor: '#3B82F6',
     overflow: 'hidden',
   },
   avatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 26,
+    borderRadius: 16,
   },
   userTextCol: {
     justifyContent: 'center',
@@ -980,27 +977,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#94A3B8',
     fontWeight: '600',
+    textAlign: 'left',
   },
   userNameText: {
     fontSize: 18,
     fontWeight: '800',
     color: '#FFFFFF',
     marginTop: 2,
+    textAlign: 'left',
   },
   empIdText: {
     fontSize: 12,
     color: '#3B82F6',
     fontWeight: '700',
     marginTop: 2,
+    textAlign: 'left',
   },
+
+  /* LOGO CONTAINER - RIGHT ALIGNED */
   companyLogoContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 76,
+    height: 76,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    padding: 6,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     marginLeft: 12,
@@ -1010,123 +1012,192 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  /* Search Bar */
+  /* Search Bar - Centered Content */
   searchBarContainer: {
     backgroundColor: '#131C33',
     borderRadius: 24,
     height: 52,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   searchIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '500',
+    textAlign: 'center',
   },
 
-  /* Session Blue Card */
+  /* Session Blue Card - Matching User Screenshot Exactly */
+  sessionGradientCard: {
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+    marginBottom: 16,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  scanLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 2.5,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 8,
+    opacity: 0.85,
+    elevation: 8,
+    zIndex: 10,
+  },
+  cardCirclePattern1: {
+    position: 'absolute',
+    right: -25,
+    top: -25,
+    width: 165,
+    height: 165,
+    borderRadius: 82.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  cardCirclePattern2: {
+    position: 'absolute',
+    right: 40,
+    bottom: -45,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
   sessionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 6,
+  },
+  pulseDotContainer: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    position: 'relative',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#34D399',
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   dotActive: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#34D399',
   },
   dotInactive: {
-    backgroundColor: '#93C5FD',
+    backgroundColor: '#FFFFFF',
+    opacity: 0.9,
   },
   sessionStatusText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   timerDigits: {
     color: '#FFFFFF',
-    fontSize: 42,
-    fontWeight: '800',
-    marginTop: 8,
-    letterSpacing: 1,
+    fontSize: 54,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginTop: 2,
+    textAlign: 'left',
   },
 
-  /* Action Cards Row */
+  /* Action Cards Row - Centered Tile Layout */
   actionCardsRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 20,
+    gap: 14,
+    marginBottom: 16,
   },
   actionCard: {
     flex: 1,
     backgroundColor: '#131C33',
     borderRadius: 24,
     padding: 20,
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    height: 150,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 146,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
   actionIconBox: {
-    width: 56,
-    height: 56,
+    width: 66,
+    height: 66,
     borderRadius: 20,
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   actionCardTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
-    lineHeight: 18,
+    lineHeight: 17,
     letterSpacing: 0.3,
+    textAlign: 'center',
   },
 
-  /* Features Container Section Titles */
+  /* Features Container Section Titles - Centered */
   sectionTitle: {
     fontSize: 13,
     fontWeight: '800',
     color: '#3B82F6',
     letterSpacing: 0.8,
     marginBottom: 16,
-  },
-  sectionTitleNoMargin: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#3B82F6',
-    letterSpacing: 0.8,
+    textAlign: 'center',
   },
 
-  /* UNIFIED ICON GRID ROW (ATTENDANCE / VISITS / SETTINGS / SITES) */
+  /* UNIFIED BLACK ICON GRID ROW - CENTERED */
   gridItemsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
+    width: '100%',
   },
   gridItem: {
     alignItems: 'center',
+    justifyContent: 'center',
     flex: 1,
   },
   gridIconCircleWrapper: {
     position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   gridIconCircle: {
-    width: 54,
-    height: 54,
+    width: 66,
+    height: 66,
     borderRadius: 20,
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
@@ -1155,143 +1226,129 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  collapseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  collapseText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#3B82F6',
-  },
-
-  /* Visits Section with Tab Toggle */
-  tableHeaderBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  tabToggleRow: {
-    flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 16,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  tabBtnActive: {
-    backgroundColor: '#3B82F6',
-  },
-  tabBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
-  },
-  tabBtnTextActive: {
-    color: '#FFFFFF',
-  },
-  emptyTableBox: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  emptyTableText: {
-    color: '#94A3B8',
-    fontSize: 13,
-  },
-  tableContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  tableHeadRow: {
-    flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginBottom: 6,
-  },
-  thCell: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#94A3B8',
-    letterSpacing: 0.5,
-  },
-  tableBodyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  reportNoText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#3B82F6',
-  },
-  dateSubText: {
-    fontSize: 10,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  siteNameCell: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  clientSubText: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 2,
-  },
-  visitTypeBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignSelf: 'flex-start',
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  visitsDoneText: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 3,
-    fontWeight: '500',
-  },
-  startVisitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10B981',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  startVisitText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
+  /* Footer - Centered */
   copyrightText: {
     textAlign: 'center',
     color: '#64748B',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.8,
     marginTop: 20,
+  },
+
+  /* Modal Styling */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: '#131C33',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    textAlign: 'center',
+  },
+  modalItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B',
+  },
+  modalItemRowText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F8FAFC',
+  },
+  fieldLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  pickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  pickerBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#F8FAFC',
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  typePill: {
+    flex: 1,
+    paddingVertical: 10,
+    backgroundColor: '#000000',
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1E293B',
+  },
+  typePillActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  typePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  typePillTextActive: {
+    color: '#FFFFFF',
+  },
+  modalInput: {
+    backgroundColor: '#000000',
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#FFFFFF',
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  submitPlanBtn: {
+    backgroundColor: '#10B981',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  submitPlanBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
   },
 });

@@ -18,11 +18,13 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { CustomAlertModal } from '../../components/ui/CustomAlertModal';
 import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 
 export default function ProfileScreen() {
   const { user, logout, profileImage } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
@@ -50,9 +52,9 @@ export default function ProfileScreen() {
               )}
             </View>
 
-            <Text style={styles.execLabel}>EXECUTIVE PROFILE</Text>
+            <Text style={styles.execLabel}>{t('exec_profile')}</Text>
             <Text style={styles.execName}>{user?.name || 'PAPPU KUMAR'}</Text>
-            <Text style={styles.execRole}>{(user?.role || 'FIELD OFFICER').toUpperCase()}</Text>
+            <Text style={styles.execRole}>{(user?.role || t('field_officer')).toUpperCase()}</Text>
 
             <View style={styles.pillsRow}>
               <View style={styles.empBadge}>
@@ -62,46 +64,46 @@ export default function ProfileScreen() {
 
               <View style={styles.activeBadge}>
                 <ShieldCheck color="#10B981" size={14} style={{ marginRight: 4 }} />
-                <Text style={styles.activeBadgeText}>ACTIVE ENGAGEMENT</Text>
+                <Text style={styles.activeBadgeText}>{t('active_engagement')}</Text>
               </View>
             </View>
           </View>
 
           {/* 2. CAREER & DEPLOYMENT SECTION */}
-          <Text style={styles.sectionHeaderTitle}>Career & Deployment</Text>
+          <Text style={styles.sectionHeaderTitle}>{t('career_deployment')}</Text>
 
           {/* Joining Date & Tenure Card */}
           <View style={styles.detailsCard}>
             <View style={styles.cardRowHeader}>
-              <Text style={styles.fieldLabel}>JOINING DATE</Text>
+              <Text style={styles.fieldLabel}>{t('joining_date')}</Text>
               <Calendar color="#3B82F6" size={20} />
             </View>
             <Text style={styles.mainValText}>Mar 12, 2012</Text>
 
-            <Text style={[styles.fieldLabel, { marginTop: 16 }]}>TENURE</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 16 }]}>{t('tenure')}</Text>
             <Text style={styles.mainValText}>14 Years, 5 Months</Text>
           </View>
 
           {/* Deployment Date & Site Card */}
           <View style={styles.detailsCard}>
             <View style={styles.cardRowHeader}>
-              <Text style={styles.fieldLabel}>DEPLOYMENT DATE</Text>
+              <Text style={styles.fieldLabel}>{t('deployment_date')}</Text>
               <MapPin color="#3B82F6" size={20} />
             </View>
             <Text style={styles.mainValText}>Mar 12, 2012</Text>
 
             <View style={styles.subDetailPill}>
-              <Text style={styles.pillLabel}>CLIENT</Text>
+              <Text style={styles.pillLabel}>{t('client')}</Text>
               <Text style={styles.pillValue}>Tata Power</Text>
             </View>
 
             <View style={styles.subDetailPill}>
-              <Text style={styles.pillLabel}>BRANCH</Text>
+              <Text style={styles.pillLabel}>{t('branch')}</Text>
               <Text style={styles.pillValue}>Pune</Text>
             </View>
 
             <View style={styles.subDetailPill}>
-              <Text style={styles.pillLabel}>SITE</Text>
+              <Text style={styles.pillLabel}>{t('site')}</Text>
               <Text style={styles.pillValue}>Humankind Technology</Text>
             </View>
           </View>
@@ -113,7 +115,7 @@ export default function ProfileScreen() {
             style={styles.signOutBtn}
           >
             <LogOut color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
-            <Text style={styles.signOutBtnText}>SIGN OUT SESSION</Text>
+            <Text style={styles.signOutBtnText}>{t('sign_out_session')}</Text>
           </TouchableOpacity>
 
           <Text style={styles.copyrightText}>© 2026 HUMANKIND TECHNOLOGY</Text>
@@ -121,12 +123,12 @@ export default function ProfileScreen() {
 
         <CustomAlertModal
           visible={showSignOutConfirm}
-          title="Sign Out"
-          message="Are you sure you want to sign out of your account session?"
+          title={t('logout')}
+          message={t('confirm_logout')}
           type="error"
           onClose={() => setShowSignOutConfirm(false)}
           onConfirm={handleSignOut}
-          confirmText="SIGN OUT"
+          confirmText={t('logout').toUpperCase()}
         />
       </SafeAreaView>
     </SwipeableBackWrapper>

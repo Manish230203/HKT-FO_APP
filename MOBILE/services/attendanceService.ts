@@ -45,9 +45,25 @@ export const getMonthlyStats = async (empOid: number | string) => {
   }
 };
 
+import { gpsTracker } from './gpsService';
+
 export const markAttendanceApi = async (payload: { empOid: number | string; latitude: number; longitude: number; siteOid?: number; timestamp?: string }) => {
-  const response = await api.post('/_AIP_markAttendance', payload);
-  return response.data;
+  try {
+    const response = await api.post('/_AIP_markAttendance', payload);
+    // Non-blocking trigger of background GPS tracking
+    if (payload.empOid) {
+      gpsTracker.startTracking(Number(payload.empOid)).catch(err => {
+        console.warn('Non-blocking GPS tracking start error:', err);
+      });
+    }
+    return response.data;
+  } catch (err) {
+    // Non-blocking fallback tracking attempt
+    if (payload.empOid) {
+      gpsTracker.startTracking(Number(payload.empOid)).catch(() => {});
+    }
+    throw err;
+  }
 };
 
 export const getAttendanceShifts = async (client_id?: string, site_id?: string) => {
@@ -72,4 +88,11 @@ export const getRegularizations = async (status?: string) => {
 
 export const savePunchRecord = async (record: any) => {
   await dbSavePunchRecord(record);
+  // Stop tracking non-blockingly if this is a Punch Out record
+  const punchType = (record.punch_type || record.type || '').toLowerCase();
+  if (punchType.includes('out')) {
+    gpsTracker.stopTracking().catch(err => {
+      console.warn('Non-blocking GPS stop tracking error:', err);
+    });
+  }
 };

@@ -17,6 +17,9 @@ import {
   LogOut,
   CalendarDays,
   PanelLeft,
+  Radio,
+  History,
+  CheckSquare,
 } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useTheme } from "@/hooks/useTheme";
@@ -85,8 +88,23 @@ export function AppLayout({ children }) {
   const [attendanceOpen, setAttendanceOpen] = useState(() =>
     location.pathname.startsWith("/attendance"),
   );
+  const [gpsOpen, setGpsOpen] = useState(() =>
+    location.pathname.startsWith("/gps"),
+  );
 
   const isAdmin = currentUser?.role?.toLowerCase() === "admin" || currentUser?.role?.toLowerCase() === "it admin";
+
+  const gpsGroup = {
+    title: "GPS & Site Visits",
+    icon: MapPin,
+    isOpen: gpsOpen,
+    setIsOpen: setGpsOpen,
+    items: [
+      { name: "Live GPS Tracking", href: "/gps/live", icon: Radio },
+      { name: "Track History", href: "/gps/history", icon: History },
+      { name: "Planned vs Actual", href: "/gps/planned-vs-actual", icon: CheckSquare },
+    ],
+  };
 
   const roundsGroup = {
     title: "Night Visits",
@@ -281,6 +299,7 @@ export function AppLayout({ children }) {
               {!isCollapsed && <span>My Sites</span>}
             </Link>
 
+            {renderGroup(gpsGroup)}
             {renderGroup(attendanceGroup)}
             {renderGroup(roundsGroup)}
             {renderGroup(visitsGroup)}

@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Config } from '../constants/Config';
 import { getPunchRecords, savePunchRecord, updatePunchRecordsList } from '../services/db';
+import { gpsTracker } from '../services/gpsService';
 
 export interface AttendanceRecord {
   date: string;
@@ -133,9 +134,13 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
               dayTitle: titleDate,
               punchInTime: l.check_in ? new Date(l.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
               punchOutTime: l.check_out ? new Date(l.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
-              siteName: l.site_name || 'AMA Facility',
+              check_in_lat: l.check_in_lat,
+              check_in_long: l.check_in_long,
+              check_out_lat: l.check_out_lat,
+              check_out_long: l.check_out_long,
+              siteName: l.site_name || null,
               clientName: 'Client',
-              status: l.check_out ? 'COMPLETED' : l.check_in ? 'PUNCHED-IN' : 'MISSED',
+              status: l.check_out ? 'PRESENT' : l.check_in ? 'PUNCHED-IN' : 'MISSED',
               officerName: user?.name || 'Officer',
             };
           });
@@ -161,6 +166,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     refreshStatus();
+    const empOid = getEmpOid();
+    if (empOid) {
+      gpsTracker?.startTracking(Number(empOid))?.catch(() => {});
+    }
+    gpsTracker?.checkAndResumeTracking()?.catch(() => {});
   }, [user]);
 
   const markAttendance = async (latitude: number, longitude: number, siteOid?: number, timestamp?: string) => {
@@ -200,6 +210,15 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         const result = await response.json();
         if (result.success) {
           await refreshStatus();
+
+          // Non-blocking GPS tracking start/stop based on punch action
+          if (result.action === 'PUNCH_OUT' || result.type === 'PUNCH_OUT' || result.status === 'PUNCH_OUT') {
+            gpsTracker?.stopTracking()?.catch(() => {});
+          } else {
+            gpsTracker?.startTracking(Number(empOid))?.catch((err) => {
+              console.warn('GPS start tracking warning:', err);
+            });
+          }
         }
         return result;
       } else {
@@ -229,19 +248,43 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         type: type,
       } as any);
 
-      const response = await fetch(`${Config.BASE_URL}/selfieValidation`, {
+      const url = `${Config.BASE_URL}/selfieValidation${Config.BASE_URL.includes('?') ? '&' : '?'}ngrok-skip-browser-warning=true`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'ngrok-skip-browser-warning': 'true',
+          'User-Agent': 'FO-Mobile-App',
         },
         body: formData,
       });
 
-      const result = await response.json();
-      return result;
+      const contentType = response.headers.get('content-type');
+      if (!response.ok) {
+        let errorMsg = `Server Error (${response.status})`;
+        if (contentType && contentType.includes('application/json')) {
+          const errData = await response.json();
+          errorMsg = errData.message || errorMsg;
+        } else {
+          const text = await response.text();
+          errorMsg = text.trim().startsWith('<') ? 'Network tunnel error. Please try face verification again.' : (text.slice(0, 100) || errorMsg);
+        }
+        return { success: false, message: errorMsg };
+      }
+
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        return result;
+      } else {
+        const text = await response.text();
+        console.warn('validateSelfie non-JSON response:', text.slice(0, 100));
+        const cleanMsg = text.trim().startsWith('<') 
+          ? 'Network tunnel warning. Please retry face verification.' 
+          : (text.slice(0, 100) || 'Server returned invalid response format');
+        return { success: false, message: cleanMsg };
+      }
     } catch (error) {
       console.error('Selfie validation error:', error);
-      return { success: false, message: 'Validation Failed' };
+      return { success: false, message: error instanceof Error ? error.message : 'Validation Failed' };
     }
   };
 
@@ -265,19 +308,52 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         type: type,
       } as any);
 
-      const response = await fetch(`${Config.BASE_URL}/_AIP_unifiedPunch`, {
+      const url = `${Config.BASE_URL}/_AIP_unifiedPunch${Config.BASE_URL.includes('?') ? '&' : '?'}ngrok-skip-browser-warning=true`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'ngrok-skip-browser-warning': 'true',
+          'User-Agent': 'FO-Mobile-App',
         },
         body: formData,
       });
 
-      const result = await response.json();
-      if (result.success) {
-        await refreshStatus();
+      const contentType = response.headers.get('content-type');
+      if (!response.ok) {
+        let errorMsg = `Server Error (${response.status})`;
+        if (contentType && contentType.includes('application/json')) {
+          const errData = await response.json();
+          errorMsg = errData.message || errorMsg;
+        } else {
+          const text = await response.text();
+          errorMsg = text.trim().startsWith('<') ? 'Network tunnel error. Please try again.' : (text.slice(0, 100) || errorMsg);
+        }
+        return { success: false, message: errorMsg };
       }
-      return result;
+
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        if (result.success) {
+          await refreshStatus();
+
+          // Non-blocking GPS tracking start/stop based on punch action
+          if (result.action === 'PUNCH_OUT' || result.type === 'PUNCH_OUT' || result.status === 'PUNCH_OUT') {
+            gpsTracker?.stopTracking()?.catch(() => {});
+          } else {
+            gpsTracker?.startTracking(Number(empOid))?.catch((err) => {
+              console.warn('GPS start tracking warning:', err);
+            });
+          }
+        }
+        return result;
+      } else {
+        const text = await response.text();
+        console.warn('unifiedPunch non-JSON response:', text.slice(0, 100));
+        const cleanMsg = text.trim().startsWith('<') 
+          ? 'Network tunnel warning. Please retry.' 
+          : (text.slice(0, 100) || 'Server returned invalid response format');
+        return { success: false, message: cleanMsg };
+      }
     } catch (error) {
       console.error('Unified punch error:', error);
       return { success: false, message: error instanceof Error ? error.message : 'Connection Error' };

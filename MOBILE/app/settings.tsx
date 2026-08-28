@@ -69,8 +69,12 @@ export default function SettingsScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const capturedUri = result.assets[0].uri;
-        await updateProfileImage(capturedUri);
-        Alert.alert('Photo Captured', 'Profile photo has been updated and saved!');
+        const uploadRes = await updateProfileImage(capturedUri);
+        if (uploadRes && uploadRes.success) {
+          Alert.alert('Profile Registered', 'Profile photo updated and face embedding registered successfully!');
+        } else {
+          Alert.alert('Photo Saved', uploadRes?.message || 'Profile photo saved locally.');
+        }
       }
     } catch (e) {
       console.error('Camera capture error', e);

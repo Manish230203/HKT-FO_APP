@@ -84,7 +84,19 @@ def get_face_embedding(image_path=None, img_data=None):
 
     detector.setInputSize((img.shape[1], img.shape[0]))
     _, faces = detector.detect(img)
-    if faces is None:
+
+    # Multi-rotation fallback: If no face detected, try checking 180°, 90°, and 270° rotations
+    if faces is None or len(faces) == 0:
+        for rot_code in [cv2.ROTATE_180, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE]:
+            rot_img = cv2.rotate(img, rot_code)
+            detector.setInputSize((rot_img.shape[1], rot_img.shape[0]))
+            _, rot_faces = detector.detect(rot_img)
+            if rot_faces is not None and len(rot_faces) > 0:
+                img = rot_img
+                faces = rot_faces
+                break
+
+    if faces is None or len(faces) == 0:
         return None
 
     # Align and extract features
@@ -159,13 +171,9 @@ def is_live_face(img_data=None, image_path=None):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
     # 1. Laplacian Variance (Texture validation)
-    # Real photos have highly defined micro-textures (pores, individual hairs, eyes).
-    # Re-captured photos or print-outs are smoother, screen grids smooth out fine gradients,
-    # or camera auto-focus on a screen creates a slightly out-of-focus capture.
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
     
     # 2. FFT Moire / Screen Pattern Detection
-    # Capture of digital LCD/LED screens creates strong high-frequency banding (Moiré pattern).
     f = np.fft.fft2(gray)
     fshift = np.fft.fftshift(f)
     magnitude_spectrum = np.abs(fshift)
@@ -187,7 +195,6 @@ def is_live_face(img_data=None, image_path=None):
         peak_ratio = 0
         
     # 3. HSV Color Saturation check
-    # Screen glass reflection and LCD emissive colors show narrow bands/skewed saturation profiles.
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     s_channel = hsv[:, :, 1]
     s_std = np.std(s_channel)
@@ -195,16 +202,16 @@ def is_live_face(img_data=None, image_path=None):
     # Log values for tuning/audit
     print(f"[ANTI-SPOOF] Laplacian Var: {laplacian_var:.2f}, Moire Peak Ratio: {peak_ratio:.2f}, Saturation Std: {s_std:.2f}")
     
-    # Check 1: Blur / Smoothness check (lighting/focus)
-    if laplacian_var < 75.0:
+    # Check 1: Blur / Smoothness check (lighting/focus) - adjusted for mobile front cameras
+    if laplacian_var < 15.0:
         return False, "Verification failed. Please stand in proper light and hold camera steady."
         
     # Check 2: Digital screen Moire check
-    if peak_ratio > 65.0:
+    if peak_ratio > 130.0:
         return False, "Verification failed. Photos or screen videos are not allowed."
         
     # Check 3: Screen reflection/color compression check
-    if s_std < 18.0 or s_std > 70.0:
+    if s_std < 5.0 or s_std > 105.0:
         return False, "Verification failed. Look straight into the camera."
         
     return True, "Liveness check passed"

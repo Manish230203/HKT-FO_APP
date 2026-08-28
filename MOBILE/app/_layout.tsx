@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from '../context/AuthContext';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import { LanguageProvider } from '../context/LanguageContext';
+import LocationGuard from '../components/LocationGuard';
 import { THEME } from '../constants/theme';
 
 export default function RootLayout() {
@@ -13,7 +14,8 @@ export default function RootLayout() {
       <AuthProvider>
         <AttendanceProvider>
           <LanguageProvider>
-            <StatusBar style="light" />
+            <LocationGuard>
+              <StatusBar style="light" />
             <Stack
               screenOptions={{
                 headerStyle: { backgroundColor: THEME.background },
@@ -39,6 +41,10 @@ export default function RootLayout() {
                 options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
               <Stack.Screen
+                name="mark-attendance"
+                options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
+              />
+              <Stack.Screen
                 name="visits/index"
                 options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
@@ -59,6 +65,7 @@ export default function RootLayout() {
                 options={{ title: 'General Visit Report', gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
             </Stack>
+            </LocationGuard>
           </LanguageProvider>
         </AttendanceProvider>
       </AuthProvider>

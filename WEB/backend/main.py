@@ -2,15 +2,25 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.officer_patrol import router as officer_router
 from app.routes.attendance import router as attendance_router
-from app.patrolling.routes import admin_routes
+from app.routes.gps import router as gps_router
+from app.routes.patrol_routes import router as patrol_router
+from app.routes.admin_routes import router as admin_router
+from app.database import engine, Base
+from app.models import patrol_models
 import uvicorn
+
+# Ensure database tables exist
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Warning creating tables on startup: {e}")
 
 app = FastAPI(title="F.O. Pages API", description="Standalone backend for Field Officer ")
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for the standalone project
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -19,8 +29,15 @@ app.add_middleware(
 # Include routes under prefix /api and root
 app.include_router(officer_router, prefix="/api")
 app.include_router(attendance_router, prefix="/api")
-app.include_router(admin_routes.router, prefix="/api")
-app.include_router(attendance_router) # Support root-level _AIP_ endpoints
+app.include_router(gps_router, prefix="/api")
+app.include_router(patrol_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
+
+# Support root-level legacy endpoints
+app.include_router(attendance_router)
+app.include_router(gps_router)
+app.include_router(patrol_router)
+
 
 @app.get("/")
 def read_root():

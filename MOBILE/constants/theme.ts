@@ -22,14 +22,14 @@ export const Colors = {
   },
   dark: {
     text: '#FFFFFF',
-    background: '#0A1128', // Deep Navy
+    background: '#0A1128', // Deep Navy Blue
     tint: tintColorDark,
     secondary: '#10B981',
     accent: '#F59E0B',
     icon: '#94A3B8',
     tabIconDefault: '#64748B',
     tabIconSelected: '#FFFFFF',
-    card: '#131C33', // Dark Navy Card
+    card: '#131C33', // Dark Bluish Card
     border: 'rgba(255,255,255,0.08)',
     surface: '#131C33',
     textVariant: '#94A3B8',

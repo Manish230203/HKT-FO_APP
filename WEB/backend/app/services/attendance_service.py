@@ -6,6 +6,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from app.database import get_db_connection
 from app.utils.timezone import get_ist_now, get_ist_today
+from typing import Any 
 
 def format_duty_type(raw_val: str) -> str:
     if not raw_val:
@@ -1077,6 +1078,10 @@ def mark_attendance_logic(data):
             if in_time:
                 duration_hours = (now - in_time).total_seconds() / 3600.0
                 if duration_hours > 16.0:
+                    auto_out = in_time + timedelta(hours=16)
+                    cursor.execute("UPDATE ATTENDANCE_TIME_LOG SET out_time = %s WHERE oid = %s", (auto_out, open_log["oid"]))
+                    cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'PRESENT' WHERE oid = %s", (open_log["cell_oid"],))
+                    conn.commit()
                     open_log = None
 
         if not open_log:
@@ -1207,14 +1212,38 @@ def mark_attendance_logic(data):
                 VALUES (%s, %s, %s)
             """, (now, cell_oid, sdc_oid))
             log_oid = cursor.lastrowid
-
-            if is_field_officer:
-                officer_name = user.get("name") or user.get("NAME") or ""
+            officer_name = user.get("name") or user.get("NAME") or ""
+            try:
                 cursor.execute("""
                     INSERT INTO FIELD_OFFICER_ATTENDANCE_LOCATION 
-                    (attendance_time_log, employee_oid, officer, punch_type, latitude, longitude)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (log_oid, empOid, officer_name, 'IN', lat, long))
+                    (attendance_time_log, employee_oid, officer, punch_type, latitude, longitude, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (log_oid, empOid, officer_name, 'IN', lat, long, now))
+            except Exception as loc_err:
+                print(f"Warning inserting attendance location: {loc_err}")
+
+            # Also record into GPSLocationLog for live tracking engine
+            try:
+                from app.database import SessionLocal
+                from app.models.patrol_models import GPSLocationLog
+                db_session = SessionLocal()
+                try:
+                    gps_log = GPSLocationLog(
+                        employee_id=empOid,
+                        latitude=float(lat),
+                        longitude=float(long),
+                        accuracy=10.0,
+                        speed=0.0,
+                        battery_level=100.0,
+                        is_mock=False,
+                        recorded_at=now
+                    )
+                    db_session.add(gps_log)
+                    db_session.commit()
+                finally:
+                    db_session.close()
+            except Exception as gps_log_err:
+                print(f"Warning auto-ingesting punch GPS location: {gps_log_err}")
 
             conn.commit()
             cursor.close()
@@ -1242,13 +1271,38 @@ def mark_attendance_logic(data):
             cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'PRESENT' WHERE oid = %s", (open_log["cell_oid"],))
             log_oid = open_log["oid"]
 
-            if is_field_officer:
-                officer_name = user.get("name") or user.get("NAME") or ""
+            officer_name = user.get("name") or user.get("NAME") or ""
+            try:
                 cursor.execute("""
                     INSERT INTO FIELD_OFFICER_ATTENDANCE_LOCATION 
-                    (attendance_time_log, employee_oid, officer, punch_type, latitude, longitude)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (log_oid, empOid, officer_name, 'OUT', lat, long))
+                    (attendance_time_log, employee_oid, officer, punch_type, latitude, longitude, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (log_oid, empOid, officer_name, 'OUT', lat, long, now))
+            except Exception as loc_err:
+                print(f"Warning inserting attendance location: {loc_err}")
+
+            # Also record into GPSLocationLog for live tracking engine
+            try:
+                from app.database import SessionLocal
+                from app.models.patrol_models import GPSLocationLog
+                db_session = SessionLocal()
+                try:
+                    gps_log = GPSLocationLog(
+                        employee_id=empOid,
+                        latitude=float(lat),
+                        longitude=float(long),
+                        accuracy=10.0,
+                        speed=0.0,
+                        battery_level=100.0,
+                        is_mock=False,
+                        recorded_at=now
+                    )
+                    db_session.add(gps_log)
+                    db_session.commit()
+                finally:
+                    db_session.close()
+            except Exception as gps_log_err:
+                print(f"Warning auto-ingesting punch GPS location: {gps_log_err}")
 
             conn.commit()
             cursor.close()
@@ -1266,15 +1320,28 @@ def get_attendance_logs_logic(empOid: int):
         return {"success": False, "message": "Database connection failed"}
     
     cursor = conn.cursor(dictionary=True)
+
+    # 1. Fetch all sites with valid coordinates for distance comparison
+    sites_with_coords = []
+    try:
+        cursor.execute("SELECT oid, name, latitude, longitude FROM SITE WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
+        sites_with_coords = cursor.fetchall()
+    except Exception as s_err:
+        print("Warning fetching sites with coords:", s_err)
+
     query = """
         SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
-               s.start_time, s.end_time, COALESCE(st.name, 'AMA FACILITY') as site_name, COALESCE(ar.duty_type, 'REGULAR') as duty_type
+               s.start_time, s.end_time, st.name as site_name, COALESCE(ar.duty_type, 'REGULAR') as duty_type,
+               loc_in.latitude as check_in_lat, loc_in.longitude as check_in_long,
+               loc_out.latitude as check_out_lat, loc_out.longitude as check_out_long
         FROM ATTENDANCE_TIME_LOG atl
         JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
         LEFT JOIN ATTENDANCE_ROW ar ON ac.ATTENDANCE_ROW = ar.oid
         LEFT JOIN SITE st ON ac.ATTENDANCE_SITE = st.oid
         LEFT JOIN SHIFT_DESIGNATION_COUNT sdc ON atl.SHIFT_DESIGNATION_COUNT = sdc.oid
         LEFT JOIN SHIFT s ON sdc.SHIFT = s.oid
+        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_in ON (loc_in.attendance_time_log = atl.oid AND loc_in.punch_type = 'IN')
+        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_out ON (loc_out.attendance_time_log = atl.oid AND loc_out.punch_type = 'OUT')
         WHERE ac.EMPLOYEE = %s 
         ORDER BY ac.attendance_date DESC, atl.in_time DESC 
         LIMIT 20
@@ -1289,6 +1356,46 @@ def get_attendance_logs_logic(empOid: int):
         log.pop("start_time", None)
         log.pop("end_time", None)
 
+        # Coordinate matching logic:
+        # Compare punch-in lat/long against sites in DB
+        c_lat = log.get("check_in_lat")
+        c_lon = log.get("check_in_long")
+
+        matched_site = None
+        if c_lat is not None and c_lon is not None:
+            from app.services.gps_service import haversine_distance_meters
+            try:
+                clat_f = float(c_lat)
+                clon_f = float(c_lon)
+                min_dist = float('inf')
+                for st_row in sites_with_coords:
+                    try:
+                        slat_f = float(st_row["latitude"])
+                        slon_f = float(st_row["longitude"])
+                        radius = float(st_row.get("geofence_radius") or 300.0)
+                        dist = haversine_distance_meters(clat_f, clon_f, slat_f, slon_f)
+                        if dist <= radius and dist < min_dist:
+                            min_dist = dist
+                            matched_site = st_row["name"]
+                    except Exception:
+                        continue
+            except Exception as dist_err:
+                print("Distance calc error:", dist_err)
+
+        log["check_in_lat"] = float(log["check_in_lat"]) if log.get("check_in_lat") is not None else None
+        log["check_in_long"] = float(log["check_in_long"]) if log.get("check_in_long") is not None else None
+        log["check_out_lat"] = float(log["check_out_lat"]) if log.get("check_out_lat") is not None else None
+        log["check_out_long"] = float(log["check_out_long"]) if log.get("check_out_long") is not None else None
+
+        if matched_site:
+            log["site_name"] = matched_site
+        else:
+            # If coordinates were recorded but did NOT match any site in DB, clear site_name so UI shows coordinates only
+            if c_lat is not None and c_lon is not None:
+                log["site_name"] = None
+            elif not log.get("site_name"):
+                log["site_name"] = None
+
     cursor.close()
     conn.close()
     return {"success": True, "logs": logs}
@@ -1300,26 +1407,45 @@ def get_today_status_logic(empOid: int):
     
     today = get_ist_today()
     cursor = conn.cursor(dictionary=True)
+
+    # 1. Auto-close any stale unclosed open logs older than 16 hours first
+    try:
+        now_dt = datetime.now()
+        cursor.execute("""
+            SELECT atl.oid, atl.in_time, atl.ATTENDANCE_CELL 
+            FROM ATTENDANCE_TIME_LOG atl
+            JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+            WHERE ac.EMPLOYEE = %s AND atl.out_time IS NULL
+        """, (empOid,))
+        stale_logs = cursor.fetchall()
+        for s_log in stale_logs:
+            in_t = s_log.get("in_time")
+            if in_t and (now_dt - in_t).total_seconds() > 16 * 3600:
+                auto_out = in_t + timedelta(hours=16)
+                cursor.execute("UPDATE ATTENDANCE_TIME_LOG SET out_time = %s WHERE oid = %s", (auto_out, s_log["oid"]))
+                cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'PRESENT' WHERE oid = %s", (s_log["ATTENDANCE_CELL"],))
+        conn.commit()
+    except Exception as stale_err:
+        print("Error auto-closing stale open logs:", stale_err)
+
+    # 2. Query today's status
     query = """
-        SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status
+        SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
+               loc_in.latitude as check_in_lat, loc_in.longitude as check_in_long,
+               loc_out.latitude as check_out_lat, loc_out.longitude as check_out_long
         FROM ATTENDANCE_TIME_LOG atl
         JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_in ON (loc_in.attendance_time_log = atl.oid AND loc_in.punch_type = 'IN')
+        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_out ON (loc_out.attendance_time_log = atl.oid AND loc_out.punch_type = 'OUT')
         WHERE ac.EMPLOYEE = %s AND ac.attendance_date = %s
         ORDER BY atl.oid DESC LIMIT 1
     """
     cursor.execute(query, (empOid, today))
     record = cursor.fetchone()
 
-    if not record:
-        query_open = """
-            SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status
-            FROM ATTENDANCE_TIME_LOG atl
-            JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
-            WHERE ac.EMPLOYEE = %s AND atl.out_time IS NULL
-            ORDER BY atl.oid DESC LIMIT 1
-        """
-        cursor.execute(query_open, (empOid,))
-        record = cursor.fetchone()
+    # 3. Only look for open logs if today's record is still currently IN (open)
+    if not record or (record.get("check_in") and record.get("check_out")):
+        record = None # Today is fully completed / absent, do NOT fall back to past days!
     
     if record:
         record["date"] = record["date"].isoformat() if record["date"] else None
@@ -1411,18 +1537,30 @@ async def validate_selfie(emp_oid, file):
         # 1. Anti-spoofing / Liveness Check
         is_live, liveness_message = is_live_face(img_data=contents)
         if not is_live:
-            return {"success": False, "message": liveness_message}
+            return {"success": False, "message": f"Liveness Check Failed: {liveness_message}"}
 
-        # 2. Check if master photo or face_embedding exists in EMPLOYEE
+        # 2. Extract face embedding from current live camera selfie
+        current_embedding = get_face_embedding(img_data=contents)
+        if current_embedding is None:
+            return {"success": False, "message": "No face detected in camera frame. Position face clearly in proper light."}
+
+        # 3. Fetch pre-calculated face_embedding from database for this employee
         conn = get_db_connection()
         if conn is None:
             return {"success": False, "message": "Database connection failed"}
             
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT face_embedding FROM EMPLOYEE WHERE oid = %s", (emp_oid,))
+        emp_str = str(emp_oid).strip()
+        cursor.execute("SELECT oid, emp_code, face_embedding FROM EMPLOYEE WHERE oid = %s OR emp_code = %s", (emp_str, emp_str))
         employee = cursor.fetchone()
-        cursor.close()
-        conn.close()
+
+        if not employee:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": f"Employee '{emp_str}' not found"}
+
+        actual_oid = employee['oid']
+        actual_emp_code = employee.get('emp_code') or str(actual_oid)
 
         master_embedding = None
         if employee and employee.get('face_embedding'):
@@ -1431,26 +1569,119 @@ async def validate_selfie(emp_oid, file):
             except Exception:
                 master_embedding = None
 
+        # Fallback: Check if master photo exists on disk and extract embedding dynamically
         if master_embedding is None:
-            master_photo_path = os.path.join("uploads", f"{emp_oid}.jpg")
+            master_photo_path = os.path.join("uploads", f"{actual_oid}.jpg")
+            if not os.path.exists(master_photo_path):
+                master_photo_path = os.path.join("uploads", f"{actual_emp_code}.jpg")
+
             if os.path.exists(master_photo_path):
                 master_embedding = get_face_embedding(master_photo_path)
+                if master_embedding:
+                    try:
+                        cursor.execute("UPDATE EMPLOYEE SET face_embedding = %s WHERE oid = %s", (json.dumps(master_embedding), actual_oid))
+                        conn.commit()
+                    except Exception as update_err:
+                        print(f"Error saving master face_embedding: {update_err}")
 
-        if master_embedding is not None:
-            # 3. Extract embedding from current selfie
-            current_embedding = get_face_embedding(img_data=contents)
-            if current_embedding is None:
-                return {"success": False, "message": "NO FACE DETECTED IN CAMERA. Position face clearly."}
+        cursor.close()
+        conn.close()
 
-            # 4. Match against master embedding
-            is_match, match_message = match_embeddings(master_embedding, current_embedding)
-            if not is_match:
-                return {"success": False, "message": match_message}
+        # Reject if no master reference embedding could be found/extracted
+        if master_embedding is None:
+            return {"success": False, "message": "MASTER PHOTO NOT REGISTERED. Please upload your profile photo first in settings."}
+
+        # 4. Strict match against master embedding using SFace YuNet comparison
+        is_match, match_message = match_embeddings(master_embedding, current_embedding)
+        if not is_match:
+            return {"success": False, "message": f"FACE MISMATCH: {match_message}"}
 
         return {"success": True, "message": "FACE VERIFIED SUCCESSFULLY"}
     except Exception as e:
         print(f"Error in validate_selfie: {e}")
-        return {"success": True, "message": "FACE VERIFIED SUCCESSFULLY"}
+        return {"success": False, "message": f"Face verification error: {str(e)}"}
+
+def upload_profile_photo_logic(empOid: Any, file):
+    try:
+        import os
+        uploads_dir = "uploads"
+        if not os.path.exists(uploads_dir):
+            os.makedirs(uploads_dir)
+
+        emp_str = str(empOid).strip()
+
+        conn = get_db_connection()
+        if conn is None:
+            return {"success": False, "message": "Database connection failed"}
+
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT oid, emp_code FROM EMPLOYEE WHERE oid = %s OR emp_code = %s", (emp_str, emp_str))
+        emp_row = cursor.fetchone()
+
+        if not emp_row:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": f"Employee '{emp_str}' not found in database"}
+
+        actual_oid = emp_row['oid']
+        actual_emp_code = emp_row.get('emp_code') or str(actual_oid)
+
+        file_contents = file.file.read()
+
+        # Save under both oid and emp_code filenames
+        file_path_oid = os.path.join(uploads_dir, f"{actual_oid}.jpg")
+        with open(file_path_oid, "wb") as f:
+            f.write(file_contents)
+
+        if actual_emp_code and str(actual_emp_code) != str(actual_oid):
+            file_path_code = os.path.join(uploads_dir, f"{actual_emp_code}.jpg")
+            with open(file_path_code, "wb") as f:
+                f.write(file_contents)
+
+        from app.utils.face import get_face_embedding
+        embedding = get_face_embedding(file_path_oid)
+        if embedding:
+            import json
+            embedding_json = json.dumps(embedding)
+            cursor.execute("UPDATE EMPLOYEE SET face_embedding = %s WHERE oid = %s", (embedding_json, actual_oid))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return {"success": True, "message": "Profile photo uploaded and face embedding registered successfully", "url": f"/uploads/{actual_oid}.jpg"}
+        else:
+            cursor.close()
+            conn.close()
+            return {"success": False, "message": "Photo uploaded but no face detected. Please upload a clear face photo."}
+
+    except Exception as e:
+        print(f"Error in upload_profile_photo_logic: {e}")
+        return {"success": False, "message": str(e)}
+
+async def unified_punch_logic(empOid: int, file, latitude: float, longitude: float):
+    try:
+        # 1. Validate Selfie
+        v_res = await validate_selfie(empOid, file)
+        if not v_res["success"]:
+            return v_res
+            
+        # 2. Mark Attendance
+        class PunchData:
+            def __init__(self, oid, lat, long):
+                self.empOid = oid
+                self.latitude = lat
+                self.longitude = long
+                
+        punch_data = PunchData(empOid, latitude, longitude)
+        res = mark_attendance_logic(punch_data)
+        
+        if res["success"]:
+            return {"success": True, "message": f"Verified & Punched: {res['message']}"}
+        else:
+            return res
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": f"Server Logic Error: {str(e)}"}
 
 def detect_shift_logic_internal(cursor, empOid: int, site_id: int, punch_type: str = "IN"):
     cursor.execute("SELECT oid, name, start_time, end_time FROM SHIFT WHERE SITE = %s", (site_id,))

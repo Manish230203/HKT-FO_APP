@@ -110,7 +110,9 @@ from app.services.attendance_service import (
     get_monthly_stats_logic,
     get_profile_logic,
     validate_selfie,
-    detect_shift_logic
+    detect_shift_logic,
+    upload_profile_photo_logic,
+    unified_punch_logic
 )
 
 @router.post("/_AIP_markAttendance")
@@ -118,11 +120,24 @@ def mark_attendance(data: AttendanceRequest):
     return mark_attendance_logic(data)
 
 @router.post("/selfieValidation")
-async def selfie_validation_endpoint(empOid: int = Form(...), file: UploadFile = File(...)):
+async def selfie_validation_endpoint(empOid: str = Form(...), file: UploadFile = File(...)):
     return await validate_selfie(empOid, file)
 
+@router.post("/_AIP_uploadProfilePhoto")
+async def upload_profile_photo(empOid: str = Form(...), file: UploadFile = File(...)):
+    return upload_profile_photo_logic(empOid, file)
+
+@router.post("/_AIP_unifiedPunch")
+async def unified_punch(
+    empOid: str = Form(...),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    file: UploadFile = File(...)
+):
+    return await unified_punch_logic(empOid, file, latitude, longitude)
+
 @router.get("/_AIP_getAttendanceLogs")
-def get_attendance_logs(empOid: int = Query(...)):
+def get_attendance_logs(empOid: str = Query(...)):
     return get_attendance_logs_logic(empOid)
 
 @router.get("/_AIP_getTodayStatus")
@@ -140,4 +155,5 @@ def get_profile(empOid: int = Query(...)):
 @router.get("/_AIP_detectShift")
 def detect_shift(empOid: int = Query(...), punch_type: str = Query("IN")):
     return detect_shift_logic(empOid, punch_type)
+
 

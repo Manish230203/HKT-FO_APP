@@ -15,7 +15,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': 'true',
   },
-  timeout: 15000,
+  timeout: 30000,
 });
 
 // Interceptor to attach Authorization header

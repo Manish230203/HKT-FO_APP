@@ -5,12 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Platform,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, Stack } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import {
@@ -103,7 +103,13 @@ export default function MarkAttendanceScreen() {
         }
 
         const records = await getPunchRecords(empId);
-        const active = records.find((r) => r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--');
+        const nowMs = Date.now();
+        const active = records.find((r) => {
+          const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+          const punchMs = r.timestamp || 0;
+          const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
+          return isPunchedIn && isWithin16Hours;
+        });
         if (active) {
           setActivePunchRecord(active);
 
@@ -129,20 +135,29 @@ export default function MarkAttendanceScreen() {
     })();
   }, [user, profileImage]);
 
-  // Fetch Location
+  // Fetch Location with resilient fallbacks (prevents kCLErrorDomain error 0 / GPS lock timeouts)
   useEffect(() => {
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-          setLocation({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-          });
+          let loc: Location.LocationObject | null = null;
+          try {
+            loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          } catch (e) {
+            console.warn('getCurrentPositionAsync balanced failed, trying last known position:', e);
+            loc = await Location.getLastKnownPositionAsync();
+          }
+
+          if (loc && loc.coords) {
+            setLocation({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+          }
         }
       } catch (e) {
-        console.error('Location error', e);
+        console.warn('Location fetch warning:', e);
       }
     })();
   }, []);
@@ -180,7 +195,7 @@ export default function MarkAttendanceScreen() {
       let photoUri: string | null = null;
       if (cameraRef.current) {
         try {
-          const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
+          const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
           if (photo && photo.uri) {
             photoUri = photo.uri;
           }
@@ -247,6 +262,8 @@ export default function MarkAttendanceScreen() {
               return {
                 ...r,
                 punchOutTime: nowTime,
+                check_out_lat: lat,
+                check_out_long: long,
                 status: 'COMPLETED',
               };
             }
@@ -271,6 +288,8 @@ export default function MarkAttendanceScreen() {
               dayTitle: `${new Date().toLocaleDateString('en-US', { weekday: 'long' })}, ${new Date().getDate()} ${new Date().toLocaleDateString('en-US', { month: 'short' })}`,
               punchInTime: nowTime,
               punchOutTime: '--:--',
+              check_in_lat: lat,
+              check_in_long: long,
               siteName: 'AMA Facility',
               clientName: 'Client',
               status: 'PUNCHED-IN',
@@ -291,7 +310,7 @@ export default function MarkAttendanceScreen() {
 
         setTimeout(() => {
           router.replace('/(tabs)/dashboard');
-        }, 1500);
+        }, 800);
       } else {
         setAlertInfo({
           visible: true,
@@ -338,6 +357,7 @@ export default function MarkAttendanceScreen() {
 
   return (
     <SwipeableBackWrapper>
+      <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.safeContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
         <ScrollView contentContainerStyle={styles.content}>
@@ -348,17 +368,17 @@ export default function MarkAttendanceScreen() {
             </TouchableOpacity>
 
             <View style={styles.headerTitleCol}>
-              <Text style={styles.mainTitleText}>Mark Attendance</Text>
+              <Text style={styles.mainTitleText}>{t('mark_attendance')}</Text>
               <Text style={styles.userSubText}>
-                User: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
+                {t('user_label')}: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
               </Text>
               <Text style={styles.sessionIdText}>
-                Session ID: AMA-{user?.employee_id || 'EMP002'}
+                {t('session_id')}: AMA-{user?.employee_id || 'EMP002'}
               </Text>
             </View>
 
             <View style={styles.timeCol}>
-              <Text style={styles.localTimeLabel}>LOCAL TIME</Text>
+              <Text style={styles.localTimeLabel}>{t('local_time')}</Text>
               <Text style={styles.localTimeDigits}>{localTime || '13:34:11'}</Text>
             </View>
           </View>
@@ -368,9 +388,9 @@ export default function MarkAttendanceScreen() {
             <View style={styles.profileMissingCard}>
               <AlertCircle color="#EF4444" size={26} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.profileMissingTitle}>Profile Photo Not Registered!</Text>
+                <Text style={styles.profileMissingTitle}>{t('profile_photo_not_registered')}</Text>
                 <Text style={styles.profileMissingSub}>
-                  Face comparison requires a reference profile photo. Please register/capture your profile photo in Settings before marking attendance.
+                  {t('profile_photo_required_desc')}
                 </Text>
 
                 <TouchableOpacity
@@ -379,7 +399,7 @@ export default function MarkAttendanceScreen() {
                   style={styles.takePhotoNowBtn}
                 >
                   <Camera color="#FFFFFF" size={16} style={{ marginRight: 6 }} />
-                  <Text style={styles.takePhotoBtnText}>REGISTER PROFILE PHOTO NOW</Text>
+                  <Text style={styles.takePhotoBtnText}>{t('register_photo_now')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -393,39 +413,12 @@ export default function MarkAttendanceScreen() {
             </View>
           )}
 
-          {/* 2. STEP INDICATOR CARD */}
-          <View style={styles.stepIndicatorCard}>
-            <View style={styles.stepItem}>
-              <View style={[styles.stepCircle, currentStep === 1 && styles.stepCircleActive]}>
-                <Text style={[styles.stepNumText, currentStep === 1 && styles.stepNumTextActive]}>
-                  1
-                </Text>
-              </View>
-              <Text style={[styles.stepLabelText, currentStep === 1 && styles.stepLabelActive]}>
-                Face Identity
-              </Text>
-            </View>
-
-            <View style={styles.stepLine} />
-
-            <View style={styles.stepItem}>
-              <View style={[styles.stepCircle, currentStep === 2 && styles.stepCircleActive]}>
-                <Text style={[styles.stepNumText, currentStep === 2 && styles.stepNumTextActive]}>
-                  2
-                </Text>
-              </View>
-              <Text style={[styles.stepLabelText, currentStep === 2 && styles.stepLabelActive]}>
-                Instant Attendance
-              </Text>
-            </View>
-          </View>
-
           {/* 3. REAL-TIME LIVENESS VERIFICATION CARD */}
           <View style={styles.verificationCard}>
             <View style={styles.livenessHeaderRow}>
               <View style={styles.redLiveDot} />
               <Text style={styles.livenessTitle}>
-                {activePunchRecord ? 'PUNCH OUT - REAL-TIME LIVENESS' : 'REAL-TIME LIVENESS VERIFICATION'}
+                {activePunchRecord ? t('punch_out_liveness') : t('liveness_verification')}
               </Text>
             </View>
 
@@ -442,7 +435,7 @@ export default function MarkAttendanceScreen() {
               {/* Center Floating Translucent Pill */}
               <View style={styles.floatingPill}>
                 <User color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
-                <Text style={styles.floatingPillText}>Position your face in the frame</Text>
+                <Text style={styles.floatingPillText}>{t('position_face')}</Text>
               </View>
             </View>
 
@@ -488,8 +481,12 @@ export default function MarkAttendanceScreen() {
           message={alertInfo.message}
           type={alertInfo.type}
           onClose={() => {
+            const isSuccess = alertInfo.type === 'success';
             setAlertInfo({ ...alertInfo, visible: false });
             setCountdown(3);
+            if (isSuccess) {
+              router.replace('/(tabs)/dashboard');
+            }
           }}
         />
       </SafeAreaView>

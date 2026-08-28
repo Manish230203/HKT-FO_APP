@@ -1,7 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Tabs } from 'expo-router';
+import { gpsTracker } from '../../services/gpsService';
 
 export default function TabLayout() {
+  useEffect(() => {
+    // Check and resume active GPS tracking on app launch / reboot recovery
+    gpsTracker.checkAndResumeTracking().catch(err => {
+      console.warn('Error resuming GPS tracking on app boot:', err);
+    });
+  }, []);
   return (
     <Tabs
       screenOptions={{

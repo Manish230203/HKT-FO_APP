@@ -42,3 +42,14 @@ export const getNightVisitTemplates = async () => {
   const response = await api.get('/officer-rounds/templates');
   return response.data || [];
 };
+
+export const sendReportEmail = async (payload: {
+  email: string;
+  subject?: string;
+  message?: string;
+  branchId?: number | string;
+  siteId?: number | string;
+}) => {
+  const response = await api.post('/officer-visits/send-email', payload);
+  return response.data;
+};

@@ -55,6 +55,8 @@ def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
     r["createdOn"] = r.get("created_on")
     r["clientId"] = r.get("client_id")
     r["siteId"] = r.get("site_id")
+    r["startTime"] = r.get("start_time") or r.get("check_in_time") or r.get("check-in_time") or r.get("startTime") or r.get("checkInTime")
+    r["endTime"] = r.get("end_time") or r.get("check_out_time") or r.get("check-out_time") or r.get("endTime") or r.get("checkOutTime")
     r["officerSignature"] = r.get("officer_signature")
     r["lectureDetails"] = r.get("lecture_details")
     r["randomChecking"] = r.get("random_checking")
@@ -116,10 +118,18 @@ def get_assessments_sites(client_id: Optional[int] = Query(None), company_id: Op
     try:
         cursor = conn.cursor(dictionary=True)
         query = """
-            SELECT DISTINCT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name 
+            SELECT DISTINCT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name, 
+                   COALESCE(NULLIF(s.latitude, 0), sg.latitude) as latitude, 
+                   COALESCE(NULLIF(s.longitude, 0), sg.longitude) as longitude 
             FROM SITE s 
             LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid 
             LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            LEFT JOIN (
+                SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude 
+                FROM SITE_GATE_QRCODE 
+                WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
+                GROUP BY SITE
+            ) sg ON s.oid = sg.SITE
         """
         where_clauses = []
         params = []
@@ -146,6 +156,99 @@ def get_assessments_sites(client_id: Optional[int] = Query(None), company_id: Op
             try: conn.close()
             except Exception: pass
 
+@router.post("/assessments/branches/{branch_id}/email-access")
+@router.put("/assessments/branches/{branch_id}")
+def update_branch_email_access(branch_id: int, payload: dict):
+    email_access = 1 if payload.get("emailAccess") in (1, "1", True) or payload.get("email_access") in (1, "1", True) else 0
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if branch_id in (3, 6):
+            cursor.execute("UPDATE BRANCH SET email_access = %s WHERE oid IN (3, 6) OR LOWER(name) LIKE '%pune%'", (email_access,))
+        else:
+            cursor.execute("UPDATE BRANCH SET email_access = %s WHERE oid = %s", (email_access, branch_id))
+        conn.commit()
+        return JSONResponse(content={"success": True, "message": f"Updated email access for branch {branch_id} to {email_access}"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+@router.get("/site-guards")
+def get_site_guards(
+    site_id: Optional[int] = Query(None),
+    siteId: Optional[int] = Query(None),
+    shift: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    target_site_id = site_id or siteId
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if target_site_id:
+            query = """
+                SELECT 
+                    e.oid as empOid,
+                    e.name,
+                    e.emp_code as empCode,
+                    COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
+                    'Satisfactory' as rating,
+                    'Alert & Awake' as status
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.active = 1 AND e.SITE = %s
+                ORDER BY e.name
+            """
+            cursor.execute(query, (target_site_id,))
+        else:
+            query = """
+                SELECT 
+                    e.oid as empOid,
+                    e.name,
+                    e.emp_code as empCode,
+                    COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
+                    'Satisfactory' as rating,
+                    'Alert & Awake' as status
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.active = 1
+                LIMIT 50
+            """
+            cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        guards_list = []
+        for r in rows:
+            guards_list.append({
+                "name": r.get("name") or "Security Guard",
+                "empCode": r.get("empCode") or f"G{r.get('empOid')}",
+                "empOid": r.get("empOid"),
+                "dutyType": r.get("dutyType") or "Security Guard",
+                "rating": "Satisfactory",
+                "status": "Alert & Awake"
+            })
+        return JSONResponse(content=guards_list)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
 # --- PLANNED VISITS ENDPOINT (FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY) ---
 
 @router.get("/planned-visits")
@@ -160,35 +263,21 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
     try:
         cursor = conn.cursor(dictionary=True)
 
-        # Count completed reports per (site_id, officer_name / employee_oid) across all 3 visit types
-        completed_counts_by_emp = {}
-        completed_counts_by_name = {}
-        completed_counts_by_site = {}
+        # Fetch completed reports per site with visit/creation date for accurate plan matching
+        completed_reports = []
         try:
             query_counts = """
-                SELECT site_id, employee_oid, LOWER(TRIM(officer)) as off_name
+                SELECT site_id, employee_oid, LOWER(TRIM(officer)) as off_name, DATE(COALESCE(visit_date, created_on)) as rep_date
                 FROM (
-                    SELECT site_id, employee_oid, officer FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE site_id IS NOT NULL AND status = 'Completed'
+                    SELECT site_id, employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE site_id IS NOT NULL AND status = 'Completed'
                     UNION ALL
-                    SELECT site_id, employee_oid, officer FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE site_id IS NOT NULL AND status = 'Completed'
+                    SELECT site_id, employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE site_id IS NOT NULL AND status = 'Completed'
                     UNION ALL
-                    SELECT site_id, employee_oid, officer FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE site_id IS NOT NULL
+                    SELECT site_id, employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE site_id IS NOT NULL
                 ) t
             """
             cursor.execute(query_counts)
-            for row in cursor.fetchall():
-                sid = row["site_id"]
-                emp_id = str(row["employee_oid"]) if row.get("employee_oid") else None
-                off_n = row.get("off_name")
-
-                if sid:
-                    completed_counts_by_site[sid] = completed_counts_by_site.get(sid, 0) + 1
-                    if emp_id:
-                        key = (sid, emp_id)
-                        completed_counts_by_emp[key] = completed_counts_by_emp.get(key, 0) + 1
-                    if off_n:
-                        key = (sid, off_n)
-                        completed_counts_by_name[key] = completed_counts_by_name.get(key, 0) + 1
+            completed_reports = cursor.fetchall() or []
         except Exception as err:
             print("Error checking completed site counts:", err)
 
@@ -205,6 +294,7 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
                 av.oid as id,
                 av.plan_code as planCode,
                 av.planning_type as planningType,
+                av.visit_date as visitDate,
                 av.week_start_date as weekStartDate,
                 av.week_end_date as weekEndDate,
                 av.planning_month as planningMonth,
@@ -215,6 +305,8 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
                 e.name as officerName,
                 s.oid as siteId,
                 s.name as siteName,
+                COALESCE(NULLIF(s.latitude, 0), sg.latitude) as latitude,
+                COALESCE(NULLIF(s.longitude, 0), sg.longitude) as longitude,
                 cl.oid as clientId,
                 cl.name as clientName,
                 vf.visit_frequency as visitFrequency
@@ -222,6 +314,12 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
             JOIN FIELD_OFFICER_VISIT_FREQUENCY vf ON av.oid = vf.plan_oid
             LEFT JOIN EMPLOYEE e ON av.employee_oid = e.oid
             LEFT JOIN SITE s ON vf.site_oid = s.oid
+            LEFT JOIN (
+                SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude 
+                FROM SITE_GATE_QRCODE 
+                WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
+                GROUP BY SITE
+            ) sg ON s.oid = sg.SITE
             LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
             {where_clause}
             ORDER BY av.created_at DESC, av.oid DESC
@@ -237,22 +335,50 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
             officer_id_str = str(r.get("officerId")) if r.get("officerId") is not None else None
             officer_name = (r.get("officerName") or "").lower().strip()
 
-            done_cnt = 0
-            if site_id_val:
-                if officer_id_str and (site_id_val, officer_id_str) in completed_counts_by_emp:
-                    done_cnt = completed_counts_by_emp[(site_id_val, officer_id_str)]
-                elif officer_name and (site_id_val, officer_name) in completed_counts_by_name:
-                    done_cnt = completed_counts_by_name[(site_id_val, officer_name)]
-                elif not officer_id_str and not officer_name:
-                    done_cnt = completed_counts_by_site.get(site_id_val, 0)
-            freq = r.get("visitFrequency") or 1
-            pending_cnt = max(0, freq - done_cnt)
-
-            # Calculate plannedPeriod time span
             ws = r.get("weekStartDate")
             we = r.get("weekEndDate")
             pm = r.get("planningMonth")
             py = r.get("planningYear")
+            vdate = r.get("visitDate")
+            cdate = r["createdAt"].strftime("%Y-%m-%d") if hasattr(r.get("createdAt"), "strftime") else str(r.get("createdAt"))[:10] if r.get("createdAt") else today_str
+
+            # Filter reports within this plan's specific timeframe
+            done_cnt = 0
+            if site_id_val:
+                for rep in completed_reports:
+                    if rep.get("site_id") != site_id_val:
+                        continue
+                    
+                    rep_d_str = str(rep["rep_date"]) if rep.get("rep_date") else None
+                    if not rep_d_str:
+                        continue
+
+                    # Check date range matching plan period
+                    in_period = False
+                    if ws and we:
+                        in_period = (str(ws) <= rep_d_str <= str(we))
+                    elif pm and py:
+                        try:
+                            rep_dt = datetime.strptime(rep_d_str, "%Y-%m-%d")
+                            in_period = (rep_dt.month == int(pm) and rep_dt.year == int(py))
+                        except Exception:
+                            in_period = False
+                    else:
+                        target_d = str(vdate) if vdate else cdate
+                        in_period = (rep_d_str == target_d)
+
+                    if in_period:
+                        rep_emp = str(rep["employee_oid"]) if rep.get("employee_oid") else None
+                        rep_off = (rep.get("off_name") or "").strip()
+                        if officer_id_str and rep_emp and officer_id_str == rep_emp:
+                            done_cnt += 1
+                        elif officer_name and rep_off and officer_name == rep_off:
+                            done_cnt += 1
+                        elif not officer_id_str and not officer_name:
+                            done_cnt += 1
+
+            freq = r.get("visitFrequency") or 1
+            pending_cnt = max(0, freq - done_cnt)
 
             if ws and we:
                 try:
@@ -268,12 +394,18 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
                     period_str = f"01 {month_name} {py} - {last_day} {month_name} {py}"
                 except Exception:
                     period_str = f"Month {pm}/{py}"
+            elif vdate:
+                try:
+                    vd_dt = datetime.strptime(str(vdate), "%Y-%m-%d")
+                    period_str = vd_dt.strftime("%d %b %Y")
+                except Exception:
+                    period_str = str(vdate)
             elif r.get("createdAt"):
                 period_str = r["createdAt"].strftime("%d %b %Y") if hasattr(r["createdAt"], "strftime") else str(r["createdAt"])[:10]
             else:
                 period_str = time.strftime("%d %b %Y")
 
-            date_str = str(ws) if ws else period_str
+            date_str = str(ws) if ws else (str(vdate) if vdate else period_str)
 
             raw_status = (r.get("planStatus") or "PUBLISHED").upper()
             if raw_status == "COMPLETED" or done_cnt >= freq:
@@ -308,6 +440,8 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
                 "clientName": r.get("clientName") or "N/A",
                 "siteId": r.get("siteId") or 1,
                 "siteName": r.get("siteName") or "N/A",
+                "latitude": r.get("latitude"),
+                "longitude": r.get("longitude"),
                 "officerId": r.get("officerId"),
                 "officerName": r.get("officerName") or "Field Officer",
                 "date": date_str,
@@ -332,10 +466,10 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
 def create_planned_visit(payload: dict):
     conn = get_db_connection()
     if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+        return JSONResponse(status_code=500, content={"success": False, "message": "Database connection failed"})
+    cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
-        import random
         from datetime import datetime
         
         cursor.execute("SELECT plan_code FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE plan_code LIKE 'VP-%' ORDER BY CHAR_LENGTH(plan_code) DESC, plan_code DESC LIMIT 1")
@@ -353,8 +487,27 @@ def create_planned_visit(payload: dict):
         if planning_type not in ["WEEKLY", "MONTHLY", "SINGLE"]:
             planning_type = "SINGLE"
             
-        emp_oid = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or 7558
-        site_oid = payload.get("siteId") or payload.get("site_oid") or 1
+        raw_emp = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or 7558
+        emp_oid = 7558
+        try:
+            emp_oid = int(raw_emp)
+        except (ValueError, TypeError):
+            # Resolve string employee ID/code to integer oid
+            try:
+                cursor.execute("SELECT oid FROM EMPLOYEE WHERE emp_code = %s OR oid = %s LIMIT 1", (str(raw_emp), str(raw_emp)))
+                emp_row = cursor.fetchone()
+                if emp_row and emp_row.get("oid"):
+                    emp_oid = int(emp_row["oid"])
+            except Exception as err:
+                print("Warning resolving emp_code:", err)
+
+        raw_site = payload.get("siteId") or payload.get("site_oid") or 1
+        site_oid = 1
+        try:
+            site_oid = int(raw_site)
+        except (ValueError, TypeError):
+            site_oid = 1
+
         freq = int(payload.get("visitFrequency", 1))
 
         week_start_date = None
@@ -399,13 +552,27 @@ def create_planned_visit(payload: dict):
         """, (plan_oid, site_oid, freq))
         
         conn.commit()
-        cursor.close()
+        if cursor:
+            cursor.close()
         conn.close()
         return JSONResponse(content={"success": True, "message": "Visit plan assigned successfully", "id": plan_oid, "planCode": plan_code})
     except Exception as e:
-        if 'conn' in locals() and conn:
-            conn.close()
-        return JSONResponse(status_code=500, content={"message": f"Failed to create visit plan: {str(e)}"})
+        print(f"Error in create_planned_visit: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return JSONResponse(status_code=500, content={"success": False, "message": f"Failed to create visit plan: {str(e)}"})
 
 
 # --- OFFICER ROUND REPORTS ---
@@ -418,11 +585,14 @@ def get_round_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str
     cursor = conn.cursor(dictionary=True)
     try:
         query = """
-            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id,
+                   CASE WHEN COALESCE(b_off.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END as email_access
             FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
             LEFT JOIN SITE s ON r.site_id = s.oid
             LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN BRANCH b_off ON e.BRANCH = b_off.oid
         """
         params = []
         target_emp = emp_oid or empOid
@@ -448,11 +618,14 @@ def get_round_report(id: str):
     cursor = conn.cursor(dictionary=True)
     try:
         query = """
-            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id,
+                   CASE WHEN COALESCE(b_off.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END as email_access
             FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
             LEFT JOIN SITE s ON r.site_id = s.oid
             LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN BRANCH b_off ON e.BRANCH = b_off.oid
             WHERE r.oid = %s
         """
         cursor.execute(query, (id,))
@@ -664,11 +837,14 @@ def get_visit_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str
     cursor = conn.cursor(dictionary=True)
     try:
         query = """
-            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id,
+                   CASE WHEN COALESCE(b_off.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END as email_access
             FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
             LEFT JOIN SITE s ON r.site_id = s.oid
             LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN BRANCH b_off ON e.BRANCH = b_off.oid
         """
         params = []
         target_emp = emp_oid or empOid
@@ -694,11 +870,14 @@ def get_visit_report(id: str):
     cursor = conn.cursor(dictionary=True)
     try:
         query = """
-            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id, COALESCE(b.email_access, 0) as email_access
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id,
+                   CASE WHEN COALESCE(b_off.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END as email_access
             FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
             LEFT JOIN SITE s ON r.site_id = s.oid
             LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN BRANCH b_off ON e.BRANCH = b_off.oid
             WHERE r.oid = %s
         """
         cursor.execute(query, (id,))
@@ -1089,32 +1268,44 @@ def get_general_visits(emp_oid: Optional[str] = Query(None), empOid: Optional[st
     cursor = conn.cursor(dictionary=True)
     try:
         init_general_visits_table(cursor)
-        query = "SELECT * FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS"
+        query = """
+            SELECT r.*, s.name as site_name, cl.name as client_name, s.BRANCH as branch_id,
+                   CASE WHEN COALESCE(b_off.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END as email_access
+            FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN BRANCH b_off ON e.BRANCH = b_off.oid
+        """
         params = []
         target_emp = emp_oid or empOid
         if target_emp:
             query += """ WHERE (
-                employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
-                OR officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
             ) """
             params.extend([target_emp, target_emp, target_emp, target_emp])
-        query += " ORDER BY created_on DESC"
+        query += " ORDER BY r.created_on DESC"
         cursor.execute(query, params)
         rows = cursor.fetchall()
         for r in rows:
             r["id"] = r["oid"]
             r["reportId"] = r.get("report_id")
-            r["clientId"] = r["client_id"]
-            r["clientName"] = r["client_name"]
-            r["siteId"] = r["site_id"]
-            r["siteName"] = r["site_name"]
-            r["personVisited"] = r["person_visited"]
-            r["reasonOfVisit"] = r["reason_of_visit"]
-            r["visitDate"] = r["visit_date"]
-            r["remark"] = r["remark"]
+            r["clientId"] = r.get("client_id")
+            r["clientName"] = r.get("client_name") or r.get("clientName")
+            r["siteId"] = r.get("site_id")
+            r["siteName"] = r.get("site_name") or r.get("siteName")
+            r["personVisited"] = r.get("person_visited")
+            r["reasonOfVisit"] = r.get("reason_of_visit")
+            r["visitDate"] = r.get("visit_date")
+            r["remark"] = r.get("remark")
             r["startTime"] = r.get("check-in_time")
             r["endTime"] = r.get("check-out_time")
-            r["createdOn"] = r["created_on"].strftime("%Y-%m-%d %H:%M:%S") if r["created_on"] else None
+            r["branchId"] = r.get("branch_id")
+            r["emailAccess"] = 1 if r.get("email_access") in (1, "1", True) else 0
+            r["email_access"] = r["emailAccess"]
+            r["createdOn"] = r.get("created_on").strftime("%Y-%m-%d %H:%M:%S") if r.get("created_on") and hasattr(r.get("created_on"), "strftime") else str(r.get("created_on") or "")
         return rows
     finally:
         cursor.close()
@@ -1173,6 +1364,16 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
         else:
             report_id = str(payload.get("reportId") or payload.get("report_id"))
 
+        # Ensure gps column exists in FIELD_OFFICER_GENERAL_VISIT_REPORTS
+        try:
+            cursor.execute("SHOW COLUMNS FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS LIKE 'gps'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE FIELD_OFFICER_GENERAL_VISIT_REPORTS ADD COLUMN gps VARCHAR(255) NULL")
+        except Exception:
+            pass
+
+        gps_val = payload.get("gps") or ""
+
         cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()
         
@@ -1181,7 +1382,7 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                 UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS SET
                     report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
                     person_visited = %s, reason_of_visit = %s, visit_date = %s,
-                    remark = %s, `check-in_time` = %s, `check-out_time` = %s, employee_oid = %s, officer = %s
+                    remark = %s, `check-in_time` = %s, `check-out_time` = %s, gps = %s, employee_oid = %s, officer = %s
                 WHERE oid = %s
             """
             query_params = (
@@ -1196,6 +1397,7 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                 payload.get("remark"),
                 payload.get("startTime") or payload.get("start_time"),
                 payload.get("endTime") or payload.get("end_time"),
+                gps_val,
                 emp_oid,
                 emp_name,
                 oid
@@ -1206,8 +1408,8 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                 INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
                     report_id, client_id, client_name, site_id, site_name,
                     person_visited, reason_of_visit, visit_date,
-                    remark, `check-in_time`, `check-out_time`, employee_oid, officer, oid
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    remark, `check-in_time`, `check-out_time`, gps, employee_oid, officer, oid
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             query_params = (
                 report_id,
@@ -1221,6 +1423,7 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                 payload.get("remark"),
                 payload.get("startTime") or payload.get("start_time"),
                 payload.get("endTime") or payload.get("end_time"),
+                gps_val,
                 emp_oid,
                 emp_name,
                 oid
@@ -1276,23 +1479,33 @@ def send_report_email(payload: dict):
     message = payload.get("message")
     branch_id = payload.get("branchId") or payload.get("branch_id")
     site_id = payload.get("siteId") or payload.get("site_id")
+    emp_oid = payload.get("empOid") or payload.get("officerId") or payload.get("employee_oid")
 
     if not email:
         raise HTTPException(status_code=400, detail="Recipient email is required")
 
-    # Validate branch email_access in DB
+    # Validate branch email_access in DB (checking both site branch and officer branch)
     conn = get_db_connection()
     if conn:
         try:
             cursor = conn.cursor(dictionary=True)
-            if branch_id:
-                cursor.execute("SELECT email_access FROM BRANCH WHERE oid = %s", (branch_id,))
-                res = cursor.fetchone()
-                if res and res.get("email_access") in (0, "0", False):
+            
+            # 1. Check officer's assigned branch email_access
+            if emp_oid:
+                cursor.execute("""
+                    SELECT b.email_access 
+                    FROM EMPLOYEE e 
+                    JOIN BRANCH b ON e.BRANCH = b.oid 
+                    WHERE e.oid = %s OR e.emp_code = %s
+                """, (emp_oid, emp_oid))
+                emp_res = cursor.fetchone()
+                if emp_res and emp_res.get("email_access") in (0, "0", False):
                     cursor.close()
                     conn.close()
-                    raise HTTPException(status_code=403, detail="Email sending is disabled for this branch (email_access = 0).")
-            elif site_id:
+                    raise HTTPException(status_code=403, detail="Email sending is disabled for officer's assigned branch (email_access = 0).")
+
+            # 2. Check site's branch email_access
+            if site_id:
                 cursor.execute("""
                     SELECT b.email_access 
                     FROM SITE s 
@@ -1303,7 +1516,17 @@ def send_report_email(payload: dict):
                 if res and res.get("email_access") in (0, "0", False):
                     cursor.close()
                     conn.close()
+                    raise HTTPException(status_code=403, detail="Email sending is disabled for this site's branch (email_access = 0).")
+
+            # 3. Check explicit branch_id if provided
+            if branch_id:
+                cursor.execute("SELECT email_access FROM BRANCH WHERE oid = %s", (branch_id,))
+                res = cursor.fetchone()
+                if res and res.get("email_access") in (0, "0", False):
+                    cursor.close()
+                    conn.close()
                     raise HTTPException(status_code=403, detail="Email sending is disabled for this branch (email_access = 0).")
+            
             cursor.close()
             conn.close()
         except HTTPException as he:

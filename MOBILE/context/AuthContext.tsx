@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, loginOfficer, getAuthenticatedUser } from '../services/authService';
 import { getUserSession, saveUserSession, clearUserSession, getProfileImage, saveProfileImage } from '../services/db';
+import { Config } from '../constants/Config';
 
 export interface LoginResult {
   success: boolean;
@@ -14,7 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (identifier: string, password?: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
-  updateProfileImage: (uri: string) => Promise<void>;
+  updateProfileImage: (uri: string) => Promise<{ success: boolean; message: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -131,6 +132,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfileImage(uri);
     const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username;
     await saveProfileImage(uri, empId ? String(empId) : undefined);
+
+    // Upload to backend to calculate and store face embedding in MySQL DB
+    try {
+      const empOidVal = user?.id || (user as any)?.oid || user?.employee_id || user?.username;
+      if (empOidVal) {
+        const formData = new FormData();
+        formData.append('empOid', empOidVal.toString());
+
+        const filename = uri.split('/').pop() || 'photo.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('file', {
+          uri: uri,
+          name: filename,
+          type: type,
+        } as any);
+
+        const response = await fetch(`${Config.BASE_URL}/_AIP_uploadProfilePhoto`, {
+          method: 'POST',
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+          },
+          body: formData,
+        });
+
+        const resData = await response.json();
+        return resData;
+      }
+    } catch (err) {
+      console.warn('Backend profile photo upload warning:', err);
+    }
+    return { success: true, message: 'Profile photo saved locally' };
   };
 
   const logout = async () => {

@@ -9,10 +9,10 @@ import { Card } from '../../components/ui/Card';
 export default function SelectVisitTypeScreen() {
   const { t } = useLanguage();
   const router = useRouter();
-  const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string }>();
+  const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string; checkInTime?: string; checkOutTime?: string }>();
 
   const handleSelect = (type: 'day' | 'night' | 'general') => {
-    const qp = `clientId=${params.clientId || ''}&siteId=${params.siteId || ''}&plannedId=${params.plannedId || ''}`;
+    const qp = `clientId=${params.clientId || ''}&siteId=${params.siteId || ''}&plannedId=${params.plannedId || ''}&checkInTime=${params.checkInTime || ''}&checkOutTime=${params.checkOutTime || ''}`;
     if (type === 'day') {
       router.push(`/visits/day-visit/day-visit-create?${qp}`);
     } else if (type === 'night') {
@@ -31,13 +31,13 @@ export default function SelectVisitTypeScreen() {
       <Card onPress={() => handleSelect('day')} style={styles.typeCard}>
         <View style={styles.cardContent}>
           <View style={[styles.iconBox, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-            <Sun color="#F59E0B" size={28} />
+            <Sun color="#F59E0B" size={38} />
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.cardTitle}>{t('day_visit')}</Text>
             <Text style={styles.cardDesc}>{t('day_visit_desc')}</Text>
           </View>
-          <ChevronRight color={THEME.textVariant} size={20} />
+          <ChevronRight color={THEME.textVariant} size={24} />
         </View>
       </Card>
 
@@ -45,13 +45,13 @@ export default function SelectVisitTypeScreen() {
       <Card onPress={() => handleSelect('night')} style={styles.typeCard}>
         <View style={styles.cardContent}>
           <View style={[styles.iconBox, { backgroundColor: 'rgba(129, 140, 248, 0.15)' }]}>
-            <Moon color="#818CF8" size={28} />
+            <Moon color="#818CF8" size={38} />
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.cardTitle}>{t('night_visit')}</Text>
             <Text style={styles.cardDesc}>{t('night_visit_desc')}</Text>
           </View>
-          <ChevronRight color={THEME.textVariant} size={20} />
+          <ChevronRight color={THEME.textVariant} size={24} />
         </View>
       </Card>
 
@@ -59,13 +59,13 @@ export default function SelectVisitTypeScreen() {
       <Card onPress={() => handleSelect('general')} style={styles.typeCard}>
         <View style={styles.cardContent}>
           <View style={[styles.iconBox, { backgroundColor: 'rgba(52, 211, 153, 0.15)' }]}>
-            <BookOpen color="#34D399" size={28} />
+            <BookOpen color="#34D399" size={38} />
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.cardTitle}>{t('general_visit')}</Text>
             <Text style={styles.cardDesc}>{t('general_visit_desc')}</Text>
           </View>
-          <ChevronRight color={THEME.textVariant} size={20} />
+          <ChevronRight color={THEME.textVariant} size={24} />
         </View>
       </Card>
     </ScrollView>
@@ -101,12 +101,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+    width: 76,
+    height: 76,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 16,
   },
   textContainer: {
     flex: 1,
