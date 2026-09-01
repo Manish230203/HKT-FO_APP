@@ -34,6 +34,41 @@ export default function ProfileScreen() {
     router.replace('/lang/lang-selection');
   };
 
+  const formatJoinDate = (dStr?: string | null) => {
+    if (!dStr) return 'Aug 29, 2016';
+    try {
+      const d = new Date(dStr);
+      if (isNaN(d.getTime())) return dStr;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dStr;
+    }
+  };
+
+  const calculateTenure = (dStr?: string | null) => {
+    if (!dStr) return '9 Years, 6 Months';
+    try {
+      const start = new Date(dStr);
+      const now = new Date();
+      if (isNaN(start.getTime())) return '9 Years, 6 Months';
+      let years = now.getFullYear() - start.getFullYear();
+      let months = now.getMonth() - start.getMonth();
+      if (months < 0) {
+        years--;
+        months += 12;
+      }
+      return `${years} Years, ${months} Months`;
+    } catch {
+      return '9 Years, 6 Months';
+    }
+  };
+
+  const joiningDateFormatted = formatJoinDate(user?.date_of_joining);
+  const tenureFormatted = calculateTenure(user?.date_of_joining);
+  const clientNameVal = user?.client_name || 'Unique Delta Force Pvt. Ltd.';
+  const branchNameVal = user?.branch_name || 'Pune';
+  const siteNameVal = user?.site_name || (user?.site_id === 192 ? 'UDF KASARWADI PUNE' : (user?.site_id ? `Site #${user.site_id}` : 'UDF KASARWADI PUNE'));
+
   return (
     <SwipeableBackWrapper>
       <SafeAreaView style={styles.container}>
@@ -53,13 +88,13 @@ export default function ProfileScreen() {
             </View>
 
             <Text style={styles.execLabel}>{t('exec_profile')}</Text>
-            <Text style={styles.execName}>{user?.name || 'PAPPU KUMAR'}</Text>
+            <Text style={styles.execName}>{user?.name || 'Manish Kenjale'}</Text>
             <Text style={styles.execRole}>{(user?.role || t('field_officer')).toUpperCase()}</Text>
 
             <View style={styles.pillsRow}>
               <View style={styles.empBadge}>
                 <ShieldCheck color="#3B82F6" size={14} style={{ marginRight: 4 }} />
-                <Text style={styles.empBadgeText}>{user?.employee_id || 'S48453'}</Text>
+                <Text style={styles.empBadgeText}>{user?.employee_id || 'EMP003'}</Text>
               </View>
 
               <View style={styles.activeBadge}>
@@ -78,10 +113,10 @@ export default function ProfileScreen() {
               <Text style={styles.fieldLabel}>{t('joining_date')}</Text>
               <Calendar color="#3B82F6" size={20} />
             </View>
-            <Text style={styles.mainValText}>Mar 12, 2012</Text>
+            <Text style={styles.mainValText}>{joiningDateFormatted}</Text>
 
             <Text style={[styles.fieldLabel, { marginTop: 16 }]}>{t('tenure')}</Text>
-            <Text style={styles.mainValText}>14 Years, 5 Months</Text>
+            <Text style={styles.mainValText}>{tenureFormatted}</Text>
           </View>
 
           {/* Deployment Date & Site Card */}
@@ -90,21 +125,21 @@ export default function ProfileScreen() {
               <Text style={styles.fieldLabel}>{t('deployment_date')}</Text>
               <MapPin color="#3B82F6" size={20} />
             </View>
-            <Text style={styles.mainValText}>Mar 12, 2012</Text>
+            <Text style={styles.mainValText}>{joiningDateFormatted}</Text>
 
             <View style={styles.subDetailPill}>
               <Text style={styles.pillLabel}>{t('client')}</Text>
-              <Text style={styles.pillValue}>Tata Power</Text>
+              <Text style={styles.pillValue}>{clientNameVal}</Text>
             </View>
 
             <View style={styles.subDetailPill}>
               <Text style={styles.pillLabel}>{t('branch')}</Text>
-              <Text style={styles.pillValue}>Pune</Text>
+              <Text style={styles.pillValue}>{branchNameVal}</Text>
             </View>
 
             <View style={styles.subDetailPill}>
               <Text style={styles.pillLabel}>{t('site')}</Text>
-              <Text style={styles.pillValue}>Humankind Technology</Text>
+              <Text style={styles.pillValue}>{siteNameVal}</Text>
             </View>
           </View>
 

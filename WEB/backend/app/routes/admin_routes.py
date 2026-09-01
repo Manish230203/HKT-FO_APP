@@ -315,10 +315,17 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     # Try to find user by mobile, emp_code, or user_account
     try:
         sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, ua.password_hash
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
+                   s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
+                   e.BRANCH as branch_id, b.name as branch_name,
+                   COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
+                   c.name as company_name, c.short_name as company_short_name, ua.password_hash
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
+            LEFT JOIN SITE s ON e.SITE = s.oid
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+            LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
             LEFT JOIN USER_ACCOUNT ua ON ua.EMPLOYEE = e.oid
             WHERE e.mobile = :id OR e.emp_code = :id OR ua.username = :id
             LIMIT 1
@@ -327,10 +334,17 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     except Exception:
         # Fallback for backup.sql schema where USER_ACCOUNT uses user_name or doesn't have EMPLOYEE FK
         sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, 'password123' as password_hash
+            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
+                   s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
+                   e.BRANCH as branch_id, b.name as branch_name,
+                   COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
+                   c.name as company_name, c.short_name as company_short_name, 'password123' as password_hash
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
+            LEFT JOIN SITE s ON e.SITE = s.oid
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+            LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
             WHERE e.mobile = :id OR e.emp_code = :id
             LIMIT 1
         """)
@@ -339,19 +353,21 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     if not user:
         raise HTTPException(status_code=401, detail="NO USER FOUND")
         
-    # Password verification disabled for testing purposes
-    # stored_password = user.get("password_hash") or "password123"
-    # if stored_password != password and password != "password123":
-    #     raise HTTPException(status_code=401, detail="INVALID PASSWORD")
-    
     user_data = {
         "id": user["oid"],
         "name": user["name"],
         "role": user["role_name"] or "Staff",
         "employee_id": user["emp_code"],
         "site_id": user["site_id"],
+        "site_name": user.get("site_name") or "UDF KASARWADI PUNE",
+        "client_id": user.get("client_id"),
+        "client_name": user.get("client_name") or "Unique Delta Force Pvt. Ltd.",
+        "branch_id": user.get("branch_id"),
+        "branch_name": user.get("branch_name") or "Pune",
+        "date_of_joining": str(user.get("date_of_joining")) if user.get("date_of_joining") else "2016-08-29",
         "company_id": user.get("company_id") or 1,
-        "company_name": user.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if user.get("company_id") == 4 else "Unique Delta Force")
+        "company_name": user.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if user.get("company_id") == 4 else "Unique Delta Force"),
+        "company_short_name": user.get("company_short_name") or ("EISPL" if user.get("company_id") == 4 else "UDF")
     }
     
     import base64
@@ -372,27 +388,53 @@ def get_current_admin(authorization: Optional[str] = Header(None), db: Session =
         try:
             token = authorization.split(" ")[1]
             data = json.loads(base64.b64decode(token.encode()).decode())
-            emp_id = data.get("id")
+            emp_id = data.get("id") or data.get("employee_id")
             if emp_id:
                 sql = text("""
-                    SELECT e.COMPANY as company_id, c.name as company_name
+                    SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
+                           s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
+                           e.BRANCH as branch_id, b.name as branch_name,
+                           COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
+                           c.name as company_name, c.short_name as company_short_name
                     FROM EMPLOYEE e
-                    LEFT JOIN COMPANY c ON e.COMPANY = c.oid
-                    WHERE e.oid = :oid
+                    LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                    LEFT JOIN SITE s ON e.SITE = s.oid
+                    LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+                    LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+                    LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
+                    WHERE e.oid = :oid OR e.emp_code = :oid
+                    LIMIT 1
                 """)
                 emp = db.execute(sql, {"oid": emp_id}).mappings().first()
                 if emp:
-                    data["company_id"] = emp["company_id"]
-                    data["company_name"] = emp["company_name"]
+                    data["name"] = emp["name"]
+                    data["role"] = emp["role_name"] or data.get("role") or "Staff"
+                    data["employee_id"] = emp["emp_code"]
+                    data["site_id"] = emp["site_id"]
+                    data["site_name"] = emp.get("site_name") or "UDF KASARWADI PUNE"
+                    data["client_id"] = emp.get("client_id")
+                    data["client_name"] = emp.get("client_name") or "Unique Delta Force Pvt. Ltd."
+                    data["branch_id"] = emp.get("branch_id")
+                    data["branch_name"] = emp.get("branch_name") or "Pune"
+                    data["date_of_joining"] = str(emp.get("date_of_joining")) if emp.get("date_of_joining") else "2016-08-29"
+                    data["company_id"] = emp.get("company_id") or 1
+                    data["company_name"] = emp.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if emp.get("company_id") == 4 else "Unique Delta Force")
+                    data["company_short_name"] = emp.get("company_short_name") or ("EISPL" if emp.get("company_id") == 4 else "UDF")
             return data
         except Exception:
             pass
     return {
-        "id": 1,
-        "name": "Administrator",
-        "role": "Admin",
-        "employee_id": "ADM001",
-        "site_id": None,
+        "id": 10208,
+        "name": "Manish Kenjale",
+        "role": "FIELD OFFICER",
+        "employee_id": "EMP003",
+        "site_id": 192,
+        "site_name": "UDF KASARWADI PUNE",
+        "client_id": 13,
+        "client_name": "Unique Delta Force Pvt. Ltd.",
+        "branch_id": 6,
+        "branch_name": "Pune",
+        "date_of_joining": "2016-08-29",
         "company_id": 1,
         "company_name": "Unique Delta Force"
     }
@@ -406,9 +448,15 @@ def global_search(q: str = "", db: Session = Depends(get_patrol_db)):
     
     # 1. Search Sites
     sites_sql = text("""
-        SELECT s.oid as id, s.name, s.latitude, s.longitude, c.name as client_name
+        SELECT s.oid as id, s.name, sg.latitude, sg.longitude, c.name as client_name
         FROM SITE s
         LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+        LEFT JOIN (
+            SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude 
+            FROM SITE_GATE_QRCODE 
+            WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
+            GROUP BY SITE
+        ) sg ON s.oid = sg.SITE
         WHERE s.name LIKE :q OR c.name LIKE :q
         LIMIT 10
     """)
@@ -1598,9 +1646,15 @@ def get_locations_companies(
         if role in ["supervisor", "field officer", "main gate supervisor"]:
             if user_site_id:
                 sites_sql = text("""
-                    SELECT s.oid as id, s.name, s.latitude, s.longitude, s.geofence_data, s.geofence_type, c.name as client_name 
+                    SELECT s.oid as id, s.name, sg.latitude, sg.longitude, s.geofence_data, s.geofence_type, c.name as client_name 
                     FROM SITE s 
                     LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid 
+                    LEFT JOIN (
+                        SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude 
+                        FROM SITE_GATE_QRCODE 
+                        WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
+                        GROUP BY SITE
+                    ) sg ON s.oid = sg.SITE
                     WHERE s.oid = :user_site_id AND s.BRANCH IN (SELECT oid FROM BRANCH WHERE COMPANY = :company_id)
                 """)
                 sites = db.execute(sites_sql, {"company_id": company["id"], "user_site_id": user_site_id}).mappings().all()
@@ -1608,9 +1662,15 @@ def get_locations_companies(
                 sites = []
         else:
             sites_sql = text("""
-                SELECT s.oid as id, s.name, s.latitude, s.longitude, s.geofence_data, s.geofence_type, c.name as client_name 
+                SELECT s.oid as id, s.name, sg.latitude, sg.longitude, s.geofence_data, s.geofence_type, c.name as client_name 
                 FROM SITE s 
                 LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid 
+                LEFT JOIN (
+                    SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude 
+                    FROM SITE_GATE_QRCODE 
+                    WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
+                    GROUP BY SITE
+                ) sg ON s.oid = sg.SITE
                 WHERE s.BRANCH IN (SELECT oid FROM BRANCH WHERE COMPANY = :company_id)
             """)
             sites = db.execute(sites_sql, {"company_id": company["id"]}).mappings().all()
@@ -2609,68 +2669,3 @@ def get_guards_by_site(site_id: Optional[int] = Query(None), db: Session = Depen
         params["site_id"] = site_id
     rows = db.execute(text(query), params).mappings().all()
     return [{"id": f"g_{r['oid']}", "name": r["name"], "employeeId": r["emp_code"], "present": True} for r in rows]
-
-@router.post("/auth/login")
-def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
-    identifier = data.get("identifier")
-    password = data.get("password")
-    
-    try:
-        sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, ua.password_hash
-            FROM EMPLOYEE e
-            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
-            LEFT JOIN USER_ACCOUNT ua ON ua.EMPLOYEE = e.oid
-            WHERE e.mobile = :id OR e.emp_code = :id OR ua.username = :id
-            LIMIT 1
-        """)
-        user = db.execute(sql, {"id": identifier}).mappings().first()
-    except Exception:
-        sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.COMPANY as company_id, c.name as company_name, 'password123' as password_hash
-            FROM EMPLOYEE e
-            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-            LEFT JOIN COMPANY c ON e.COMPANY = c.oid
-            WHERE e.mobile = :id OR e.emp_code = :id
-            LIMIT 1
-        """)
-        user = db.execute(sql, {"id": identifier}).mappings().first()
-    
-    if not user:
-        raise HTTPException(status_code=401, detail="NO USER FOUND")
-        
-    user_data = {
-        "id": user["oid"],
-        "name": user["name"],
-        "role": user["role_name"] or "Staff",
-        "employee_id": user["emp_code"],
-        "site_id": user["site_id"],
-        "company_id": user.get("company_id") or 1,
-        "company_name": user.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if user.get("company_id") == 4 else "Unique Delta Force")
-    }
-    
-    import base64
-    import json
-    token = base64.b64encode(json.dumps(user_data).encode()).decode()
-    
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": user_data
-    }
-
-@router.get("/auth/me")
-def get_current_admin(authorization: Optional[str] = Header(None)):
-    import base64
-    import json
-    if authorization and authorization.startswith("Bearer "):
-        try:
-            token = authorization.split(" ")[1]
-            return json.loads(base64.b64decode(token.encode()).decode())
-        except Exception:
-            raise HTTPException(status_code=401, detail="INVALID TOKEN")
-    raise HTTPException(status_code=401, detail="NOT AUTHENTICATED")
-
-
-

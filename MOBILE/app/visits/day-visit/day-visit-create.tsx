@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, FlatList, Image, Keyboard } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { Sun, Plus, Trash2, CheckCircle2, ChevronDown, Building, X, Clock, MapPin, Camera } from 'lucide-react-native';
+import { Sun, Plus, Trash2, CheckCircle2, ChevronDown, Building, X, Clock, MapPin, Camera, Lock } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { getSites, getClients, getSiteGuards, Site, Client, checkOutSiteVisit } from '../../../services/siteService';
 import { submitDayVisitReport, getDayVisitTemplates } from '../../../services/visitService';
-import { clearActiveCheckIn } from '../../../services/db';
+import { clearActiveCheckIn, markReportSubmittedForCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
@@ -52,7 +52,7 @@ export default function CreateDayVisitReportScreen() {
     params.checkInTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   );
   const [endTime, setEndTime] = useState(
-    params.checkOutTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    params.checkOutTime || null
   );
 
   // Custom On-Spot Questions State
@@ -71,6 +71,7 @@ export default function CreateDayVisitReportScreen() {
 
   const getSiteDurationText = () => {
     try {
+      if (!startTime || !endTime) return null;
       const [sH, sM] = startTime.split(':').map(Number);
       const [eH, eM] = endTime.split(':').map(Number);
       if (isNaN(sH) || isNaN(sM) || isNaN(eH) || isNaN(eM)) return null;
@@ -91,7 +92,10 @@ export default function CreateDayVisitReportScreen() {
   };
 
   // Dynamic Template Questions from DB (FIELD_OFFICER_DAY_VISIT_TEMPLATES)
-  const [templateQuestions, setTemplateQuestions] = useState<Array<{ id: string; section?: string; question: string }>>([]);
+  const [allTemplatePool, setAllTemplatePool] = useState<Array<{ id: string; section?: string; question: string; required?: boolean }>>([]);
+  const [templateQuestions, setTemplateQuestions] = useState<Array<{ id: string; section?: string; question: string; required?: boolean }>>([]);
+  const [onSpotModalVisible, setOnSpotModalVisible] = useState(false);
+  const [bankSearchQuery, setBankSearchQuery] = useState('');
 
   // Time Picker 24h State
   const [timePickerConfig, setTimePickerConfig] = useState<{
@@ -130,8 +134,9 @@ export default function CreateDayVisitReportScreen() {
         base64: true,
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const photoUri = result.assets[0].uri;
-        setQuestionPhotos((prev) => ({ ...prev, [qText]: photoUri }));
+        const asset = result.assets[0];
+        const photoData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        setQuestionPhotos((prev) => ({ ...prev, [qText]: photoData }));
       }
     } catch (e) {
       console.warn('Error launching camera for question photo:', e);
@@ -230,16 +235,24 @@ export default function CreateDayVisitReportScreen() {
       setClients(clientData || []);
       setSites(siteData || []);
 
-      // Load DB template questions from FIELD_OFFICER_DAY_VISIT_TEMPLATES or fallback to mandatory questions
-      let qList: any[] = [];
+      // Load DB template questions from FIELD_OFFICER_DAY_VISIT_TEMPLATES
+      let allQs: any[] = [];
       if (templates && templates.length > 0 && templates[0].questions?.length > 0) {
-        qList = templates[0].questions;
+        allQs = templates[0].questions;
       } else {
-        qList = DEFAULT_DAY_MANDATORY_QUESTIONS;
+        allQs = DEFAULT_DAY_MANDATORY_QUESTIONS;
       }
-      setTemplateQuestions(qList);
+      setAllTemplatePool(allQs);
+
+      // Only show required questions in the initial checklist
+      const requiredQs = allQs.filter(
+        (q: any) => q.required === true || q.is_required === true || q.required === 1 || q.is_required === 1 || q.mandatory === true
+      );
+      const defaultList = requiredQs.length > 0 ? requiredQs : allQs.slice(0, 5);
+      setTemplateQuestions(defaultList);
+
       const initChecklist: Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'> = {};
-      qList.forEach((qItem: any) => {
+      defaultList.forEach((qItem: any) => {
         const text = qItem.question || String(qItem);
         initChecklist[text] = 'Satisfactory';
       });
@@ -302,18 +315,59 @@ export default function CreateDayVisitReportScreen() {
     setGuards(guards.filter((_, i) => i !== idx));
   };
 
+  const availableBankQuestions = allTemplatePool.filter((q: any) => {
+    const qText = (q.question || String(q)).toLowerCase().trim();
+    const inRequired = templateQuestions.some((t: any) => (t.question || String(t)).toLowerCase().trim() === qText);
+    const inCustom = customQuestions.some((c: any) => (c.question || String(c)).toLowerCase().trim() === qText);
+    return !inRequired && !inCustom;
+  });
+
+  const filteredBankQuestions = availableBankQuestions.filter((q: any) => {
+    const qText = (q.question || String(q)).toLowerCase();
+    const qSec = (q.section || '').toLowerCase();
+    const query = bankSearchQuery.toLowerCase();
+    return qText.includes(query) || qSec.includes(query);
+  });
+
+  const handleAddFromBank = (qItem: any) => {
+    const qText = qItem.question || String(qItem);
+    const newQ = {
+      id: qItem.id || `bank_${Date.now()}`,
+      section: qItem.section || 'On-Spot Inspection',
+      question: qText,
+      isCustom: true,
+    };
+    setCustomQuestions((prev) => [...prev, newQ]);
+    setChecklist((prev) => ({ ...prev, [qText]: 'Satisfactory' }));
+    setOnSpotModalVisible(false);
+    setBankSearchQuery('');
+    Alert.alert('Question Added', `"${qText}" added to the checklist.`);
+  };
+
   const handleAddCustomQuestion = () => {
-    if (!newQuestionText.trim()) return;
     const qText = newQuestionText.trim();
+    if (!qText) {
+      Alert.alert('Question Required', 'Please enter your on-spot inspection question in the input field first.');
+      return;
+    }
+    const exists = [...templateQuestions, ...customQuestions].some(
+      (q: any) => (q.question || String(q)).toLowerCase() === qText.toLowerCase()
+    );
+    if (exists) {
+      Alert.alert('Duplicate Item', 'This checklist item already exists in the checklist.');
+      return;
+    }
     const newQ = {
       id: `spot_${Date.now()}`,
-      section: 'On-Spot Inspection',
+      section: 'Custom Inspection',
       question: qText,
       isCustom: true,
     };
     setCustomQuestions((prev) => [...prev, newQ]);
     setChecklist((prev) => ({ ...prev, [qText]: 'Satisfactory' }));
     setNewQuestionText('');
+    Keyboard.dismiss();
+    Alert.alert('Question Added', `"${qText}" added to the checklist.`);
   };
 
   const handleRemoveCustomQuestion = (qText: string) => {
@@ -372,26 +426,16 @@ export default function CreateDayVisitReportScreen() {
         status: 'Completed',
       };
 
-      await submitDayVisitReport(payload);
+      const res = await submitDayVisitReport(payload);
 
-      // Trigger automatic Check-Out of the Site Visit Session
-      const empOid = user?.id || (user as any)?.oid || user?.employee_id || 7558;
-      try {
-        await checkOutSiteVisit({
-          employee_id: empOid,
-          site_id: parseInt(siteId, 10) || 187,
-        });
-      } catch (checkOutErr) {
-        console.warn('Auto check-out warning:', checkOutErr);
+      if (params.plannedId || siteId) {
+        await markReportSubmittedForCheckIn(params.plannedId, siteId, (res as any)?.report_id || (res as any)?.oid, 'Day Visit');
       }
 
-      if (params.plannedId) {
-        await clearActiveCheckIn(params.plannedId);
-      }
       setAlertInfo({
         visible: true,
-        title: t('day_visit_submitted'),
-        message: 'Day Visit Report submitted successfully and site visit session checked out.',
+        title: t('day_visit_submitted') || 'Report Submitted',
+        message: 'Day Visit Report submitted successfully! Please tap Check-Out on the visits screen when you leave site.',
         type: 'success',
       });
     } catch (e: any) {
@@ -411,92 +455,55 @@ export default function CreateDayVisitReportScreen() {
     <View style={styles.container}>
       <StepIndicator steps={STEPS} currentStep={currentStep} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 140 }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={true}
+        indicatorStyle="white"
+      >
         {/* STEP 0: General Info */}
         {currentStep === 0 && (
           <Card style={styles.stepCard}>
             <Text style={styles.stepTitle}>General Information</Text>
 
             {/* Client Selector Dropdown */}
-            <Text style={styles.fieldLabel}>SELECT CLIENT</Text>
+            <Text style={styles.fieldLabel}>CLIENT {Boolean(params.siteId || params.plannedId) ? '(LOCKED)' : ''}</Text>
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={Boolean(params.siteId || params.plannedId) ? 1 : 0.8}
+              disabled={Boolean(params.siteId || params.plannedId)}
               onPress={() => setClientModalVisible(true)}
-              style={styles.pickerButton}
+              style={[styles.pickerButton, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonLocked : null]}
             >
-              <Text style={styles.pickerButtonText}>
+              <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonTextLocked : null]}>
                 {clientName || clients.find((c) => String(c.id) === String(clientId))?.name || 'Select Client...'}
               </Text>
-              <ChevronDown color={THEME.textVariant} size={20} />
+              {Boolean(params.siteId || params.plannedId) ? (
+                <Lock color="#64748B" size={16} />
+              ) : (
+                <ChevronDown color={THEME.textVariant} size={20} />
+              )}
             </TouchableOpacity>
 
             {/* Site Selector Dropdown */}
-            <Text style={styles.fieldLabel}>SELECT SITE</Text>
+            <Text style={styles.fieldLabel}>SITE {Boolean(params.siteId || params.plannedId) ? '(LOCKED)' : ''}</Text>
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={Boolean(params.siteId || params.plannedId) ? 1 : 0.8}
+              disabled={Boolean(params.siteId || params.plannedId)}
               onPress={() => setSiteModalVisible(true)}
-              style={styles.pickerButton}
+              style={[styles.pickerButton, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonLocked : null]}
             >
-              <Text style={styles.pickerButtonText}>
+              <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonTextLocked : null]}>
                 {siteName || sites.find((s) => String(s.id) === String(siteId))?.name || 'Select Site...'}
               </Text>
-              <ChevronDown color={THEME.textVariant} size={20} />
+              {Boolean(params.siteId || params.plannedId) ? (
+                <Lock color="#64748B" size={16} />
+              ) : (
+                <ChevronDown color={THEME.textVariant} size={20} />
+              )}
             </TouchableOpacity>
 
             <Input label="Shift" value={shift} onChangeText={setShift} />
             <Input label="Visit Date" value={visitDate} onChangeText={setVisitDate} />
-            
-            {/* Check-In Time 24h Selector + Check-In Now Button */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-              <Text style={styles.fieldLabel}>CHECK-IN TIME (START)</Text>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={handleCheckInNow}
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}
-              >
-                <Clock color="#10B981" size={13} style={{ marginRight: 4 }} />
-                <Text style={{ fontSize: 11, fontWeight: '800', color: '#10B981' }}>Check-In Now</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setTimePickerConfig({ visible: true, mode: 'start', title: 'Select Check-In Time (24-Hour Clock)', value: startTime })}
-              style={styles.pickerButton}
-            >
-              <Text style={styles.pickerButtonText}>{startTime} (HH:mm)</Text>
-              <Clock color={THEME.primary} size={20} />
-            </TouchableOpacity>
-
-            {/* Check-Out Time 24h Selector + Check-Out Now Button */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-              <Text style={styles.fieldLabel}>CHECK-OUT TIME (END)</Text>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={handleCheckOutNow}
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 158, 11, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)' }}
-              >
-                <Clock color="#F59E0B" size={13} style={{ marginRight: 4 }} />
-                <Text style={{ fontSize: 11, fontWeight: '800', color: '#F59E0B' }}>Check-Out Now</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setTimePickerConfig({ visible: true, mode: 'end', title: 'Select Check-Out Time (24-Hour Clock)', value: endTime })}
-              style={styles.pickerButton}
-            >
-              <Text style={styles.pickerButtonText}>{endTime} (HH:mm)</Text>
-              <Clock color={THEME.primary} size={20} />
-            </TouchableOpacity>
-
-            {/* Total Site Duration Banner */}
-            {getSiteDurationText() ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.12)', padding: 12, borderRadius: 10, marginTop: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.25)' }}>
-                <Clock color="#3B82F6" size={18} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#93C5FD' }}>
-                  Total Time Spent on Site: <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>{getSiteDurationText()}</Text>
-                </Text>
-              </View>
-            ) : null}
 
             {/* GPS Location Status Banner */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: 12, borderRadius: 10, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.25)' }}>
@@ -693,19 +700,47 @@ export default function CreateDayVisitReportScreen() {
               );
             })}
 
-            <Text style={[styles.stepTitle, { marginTop: 16 }]}>Add On-Spot Inspection Question</Text>
-            <Input
-              label="On-Spot Question / Item"
-              value={newQuestionText}
-              onChangeText={setNewQuestionText}
-              placeholder="e.g. Is rear emergency fire exit clear of obstruction?"
-            />
-            <Button
-              title="Add On-Spot Question to Checklist"
-              variant="outline"
-              onPress={handleAddCustomQuestion}
-              icon={<Plus color={THEME.primary} size={18} />}
-            />
+            <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.1)' }}>
+              <Text style={[styles.stepTitle, { marginBottom: 4 }]}>Add On-Spot Inspection Question</Text>
+              <Text style={{ fontSize: 12, color: THEME.textVariant, marginBottom: 14 }}>
+                Add extra inspection points from the question pool or type a new custom item.
+              </Text>
+
+              {/* 1. Dropdown / Picker from Template Pool */}
+              {availableBankQuestions.length > 0 ? (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={styles.fieldLabel}>CHOOSE FROM QUESTION POOL ({availableBankQuestions.length} AVAILABLE)</Text>
+                  <TouchableOpacity
+                    style={styles.pickerButton}
+                    activeOpacity={0.8}
+                    onPress={() => setOnSpotModalVisible(true)}
+                  >
+                    <Text style={[styles.pickerButtonText, { color: '#E2E8F0' }]}>
+                      Select from Question Bank...
+                    </Text>
+                    <ChevronDown size={20} color={THEME.textVariant} />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {/* 2. Custom Question Input */}
+              <View>
+                <Input
+                  label="OR Type a New Custom Question"
+                  value={newQuestionText}
+                  onChangeText={setNewQuestionText}
+                  placeholder="e.g. Is rear emergency fire exit clear of obstruction?"
+                  returnKeyType="done"
+                  onSubmitEditing={handleAddCustomQuestion}
+                />
+                <Button
+                  title="Add Custom Question to Checklist"
+                  variant="outline"
+                  onPress={handleAddCustomQuestion}
+                  icon={<Plus color={THEME.primary} size={18} />}
+                />
+              </View>
+            </View>
           </Card>
         )}
 
@@ -874,6 +909,66 @@ export default function CreateDayVisitReportScreen() {
         }}
         onClose={() => setTimePickerConfig((prev) => ({ ...prev, visible: false }))}
       />
+
+      {/* On-Spot Question Bank Modal */}
+      <Modal visible={onSpotModalVisible} transparent animationType="slide" onRequestClose={() => setOnSpotModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Question from Pool ({availableBankQuestions.length})</Text>
+              <TouchableOpacity onPress={() => setOnSpotModalVisible(false)}>
+                <X color="#94A3B8" size={20} />
+              </TouchableOpacity>
+            </View>
+
+            <Input
+              placeholder="Search questions in pool..."
+              value={bankSearchQuery}
+              onChangeText={setBankSearchQuery}
+              containerStyle={{ marginVertical: 8 }}
+            />
+
+            <FlatList
+              data={filteredBankQuestions}
+              keyExtractor={(item, index) => item.id || `bank_q_${index}`}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={{
+                    padding: 14,
+                    borderBottomWidth: 1,
+                    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    marginBottom: 6,
+                    borderRadius: 8,
+                  }}
+                  activeOpacity={0.7}
+                  onPress={() => handleAddFromBank(item)}
+                >
+                  {item.section ? (
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: THEME.primary, marginBottom: 2 }}>
+                      {item.section.toUpperCase()}
+                    </Text>
+                  ) : null}
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFFFFF' }}>
+                    {item.question}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={{ padding: 24, alignItems: 'center' }}>
+                  <Text style={{ color: THEME.textVariant, textAlign: 'center' }}>
+                    {availableBankQuestions.length === 0
+                      ? 'All questions from the pool have been added.'
+                      : 'No questions match your search.'}
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -907,6 +1002,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#F8FAFC',
+  },
+  pickerButtonLocked: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+  },
+  pickerButtonTextLocked: {
+    color: '#CBD5E1',
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

@@ -17,13 +17,26 @@ export const Input: React.FC<InputProps> = ({
   style,
   ...props
 }) => {
+  const isMultiline = !!props.multiline;
+
   return (
     <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputWrapper, error ? styles.inputError : null]}>
-        {leftIcon && <View style={styles.leftIconContainer}>{leftIcon}</View>}
+      <View
+        style={[
+          styles.inputWrapper,
+          isMultiline ? styles.inputWrapperMultiline : null,
+          error ? styles.inputError : null,
+        ]}
+      >
+        {leftIcon && <View style={[styles.leftIconContainer, isMultiline ? { marginTop: 2 } : null]}>{leftIcon}</View>}
         <TextInput
-          style={[styles.input, style]}
+          style={[
+            styles.input,
+            isMultiline ? styles.inputMultiline : null,
+            style,
+          ]}
+          textAlignVertical={isMultiline ? 'top' : 'center'}
           placeholderTextColor="#64748B"
           {...props}
         />
@@ -48,12 +61,17 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 48,
+    minHeight: 48,
     backgroundColor: '#1E293B',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: THEME.border,
     paddingHorizontal: 14,
+  },
+  inputWrapperMultiline: {
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    minHeight: 90,
   },
   leftIconContainer: {
     marginRight: 10,
@@ -62,9 +80,15 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: '100%',
+    minHeight: 40,
     color: THEME.text,
     fontSize: THEME.typography.sm,
+  },
+  inputMultiline: {
+    minHeight: 70,
+    textAlignVertical: 'top',
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   inputError: {
     borderColor: THEME.danger,

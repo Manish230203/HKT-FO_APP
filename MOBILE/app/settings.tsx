@@ -302,10 +302,22 @@ export default function SettingsScreen() {
                   <Text style={styles.detailsFieldLabel}>JOINING DATE</Text>
                   <Calendar color="#3B82F6" size={20} />
                 </View>
-                <Text style={styles.detailsMainVal}>Mar 12, 2012</Text>
+                <Text style={styles.detailsMainVal}>
+                  {user?.date_of_joining ? new Date(user.date_of_joining).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Aug 29, 2016'}
+                </Text>
 
                 <Text style={[styles.detailsFieldLabel, { marginTop: 14 }]}>TENURE</Text>
-                <Text style={styles.detailsMainVal}>14 Years, 5 Months</Text>
+                <Text style={styles.detailsMainVal}>
+                  {(() => {
+                    if (!user?.date_of_joining) return '9 Years, 6 Months';
+                    const start = new Date(user.date_of_joining);
+                    const now = new Date();
+                    let years = now.getFullYear() - start.getFullYear();
+                    let months = now.getMonth() - start.getMonth();
+                    if (months < 0) { years--; months += 12; }
+                    return `${years} Years, ${months} Months`;
+                  })()}
+                </Text>
               </View>
 
               <View style={styles.detailsCard}>
@@ -313,21 +325,25 @@ export default function SettingsScreen() {
                   <Text style={styles.detailsFieldLabel}>DEPLOYMENT DATE</Text>
                   <MapPin color="#3B82F6" size={20} />
                 </View>
-                <Text style={styles.detailsMainVal}>Mar 12, 2012</Text>
+                <Text style={styles.detailsMainVal}>
+                  {user?.date_of_joining ? new Date(user.date_of_joining).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Aug 29, 2016'}
+                </Text>
 
                 <View style={styles.subDetailBox}>
                   <Text style={styles.subDetailLabel}>CLIENT</Text>
-                  <Text style={styles.subDetailVal}>Tata Power</Text>
+                  <Text style={styles.subDetailVal}>{user?.client_name || 'Unique Delta Force Pvt. Ltd.'}</Text>
                 </View>
 
                 <View style={styles.subDetailBox}>
                   <Text style={styles.subDetailLabel}>BRANCH</Text>
-                  <Text style={styles.subDetailVal}>Pune</Text>
+                  <Text style={styles.subDetailVal}>{user?.branch_name || 'Pune'}</Text>
                 </View>
 
                 <View style={styles.subDetailBox}>
                   <Text style={styles.subDetailLabel}>SITE</Text>
-                  <Text style={styles.subDetailVal}>Humankind Technology</Text>
+                  <Text style={styles.subDetailVal}>
+                    {user?.site_name || (user?.site_id === 192 ? 'UDF KASARWADI PUNE' : (user?.site_id ? `Site #${user.site_id}` : 'UDF KASARWADI PUNE'))}
+                  </Text>
                 </View>
               </View>
             </ScrollView>

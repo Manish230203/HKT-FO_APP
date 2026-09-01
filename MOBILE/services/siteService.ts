@@ -1,4 +1,5 @@
 import api from './api';
+import gpsTracker from './gpsService';
 
 export interface Client {
   id: number;
@@ -35,6 +36,7 @@ export interface PlannedVisit {
   completedVisits?: number;
   pendingVisits?: number;
   status?: string;
+  radius?: number;
 }
 
 export interface ActiveSiteSession {
@@ -112,6 +114,13 @@ export const checkInSiteVisit = async (payload: {
   longitude?: number;
 }) => {
   const response = await api.post('/site-visit/check-in', payload);
+  if (response.data && response.data.success) {
+    try {
+      await gpsTracker.updateTrackingConfiguration(true);
+    } catch (e) {
+      console.warn('Failed to update gps config on check-in:', e);
+    }
+  }
   return response.data;
 };
 
@@ -122,6 +131,13 @@ export const checkOutSiteVisit = async (payload: {
   longitude?: number;
 }) => {
   const response = await api.post('/site-visit/check-out', payload);
+  if (response.data && response.data.success) {
+    try {
+      await gpsTracker.updateTrackingConfiguration(false);
+    } catch (e) {
+      console.warn('Failed to update gps config on check-out:', e);
+    }
+  }
   return response.data;
 };
 

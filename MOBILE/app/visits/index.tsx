@@ -10,6 +10,7 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -36,7 +37,7 @@ import {
   ActiveSiteSession,
 } from '../../services/siteService';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits, sendReportEmail } from '../../services/visitService';
-import { getActiveCheckIns, saveActiveCheckIns, clearActiveCheckIn } from '../../services/db';
+import { getActiveCheckIns, saveActiveCheckIns, clearActiveCheckIn, ActiveCheckInInfo } from '../../services/db';
 import { THEME } from '../../constants/theme';
 import * as Location from 'expo-location';
 
@@ -54,6 +55,9 @@ type CompletedVisit = {
   status: string;
   siteId?: number | string;
   emailAccess?: number | boolean;
+  companyName?: string;
+  companyShortName?: string;
+  companyId?: number;
   rawReport?: any;
 };
 
@@ -82,8 +86,37 @@ export default function VisitsScreen() {
   const [completedVisits, setCompletedVisits] = useState<CompletedVisit[]>([]);
   const [selectedReport, setSelectedReport] = useState<CompletedVisit | null>(null);
 
+  const getReportCompany = (rep: CompletedVisit | null) => {
+    if (!rep) {
+      return {
+        name: 'Unique Delta Force Security Pvt. Ltd.',
+        logo: require('../../assets/images/udf_logo.png'),
+        isEagle: false,
+      };
+    }
+    const r = rep.rawReport || {};
+    const compName = String(rep.companyName || r.companyName || r.company_name || r.employee_company_name || user?.company_name || '').toLowerCase();
+    const compId = Number(rep.companyId || r.companyId || r.company_id || r.COMPANY || user?.company_id || 1);
+    const officerName = String(rep.officer || r.officer || user?.name || '').toLowerCase();
+
+    const isEagle = compId === 4 || compName.includes('eagle') || compName.includes('eispl') || officerName.includes('anil bhosale') || officerName.includes('bhosale');
+
+    if (isEagle) {
+      return {
+        name: 'Eagle Industrial Services Pvt. Ltd.',
+        logo: require('../../assets/images/eagle_logo.png'),
+        isEagle: true,
+      };
+    }
+    return {
+      name: 'Unique Delta Force Security Pvt. Ltd.',
+      logo: require('../../assets/images/udf_logo.png'),
+      isEagle: false,
+    };
+  };
+
   // Active Checked-In Site Visits State (persisted in AsyncStorage / db.ts)
-  const [activeCheckIns, setActiveCheckIns] = useState<Record<string, { checkInTime: string; date: string; siteId?: string | number; siteName?: string; clientId?: string | number }>>({});
+  const [activeCheckIns, setActiveCheckIns] = useState<Record<string, ActiveCheckInInfo>>({});
   
   // Backend Active Site Session State (SITE_VISIT_SESSIONS table)
   const [activeBackendSession, setActiveBackendSession] = useState<ActiveSiteSession | null>(null);
@@ -240,8 +273,8 @@ export default function VisitsScreen() {
         await fetchActiveSession();
 
         Alert.alert(
-          'Checked-In Successfully',
-          `Check-In recorded at ${nowTime} for site: ${pv.siteName || 'Site'}.\n\nSite visit session is active in SITE_VISIT_SESSIONS.`
+          t('checked_in_success_title') || 'Checked-In Successfully',
+          `Check-In recorded at ${nowTime} for site:\n${pv.siteName || 'Site'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`
         );
       } else if (res && res.has_active_session) {
         setEnforcerModal({
@@ -285,29 +318,126 @@ export default function VisitsScreen() {
     }
   };
 
-  const handleCheckOutAndReport = async (pv: PlannedVisit) => {
-    const empOid = getEmpOid();
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  const handleSubmitReportNav = (pv: PlannedVisit) => {
     const activeData = activeCheckIns[pv.id];
     const cIn = activeData?.checkInTime || (activeBackendSession && activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00');
-    const cOut = nowTime;
-
-    // Call backend Check-Out endpoint for SITE_VISIT_SESSIONS
-    try {
-      await checkOutSiteVisit({
-        employee_id: empOid,
-        site_id: Number(pv.siteId),
-        latitude: userLocation?.latitude,
-        longitude: userLocation?.longitude,
-      });
-      await fetchActiveSession();
-    } catch (e) {
-      console.warn('Check-out warning:', e);
-    }
-
     router.push(
-      `/visits/select-type?clientId=${pv.clientId || ''}&siteId=${pv.siteId || ''}&plannedId=${pv.id}&checkInTime=${cIn}&checkOutTime=${cOut}`
+      `/visits/select-type?clientId=${pv.clientId || ''}&siteId=${pv.siteId || ''}&plannedId=${pv.id}&checkInTime=${cIn}`
     );
+  };
+
+  const handleCheckOutVisit = async (pv: PlannedVisit) => {
+    Alert.alert(
+      t('confirm_checkout_title') || 'Confirm Check-Out',
+      `Are you sure you want to check out from ${pv.siteName || 'this site'}?\n\nThis will complete and end your visit session.`,
+      [
+        {
+          text: t('cancel') || 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: t('checkout') || 'Check-Out',
+          style: 'destructive',
+          onPress: async () => {
+            const empOid = getEmpOid();
+            try {
+              await checkOutSiteVisit({
+                employee_id: empOid,
+                site_id: Number(pv.siteId),
+                latitude: userLocation?.latitude,
+                longitude: userLocation?.longitude,
+              });
+              await clearActiveCheckIn(pv.id);
+              const updatedCheckIns = { ...activeCheckIns };
+              delete updatedCheckIns[pv.id];
+              setActiveCheckIns(updatedCheckIns);
+              await fetchActiveSession();
+              await fetchVisits();
+              setActiveTab('completed');
+              Alert.alert(t('visit_completed_title') || 'Visit Completed', t('visit_completed_desc') || 'You have checked out successfully! Visit record is complete.');
+            } catch (e: any) {
+              console.error('Check-out error:', e);
+              Alert.alert('Check-Out Error', e?.response?.data?.message || 'Failed to complete check out.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const isReportSubmittedForSite = (siteId?: number | string, siteName?: string) => {
+    if (!siteId && !siteName) return false;
+    // 1. Check local activeCheckIns state
+    const matchingPv = siteId ? plannedVisits.find((pv) => Number(pv.siteId) === Number(siteId)) : undefined;
+    const activeData = matchingPv ? activeCheckIns[String(matchingPv.id)] : Object.values(activeCheckIns).find((a: any) => Number(a?.siteId) === Number(siteId));
+    if (activeData?.reportSubmitted) return true;
+
+    // 2. Check if a report exists in completedVisits for this site today
+    const sNameNorm = (siteName || '').toLowerCase().trim();
+    const hasCompleted = completedVisits.some((cv) => {
+      const cvSiteId = cv.siteId || cv.rawReport?.site_id || cv.rawReport?.siteId;
+      const cvSiteName = (cv.siteName || cv.rawReport?.site_name || '').toLowerCase().trim();
+      if (siteId && cvSiteId && Number(cvSiteId) === Number(siteId)) return true;
+      if (sNameNorm && cvSiteName && (cvSiteName === sNameNorm || cvSiteName.includes(sNameNorm) || sNameNorm.includes(cvSiteName))) return true;
+      return false;
+    });
+
+    return hasCompleted;
+  };
+
+  const handleTopCheckOut = async () => {
+    if (!activeBackendSession) return;
+
+    // Search for a matching planned visit for this site
+    const matchingPv = plannedVisits.find((pv) => Number(pv.siteId) === Number(activeBackendSession.site_id));
+    const isSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name);
+
+    if (isSubmitted) {
+      if (matchingPv) {
+        await handleCheckOutVisit(matchingPv);
+      } else {
+        Alert.alert(
+          t('confirm_checkout_title') || 'Confirm Check-Out',
+          `Are you sure you want to check out from ${activeBackendSession.site_name || 'this site'}?\n\nThis will complete and end your visit session.`,
+          [
+            {
+              text: t('cancel') || 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: t('checkout') || 'Check-Out',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  const empOid = getEmpOid();
+                  await checkOutSiteVisit({
+                    employee_id: empOid,
+                    site_id: Number(activeBackendSession.site_id),
+                    latitude: userLocation?.latitude,
+                    longitude: userLocation?.longitude,
+                  });
+                  if (activeBackendSession.site_id) {
+                    await clearActiveCheckIn(activeBackendSession.site_id);
+                  }
+                  await fetchActiveSession();
+                  await fetchVisits();
+                  setActiveTab('completed');
+                  Alert.alert(t('visit_completed_title') || 'Visit Completed', t('visit_completed_desc') || 'You have checked out successfully! Visit record is complete.');
+                } catch (e: any) {
+                  console.error('Check-out error:', e);
+                  Alert.alert('Check-Out Error', e?.response?.data?.message || 'Failed to complete check out.');
+                }
+              },
+            },
+          ]
+        );
+      }
+    } else {
+      const cIn = activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00';
+      router.push(
+        `/visits/select-type?clientId=${matchingPv?.clientId || ''}&siteId=${activeBackendSession.site_id || ''}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}`
+      );
+    }
   };
 
   // Email Form State (Single Modal)
@@ -422,6 +552,9 @@ export default function VisitsScreen() {
             officer: r.officer || user?.name || 'Amit Kulkarni',
             status: 'Completed',
             emailAccess: r.emailAccess !== undefined ? r.emailAccess : (r.email_access !== undefined ? r.email_access : 1),
+            companyName: r.companyName || r.company_name || user?.company_name || 'Unique Delta Force Security Pvt. Ltd.',
+            companyShortName: r.companyShortName || r.company_short_name || 'UDF',
+            companyId: r.companyId || r.company_id || user?.company_id || 1,
             rawReport: r,
           });
         }
@@ -443,6 +576,9 @@ export default function VisitsScreen() {
             officer: r.officer || user?.name || 'Amit Kulkarni',
             status: 'Completed',
             emailAccess: r.emailAccess !== undefined ? r.emailAccess : (r.email_access !== undefined ? r.email_access : 1),
+            companyName: r.companyName || r.company_name || user?.company_name || 'Unique Delta Force Security Pvt. Ltd.',
+            companyShortName: r.companyShortName || r.company_short_name || 'UDF',
+            companyId: r.companyId || r.company_id || user?.company_id || 1,
             rawReport: r,
           });
         }
@@ -464,6 +600,9 @@ export default function VisitsScreen() {
             officer: r.officer || user?.name || 'Amit Kulkarni',
             status: 'Completed',
             emailAccess: r.emailAccess !== undefined ? r.emailAccess : (r.email_access !== undefined ? r.email_access : 1),
+            companyName: r.companyName || r.company_name || user?.company_name || 'Unique Delta Force Security Pvt. Ltd.',
+            companyShortName: r.companyShortName || r.company_short_name || 'UDF',
+            companyId: r.companyId || r.company_id || user?.company_id || 1,
             rawReport: r,
           });
         }
@@ -552,27 +691,42 @@ export default function VisitsScreen() {
 
 
       {/* ACTIVE SITE VISIT SESSION BANNER */}
-      {activeBackendSession && (
-        <View style={styles.activeSessionBanner}>
-          <View style={styles.activeSessionTextCol}>
-            <View style={styles.activeSessionPulseRow}>
-              <View style={styles.pulseDot} />
-              <Text style={styles.activeSessionTitle}>ACTIVE SITE VISIT SESSION</Text>
+      {activeBackendSession && (() => {
+        const isTopReportSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name);
+
+        return (
+          <View style={[styles.activeSessionBanner, isTopReportSubmitted ? { borderColor: '#A855F7' } : {}]}>
+            <View style={styles.activeSessionTextCol}>
+              <View style={styles.activeSessionPulseRow}>
+                <View style={[styles.pulseDot, { backgroundColor: isTopReportSubmitted ? '#A855F7' : '#10B981' }]} />
+                <Text style={[styles.activeSessionTitle, { color: isTopReportSubmitted ? '#C084FC' : '#60A5FA' }]}>
+                  {isTopReportSubmitted ? 'REPORT SUBMITTED' : 'ACTIVE SITE VISIT SESSION'}
+                </Text>
+              </View>
+              <Text style={styles.activeSessionSiteName}>{activeBackendSession.site_name}</Text>
+              <Text style={styles.activeSessionSubText}>
+                Started at {new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {isTopReportSubmitted ? 'Ready for Check-Out' : 'Report Pending'}
+              </Text>
             </View>
-            <Text style={styles.activeSessionSiteName}>{activeBackendSession.site_name}</Text>
-            <Text style={styles.activeSessionSubText}>
-              Started at {new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Duration: {liveDurationMins} mins
-            </Text>
+            <TouchableOpacity
+              style={[styles.activeSessionCheckoutBtn, { backgroundColor: isTopReportSubmitted ? '#EF4444' : '#3B82F6' }]}
+              onPress={handleTopCheckOut}
+            >
+              {isTopReportSubmitted ? (
+                <>
+                  <LogOutIcon color="#FFFFFF" size={15} style={{ marginRight: 5 }} />
+                  <Text style={styles.activeSessionCheckoutBtnText}>Check-Out</Text>
+                </>
+              ) : (
+                <>
+                  <FileText color="#FFFFFF" size={15} style={{ marginRight: 5 }} />
+                  <Text style={styles.activeSessionCheckoutBtnText}>Submit Report</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.activeSessionCheckoutBtn}
-            onPress={handleForceCheckoutPreviousVisit}
-          >
-            <LogOutIcon color="#FFFFFF" size={15} style={{ marginRight: 5 }} />
-            <Text style={styles.activeSessionCheckoutBtnText}>Check-Out</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        );
+      })()}
 
       <ScrollView
         style={styles.scrollArea}
@@ -605,13 +759,16 @@ export default function VisitsScreen() {
                     Number(pv.latitude),
                     Number(pv.longitude)
                   ));
-                  isOutsideGeofence = distanceMeters > 200;
+                  const allowedRadius = pv.radius !== null && pv.radius !== undefined ? Number(pv.radius) : 100;
+                  isOutsideGeofence = distanceMeters > allowedRadius;
                 } else if (!hasSiteCoords) {
                   isOutsideGeofence = true;
                 }
 
-                // Check if this planned visit site matches the active backend session
-                const isCurrentActiveSite = activeBackendSession && Number(activeBackendSession.site_id) === Number(pv.siteId);
+                // Check if this planned visit site matches the active backend session or local checkin
+                const isReportSubmitted = isReportSubmittedForSite(pv.siteId, pv.siteName);
+                const activeData = activeCheckIns[String(pv.id)] || (activeBackendSession && Number(activeBackendSession.site_id) === Number(pv.siteId) ? { checkInTime: activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00', date: '', siteId: pv.siteId, reportSubmitted: isReportSubmitted } : null);
+                const isCheckedIn = !!activeData || (activeBackendSession && Number(activeBackendSession.site_id) === Number(pv.siteId));
 
                 return (
                   <View key={pv.id} style={styles.visitCard}>
@@ -620,11 +777,11 @@ export default function VisitsScreen() {
                       <View style={styles.planCodeBadge}>
                         <Text style={styles.planCodeText}>{pv.planCode || 'PLAN'}</Text>
                       </View>
-                      {isCurrentActiveSite ? (
-                        <View style={[styles.statusBadge, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
-                          <ClockIcon color="#10B981" size={12} style={{ marginRight: 4 }} />
-                          <Text style={[styles.statusBadgeText, { color: '#10B981', fontWeight: '800' }]}>
-                            Active Visit Session
+                      {isCheckedIn ? (
+                        <View style={[styles.statusBadge, { backgroundColor: isReportSubmitted ? 'rgba(168, 85, 247, 0.2)' : 'rgba(16, 185, 129, 0.2)' }]}>
+                          <ClockIcon color={isReportSubmitted ? '#A855F7' : '#10B981'} size={12} style={{ marginRight: 4 }} />
+                          <Text style={[styles.statusBadgeText, { color: isReportSubmitted ? '#C084FC' : '#10B981', fontWeight: '800' }]}>
+                            {isReportSubmitted ? 'Report Submitted' : `Checked In (${activeData?.checkInTime || 'Active'})`}
                           </Text>
                         </View>
                       ) : (
@@ -649,7 +806,7 @@ export default function VisitsScreen() {
                       <Text style={styles.metaText}>{pv.plannedPeriod || pv.date || 'Weekly Visit'}</Text>
                     </View>
 
-                    {/* Card Bottom: Progress Bar + Check-In / Check-Out Button */}
+                    {/* Card Bottom: Progress Bar + Action Button */}
                     <View style={styles.cardBottomRow}>
                       <View style={styles.progressWrap}>
                         <Text style={styles.progressLabel}>
@@ -668,15 +825,26 @@ export default function VisitsScreen() {
                         </View>
                       </View>
 
-                      {isCurrentActiveSite ? (
-                        <TouchableOpacity
-                          activeOpacity={0.85}
-                          style={[styles.startBtn, { backgroundColor: '#F59E0B' }]}
-                          onPress={() => handleCheckOutAndReport(pv)}
-                        >
-                          <LogOut color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
-                          <Text style={styles.startBtnText}>Check-Out & Report</Text>
-                        </TouchableOpacity>
+                      {isCheckedIn ? (
+                        isReportSubmitted ? (
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            style={[styles.startBtn, { backgroundColor: '#EF4444' }]}
+                            onPress={() => handleCheckOutVisit(pv)}
+                          >
+                            <LogOut color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
+                            <Text style={styles.startBtnText}>Check-Out</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            style={[styles.startBtn, { backgroundColor: '#3B82F6' }]}
+                            onPress={() => handleSubmitReportNav(pv)}
+                          >
+                            <FileText color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
+                            <Text style={styles.startBtnText}>Submit Report</Text>
+                          </TouchableOpacity>
+                        )
                       ) : !hasSiteCoords ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
@@ -733,7 +901,7 @@ export default function VisitsScreen() {
                         >
                           <LogIn color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
                           <Text style={styles.startBtnText}>
-                            {distanceMeters ? `Check-In (${distanceMeters}m)` : 'Check-In Now'}
+                            {t('check_in_now') || 'Check-In'}
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -948,8 +1116,11 @@ export default function VisitsScreen() {
                   {/* Corporate Banner Header (Exact WEB Match) */}
                   <View style={styles.previewCorporateBanner}>
                     <View style={styles.bannerHeaderTopRow}>
-                      <Building2 color="#60A5FA" size={20} />
-                      <Text style={styles.companyNameTitle}>Unique Delta Force Security Pvt. Ltd.</Text>
+                      <Image
+                        source={getReportCompany(selectedReport).logo}
+                        style={{ width: 28, height: 28, resizeMode: 'contain', marginRight: 8 }}
+                      />
+                      <Text style={styles.companyNameTitle}>{getReportCompany(selectedReport).name}</Text>
                     </View>
 
                     <View style={styles.reportTitleBanner}>
@@ -1132,7 +1303,55 @@ export default function VisitsScreen() {
                     </View>
                   )}
 
-                  {/* 6. Remarks & Customer Feedback */}
+                  {/* 6. Photo Evidence */}
+                  {(() => {
+                    const rawPhotos = selectedReport?.rawReport?.photos || selectedReport?.rawReport?.photo_evidence || [];
+                    const baseList = Array.isArray(rawPhotos) ? rawPhotos : (typeof rawPhotos === 'string' ? (JSON.parse(rawPhotos || '[]') || []) : []);
+                    const rawChecklist = selectedReport?.rawReport?.checklist;
+                    const parsedChecklist = Array.isArray(rawChecklist) ? rawChecklist : (typeof rawChecklist === 'string' ? (JSON.parse(rawChecklist || '[]') || []) : []);
+                    const checklistPhotos = (parsedChecklist || []).map((c: any) => c.photo || (Array.isArray(c.photos) ? c.photos[0] : null)).filter(Boolean);
+                    const allPhotos = Array.from(new Set([...baseList, ...checklistPhotos])).filter(Boolean);
+
+                    const resolveMobilePhotoUrl = (url: string) => {
+                      if (!url || typeof url !== 'string') return '';
+                      if (url.startsWith('data:image/') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('file://')) {
+                        return url;
+                      }
+                      if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+                        const clean = url.startsWith('/') ? url : `/${url}`;
+                        const rawApi = process.env.EXPO_PUBLIC_API_URL || 'https://tarot-carrot-celery.ngrok-free.dev';
+                        const serverHost = rawApi.replace(/\/api\/?$/, '');
+                        return `${serverHost}${clean}`;
+                      }
+                      return url;
+                    };
+
+                    if (allPhotos.length === 0) return null;
+
+                    return (
+                      <View style={styles.detailSectionCard}>
+                        <View style={styles.navySectionTitleBox}>
+                          <Text style={styles.navySectionTitle}>PHOTO EVIDENCE ({allPhotos.length})</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12, backgroundColor: '#1E293B', borderRadius: 8 }}>
+                          {allPhotos.map((p: any, idx: number) => {
+                            const fullUrl = resolveMobilePhotoUrl(String(p));
+                            return (
+                              <View key={idx} style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#334155', backgroundColor: '#0F172A' }}>
+                                <Image
+                                  source={{ uri: fullUrl }}
+                                  style={{ width: '100%', height: '100%' }}
+                                  resizeMode="cover"
+                                />
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })()}
+
+                  {/* 7. Remarks & Customer Feedback */}
                   <View style={styles.detailSectionCard}>
                     <View style={styles.navySectionTitleBox}>
                       <Text style={styles.navySectionTitle}>REMARKS & OFFICER SUGGESTIONS</Text>
@@ -1147,7 +1366,7 @@ export default function VisitsScreen() {
                     </View>
                   </View>
 
-                  {/* 7. Action Button: Send Email Report */}
+                  {/* 8. Action Button: Send Email Report */}
                   <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => handleOpenEmailForm(selectedReport)}

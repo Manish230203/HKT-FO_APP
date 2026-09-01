@@ -35,7 +35,8 @@ def get_db_pool():
                 host=DB_HOST,
                 user=DB_USER,
                 password=DB_PASSWORD,
-                database=DB_NAME
+                database=DB_NAME,
+                init_command="SET time_zone = '+05:30'"
             )
         except Exception as e:
             print(f"Error creating connection pool: {e}")
@@ -54,7 +55,8 @@ def get_db_connection():
             host=DB_HOST,
             user=DB_USER,
             password=DB_PASSWORD,
-            database=DB_NAME
+            database=DB_NAME,
+            init_command="SET time_zone = '+05:30'"
         )
     except mysql.connector.Error as err:
         print(f"Error connecting to database: {err}")
@@ -66,6 +68,7 @@ SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{D
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
+    connect_args={"init_command": "SET time_zone = '+05:30'"},
     pool_pre_ping=True,
     pool_size=3,
     max_overflow=2,

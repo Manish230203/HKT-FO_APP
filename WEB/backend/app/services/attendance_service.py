@@ -511,11 +511,15 @@ def approve_regularization_logic(reg_id: int, approved_by_name: str):
             elif primary_client_oid and punch_client_oid and int(primary_client_oid) == int(punch_client_oid):
                 duty_type = "OUTPOST"
                 
+            cursor.execute("SELECT COALESCE(MAX(oid), 0) + 1 as next_oid FROM ATTENDANCE_ROW")
+            next_row_res = cursor.fetchone()
+            next_row_oid = next_row_res["next_oid"] if next_row_res else 1
+                
             cursor.execute("""
-                INSERT INTO ATTENDANCE_ROW (yearmonth, duty_type, EMPLOYEE, ATTENDANCE_SITE, DUTY_DESIGNATION)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (year_month, duty_type, emp_oid, site_oid, designation))
-            row_oid = cursor.lastrowid
+                INSERT INTO ATTENDANCE_ROW (oid, yearmonth, duty_type, EMPLOYEE, ATTENDANCE_SITE, DUTY_DESIGNATION)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (next_row_oid, year_month, duty_type, emp_oid, site_oid, designation))
+            row_oid = next_row_oid
             
         # 4. Find/Create ATTENDANCE_CELL
         cursor.execute("""
@@ -527,11 +531,15 @@ def approve_regularization_logic(reg_id: int, approved_by_name: str):
         if cell_res:
             cell_oid = cell_res["oid"]
         else:
+            cursor.execute("SELECT COALESCE(MAX(oid), 0) + 1 as next_oid FROM ATTENDANCE_CELL")
+            next_cell_res = cursor.fetchone()
+            next_cell_oid = next_cell_res["next_oid"] if next_cell_res else 1
+
             cursor.execute("""
-                INSERT INTO ATTENDANCE_CELL (attendance_date, attendance_state, EMPLOYEE_DESIGNATION, CLIENT_DESIGNATION, EMPLOYEE_SITE, ATTENDANCE_SITE, ATTENDANCE_ROW, EMPLOYEE)
-                VALUES (%s, 'IN', %s, %s, %s, %s, %s, %s)
-            """, (duty_date, emp["company_designation"] or designation, designation, user_assigned_site, site_oid, row_oid, emp_oid))
-            cell_oid = cursor.lastrowid
+                INSERT INTO ATTENDANCE_CELL (oid, attendance_date, attendance_state, EMPLOYEE_DESIGNATION, CLIENT_DESIGNATION, EMPLOYEE_SITE, ATTENDANCE_SITE, ATTENDANCE_ROW, EMPLOYEE)
+                VALUES (%s, %s, 'IN', %s, %s, %s, %s, %s, %s)
+            """, (next_cell_oid, duty_date, emp["company_designation"] or designation, designation, user_assigned_site, site_oid, row_oid, emp_oid))
+            cell_oid = next_cell_oid
             
         # 5. Resolve Shift & Shift Designation Count
         cursor.execute("SELECT oid FROM SHIFT WHERE name = %s AND SITE = %s LIMIT 1", (shift_name, site_oid))
@@ -567,16 +575,20 @@ def approve_regularization_logic(reg_id: int, approved_by_name: str):
             else:
                 cursor.execute("UPDATE ATTENDANCE_TIME_LOG SET out_time = %s WHERE oid = %s", (datetime_str, log_oid))
         else:
+            cursor.execute("SELECT COALESCE(MAX(oid), 0) + 1 as next_oid FROM ATTENDANCE_TIME_LOG")
+            next_log_res = cursor.fetchone()
+            next_log_oid = next_log_res["next_oid"] if next_log_res else 1
+
             if reg_for == "Punch In":
                 cursor.execute("""
-                    INSERT INTO ATTENDANCE_TIME_LOG (in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
-                    VALUES (%s, %s, %s)
-                """, (datetime_str, cell_oid, sdc_oid))
+                    INSERT INTO ATTENDANCE_TIME_LOG (oid, in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
+                    VALUES (%s, %s, %s, %s)
+                """, (next_log_oid, datetime_str, cell_oid, sdc_oid))
             else:
                 cursor.execute("""
-                    INSERT INTO ATTENDANCE_TIME_LOG (out_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
-                    VALUES (%s, %s, %s)
-                """, (datetime_str, cell_oid, sdc_oid))
+                    INSERT INTO ATTENDANCE_TIME_LOG (oid, out_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
+                    VALUES (%s, %s, %s, %s)
+                """, (next_log_oid, datetime_str, cell_oid, sdc_oid))
                 
         # 7. Update ATTENDANCE_CELL state based on active log
         cursor.execute("SELECT in_time, out_time FROM ATTENDANCE_TIME_LOG WHERE ATTENDANCE_CELL = %s LIMIT 1", (cell_oid,))
@@ -1185,11 +1197,15 @@ def mark_attendance_logic(data):
                 row_oid = row_res["oid"]
                 cursor.execute("UPDATE ATTENDANCE_ROW SET duty_type = %s WHERE oid = %s", (duty_type, row_oid))
             else:
+                cursor.execute("SELECT COALESCE(MAX(oid), 0) + 1 as next_oid FROM ATTENDANCE_ROW")
+                next_row_res = cursor.fetchone()
+                next_row_oid = next_row_res["next_oid"] if next_row_res else 1
+
                 cursor.execute("""
-                    INSERT INTO ATTENDANCE_ROW (yearmonth, duty_type, EMPLOYEE, ATTENDANCE_SITE, DUTY_DESIGNATION)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (year_month, duty_type, empOid, user["site_oid"], duty_desig))
-                row_oid = cursor.lastrowid
+                    INSERT INTO ATTENDANCE_ROW (oid, yearmonth, duty_type, EMPLOYEE, ATTENDANCE_SITE, DUTY_DESIGNATION)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (next_row_oid, year_month, duty_type, empOid, user["site_oid"], duty_desig))
+                row_oid = next_row_oid
 
             cursor.execute("""
                 SELECT oid FROM ATTENDANCE_CELL 
@@ -1201,17 +1217,25 @@ def mark_attendance_logic(data):
                 cell_oid = cell_res["oid"]
                 cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'IN' WHERE oid = %s", (cell_oid,))
             else:
+                cursor.execute("SELECT COALESCE(MAX(oid), 0) + 1 as next_oid FROM ATTENDANCE_CELL")
+                next_cell_res = cursor.fetchone()
+                next_cell_oid = next_cell_res["next_oid"] if next_cell_res else 1
+
                 cursor.execute("""
-                    INSERT INTO ATTENDANCE_CELL (attendance_date, attendance_state, EMPLOYEE_DESIGNATION, CLIENT_DESIGNATION, EMPLOYEE_SITE, ATTENDANCE_SITE, ATTENDANCE_ROW, EMPLOYEE)
-                    VALUES (%s, 'IN', %s, %s, %s, %s, %s, %s)
-                """, (today, user["COMPANY_DESIGNATION"] or user["DESIGNATION"], user["DESIGNATION"], user_assigned_site, active_site_oid, row_oid, empOid))
-                cell_oid = cursor.lastrowid
+                    INSERT INTO ATTENDANCE_CELL (oid, attendance_date, attendance_state, EMPLOYEE_DESIGNATION, CLIENT_DESIGNATION, EMPLOYEE_SITE, ATTENDANCE_SITE, ATTENDANCE_ROW, EMPLOYEE)
+                    VALUES (%s, %s, 'IN', %s, %s, %s, %s, %s, %s)
+                """, (next_cell_oid, today, user["COMPANY_DESIGNATION"] or user["DESIGNATION"], user["DESIGNATION"], user_assigned_site, active_site_oid, row_oid, empOid))
+                cell_oid = next_cell_oid
+
+            cursor.execute("SELECT COALESCE(MAX(oid), 0) + 1 as next_oid FROM ATTENDANCE_TIME_LOG")
+            next_log_res = cursor.fetchone()
+            next_log_oid = next_log_res["next_oid"] if next_log_res else 1
 
             cursor.execute("""
-                INSERT INTO ATTENDANCE_TIME_LOG (in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
-                VALUES (%s, %s, %s)
-            """, (now, cell_oid, sdc_oid))
-            log_oid = cursor.lastrowid
+                INSERT INTO ATTENDANCE_TIME_LOG (oid, in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
+                VALUES (%s, %s, %s, %s)
+            """, (next_log_oid, now, cell_oid, sdc_oid))
+            log_oid = next_log_oid
             officer_name = user.get("name") or user.get("NAME") or ""
             try:
                 cursor.execute("""

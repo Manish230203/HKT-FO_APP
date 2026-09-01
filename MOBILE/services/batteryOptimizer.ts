@@ -1,4 +1,5 @@
 import { Platform, Linking } from 'react-native';
+import * as Application from 'expo-application';
 
 /**
  * Trigger Android System Battery Optimization Bypass Dialog
@@ -9,11 +10,12 @@ export const requestIgnoreBatteryOptimizations = async (): Promise<boolean> => {
 
   try {
     const IntentLauncher = require('expo-intent-launcher');
+    const packageName = Application.applicationId;
     try {
       // 1. Launch direct package request dialog: Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
       await IntentLauncher.startActivityAsync(
         'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-        { data: 'package:com.fomobile' }
+        { data: `package:${packageName}` }
       );
       return true;
     } catch {

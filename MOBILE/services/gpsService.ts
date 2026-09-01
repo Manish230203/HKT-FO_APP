@@ -33,6 +33,10 @@ class MobileGPSTracker {
   private shiftId: number | null = null;
   private lastLocation: Location.LocationObject | null = null;
   private currentIntervalMs: number = 15000; // Default 15s (Moving)
+  private lastSentPoint: GPSPoint | null = null;
+  private lastSentTime: number = 0;
+  private hasActiveVisit: boolean = false;
+  private isSyncing: boolean = false;
 
   // Initialize and start native adaptive location tracking
   public async startTracking(empId?: number, shiftId?: number) {
@@ -54,7 +58,15 @@ class MobileGPSTracker {
     if (shiftId) this.shiftId = shiftId;
     this.isTracking = true;
 
-    console.log(`Starting Native Background GPS tracking for Officer #${this.employeeId}`);
+    // Check if there is an active site visit session to set initial state
+    try {
+      const activeSession = await api.get(`/site-visit/active?employee_id=${this.employeeId}`);
+      this.hasActiveVisit = !!(activeSession.data && activeSession.data.active_session);
+    } catch {
+      this.hasActiveVisit = false;
+    }
+
+    console.log(`Starting Native Background GPS tracking for Officer #${this.employeeId}. Active Visit: ${this.hasActiveVisit}`);
 
     // Persist active tracking state for device reboot / app restart recovery
     await this.saveActiveSessionState(true, this.employeeId, this.shiftId);
@@ -86,27 +98,9 @@ class MobileGPSTracker {
       console.warn('Error requesting location permissions:', e);
     }
 
-    // 2. Register Native Expo Background Location Task with HIGH ACCURACY & WAKE_LOCK
+    // 2. Register Native Expo Background Location Task with BestForNavigation high accuracy & dynamic filters
     try {
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-      if (!hasStarted) {
-        await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 15000,
-          distanceInterval: 15,
-          deferredUpdatesInterval: 15000,
-          deferredUpdatesDistance: 15,
-          showsBackgroundLocationIndicator: true,
-          pausesUpdatesAutomatically: false,
-          activityType: Location.ActivityType.AutomotiveNavigation,
-          foregroundService: {
-            notificationTitle: 'PatrolSync FO Duty Active',
-            notificationBody: 'Location tracking is active for field officer verification.',
-            notificationColor: '#00599B',
-          },
-        });
-        console.log('Native background location updates started successfully with BestForNavigation high accuracy & WakeLock');
-      }
+      await this.updateTrackingConfiguration(this.hasActiveVisit);
     } catch (bgTaskErr) {
       console.warn('Native background location registration error (falling back to JS timer):', bgTaskErr);
     }
@@ -115,6 +109,79 @@ class MobileGPSTracker {
     if (!this.timerId) {
       this.scheduleNextFix();
     }
+  }
+
+  public async updateTrackingConfiguration(hasActiveVisit: boolean) {
+    this.hasActiveVisit = hasActiveVisit;
+    if (!this.employeeId || !this.isTracking) return;
+
+    try {
+      const config = this.hasActiveVisit ? {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 15000, // 15 seconds active visit
+        distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
+        deferredUpdatesInterval: 15000,
+        deferredUpdatesDistance: 0,
+        showsBackgroundLocationIndicator: true,
+        pausesUpdatesAutomatically: false,
+        activityType: Location.ActivityType.AutomotiveNavigation,
+        foregroundService: {
+          notificationTitle: 'PatrolSync FO Duty Active',
+          notificationBody: 'Location tracking is active for field officer verification.',
+          notificationColor: '#00599B',
+          killServiceOnDestroy: false,
+        },
+      } : {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 30000, // 30 seconds travelling
+        distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
+        deferredUpdatesInterval: 30000,
+        deferredUpdatesDistance: 0,
+        showsBackgroundLocationIndicator: true,
+        pausesUpdatesAutomatically: false,
+        activityType: Location.ActivityType.AutomotiveNavigation,
+        foregroundService: {
+          notificationTitle: 'PatrolSync FO Duty Active',
+          notificationBody: 'Location tracking is active for field officer verification.',
+          notificationColor: '#00599B',
+          killServiceOnDestroy: false,
+        },
+      };
+
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, config);
+      console.log(`Updated native background location task configuration. Checked-in: ${this.hasActiveVisit}`);
+    } catch (e) {
+      console.warn('Error updating native background location config:', e);
+    }
+  }
+
+  private shouldSendPoint(pt: GPSPoint): boolean {
+    if (!this.lastSentPoint) {
+      return true;
+    }
+
+    const dist = this.calculateDistance(
+      this.lastSentPoint.latitude,
+      this.lastSentPoint.longitude,
+      pt.latitude,
+      pt.longitude
+    );
+
+    const timeDiffMs = Date.now() - this.lastSentTime;
+
+    // Heartbeat check: If stationary for > 2 minutes (120,000ms), send 1 heartbeat ping
+    if (timeDiffMs >= 120000) {
+      console.log('Heartbeat trigger: Stationary for > 2 minutes, sending location.');
+      return true;
+    }
+
+    // Displacement threshold:
+    const threshold = this.hasActiveVisit ? 10 : 25;
+    if (dist >= threshold) {
+      return true;
+    }
+
+    return false;
   }
 
   public async stopTracking() {
@@ -228,7 +295,11 @@ class MobileGPSTracker {
         recorded_at: recAt,
       };
 
-      pointsToSync.push(pt);
+      if (this.shouldSendPoint(pt)) {
+        pointsToSync.push(pt);
+        this.lastSentPoint = pt;
+        this.lastSentTime = Date.now();
+      }
     }
 
     if (pointsToSync.length > 0) {
@@ -294,8 +365,11 @@ class MobileGPSTracker {
 
       this.lastLocation = location;
 
-      // Sync with backend (with offline queue fallback)
-      await this.syncGPSPoints([pt]);
+      if (this.shouldSendPoint(pt)) {
+        this.lastSentPoint = pt;
+        this.lastSentTime = Date.now();
+        await this.syncGPSPoints([pt]);
+      }
     } catch (err) {
       console.warn('GPS location fix error (non-blocking):', err);
     }
@@ -315,9 +389,9 @@ class MobileGPSTracker {
     }
 
     if (spd > 0.5 || distanceMoved > 5.0) {
-      this.currentIntervalMs = 15000;
+      this.currentIntervalMs = this.hasActiveVisit ? 15000 : 30000;
     } else {
-      this.currentIntervalMs = 120000;
+      this.currentIntervalMs = 120000; // 2 minutes when stationary
     }
   }
 
@@ -337,24 +411,34 @@ class MobileGPSTracker {
   public async syncGPSPoints(newPoints: GPSPoint[]) {
     if (!this.employeeId) return;
 
-    // Load existing offline queue
-    const queuedPoints = await this.getOfflineQueue();
+    if (this.isSyncing) {
+      // Queue these new points for the next sync cycle
+      await this.saveOfflineQueue([...await this.getOfflineQueue(), ...newPoints]);
+      return;
+    }
 
-    // Deduplicate by point_id or (latitude, longitude, recorded_at)
-    const combined = [...queuedPoints, ...newPoints];
-    const uniquePointsMap = new Map<string, GPSPoint>();
-
-    combined.forEach((pt) => {
-      const key = pt.point_id || `${pt.latitude}_${pt.longitude}_${pt.recorded_at}`;
-      if (!uniquePointsMap.has(key)) {
-        uniquePointsMap.set(key, pt);
-      }
-    });
-
-    const allPoints = Array.from(uniquePointsMap.values());
-    if (allPoints.length === 0) return;
-
+    this.isSyncing = true;
     try {
+      // Load existing offline queue
+      const queuedPoints = await this.getOfflineQueue();
+
+      // Deduplicate by point_id or (latitude, longitude, recorded_at)
+      const combined = [...queuedPoints, ...newPoints];
+      const uniquePointsMap = new Map<string, GPSPoint>();
+
+      combined.forEach((pt) => {
+        const key = pt.point_id || `${pt.latitude}_${pt.longitude}_${pt.recorded_at}`;
+        if (!uniquePointsMap.has(key)) {
+          uniquePointsMap.set(key, pt);
+        }
+      });
+
+      const allPoints = Array.from(uniquePointsMap.values());
+      if (allPoints.length === 0) {
+        this.isSyncing = false;
+        return;
+      }
+
       const response = await api.post('/gps/ingest', {
         employee_id: this.employeeId,
         shift_id: this.shiftId,
@@ -371,7 +455,9 @@ class MobileGPSTracker {
         await this.saveOfflineQueue(allPoints);
       }
     } catch (err) {
-      await this.saveOfflineQueue(allPoints);
+      await this.saveOfflineQueue([...await this.getOfflineQueue(), ...newPoints]);
+    } finally {
+      this.isSyncing = false;
     }
   }
 

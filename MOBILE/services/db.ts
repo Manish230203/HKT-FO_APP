@@ -172,7 +172,18 @@ export const getPunchRecords = async (empId?: string): Promise<any[]> => {
   }
 };
 
-export const saveActiveCheckIns = async (checkIns: Record<string, { checkInTime: string; date: string; siteId?: string | number; siteName?: string; clientId?: string | number }>) => {
+export interface ActiveCheckInInfo {
+  checkInTime: string;
+  date: string;
+  siteId?: string | number;
+  siteName?: string;
+  clientId?: string | number;
+  reportSubmitted?: boolean;
+  reportId?: string;
+  reportType?: string;
+}
+
+export const saveActiveCheckIns = async (checkIns: Record<string, ActiveCheckInInfo>) => {
   try {
     const payload = JSON.stringify(checkIns);
     await setStorageItem('fo_active_checkins', payload);
@@ -181,7 +192,7 @@ export const saveActiveCheckIns = async (checkIns: Record<string, { checkInTime:
   }
 };
 
-export const getActiveCheckIns = async (): Promise<Record<string, { checkInTime: string; date: string; siteId?: string | number; siteName?: string; clientId?: string | number }>> => {
+export const getActiveCheckIns = async (): Promise<Record<string, ActiveCheckInInfo>> => {
   try {
     const payload = await getStorageItem('fo_active_checkins');
     return payload ? JSON.parse(payload) : {};
@@ -191,12 +202,54 @@ export const getActiveCheckIns = async (): Promise<Record<string, { checkInTime:
   }
 };
 
+export const markReportSubmittedForCheckIn = async (plannedId?: string | number, siteId?: string | number, reportId?: string, reportType?: string) => {
+  try {
+    const active = await getActiveCheckIns();
+    const pKey = plannedId ? String(plannedId) : null;
+    const sKey = siteId ? String(siteId) : null;
+
+    if (pKey) {
+      active[pKey] = {
+        ...(active[pKey] || { siteId: siteId ? String(siteId) : '' }),
+        reportSubmitted: true,
+        reportId: reportId || active[pKey]?.reportId,
+        reportType: reportType || active[pKey]?.reportType,
+      };
+    }
+    if (sKey) {
+      active[sKey] = {
+        ...(active[sKey] || { siteId: sKey }),
+        reportSubmitted: true,
+        reportId: reportId || active[sKey]?.reportId,
+        reportType: reportType || active[sKey]?.reportType,
+      };
+    }
+    Object.keys(active).forEach((k) => {
+      if (siteId && String(active[k].siteId) === String(siteId)) {
+        active[k].reportSubmitted = true;
+        if (reportId) active[k].reportId = reportId;
+        if (reportType) active[k].reportType = reportType;
+      }
+    });
+    await saveActiveCheckIns(active);
+  } catch (e) {
+    console.error("Mark report submitted failed", e);
+  }
+};
+
 export const clearActiveCheckIn = async (plannedId: string | number) => {
   try {
     const active = await getActiveCheckIns();
     delete active[String(plannedId)];
+    // Also remove any entries matching by siteId
+    Object.keys(active).forEach(k => {
+      if (String(active[k].siteId) === String(plannedId)) {
+        delete active[k];
+      }
+    });
     await saveActiveCheckIns(active);
   } catch (e) {
     console.error("Clear active checkin failed", e);
   }
 };
+

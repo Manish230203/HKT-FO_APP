@@ -14,6 +14,12 @@ export interface UserProfile {
   empOid?: number | string;
   username?: string;
   site_id?: number | null;
+  site_name?: string | null;
+  client_id?: number | null;
+  client_name?: string | null;
+  branch_id?: number | null;
+  branch_name?: string | null;
+  date_of_joining?: string | null;
   company_id?: number | null;
   company_name?: string | null;
 }

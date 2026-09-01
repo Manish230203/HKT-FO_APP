@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 from app.routes.officer_patrol import router as officer_router
 from app.routes.attendance import router as attendance_router
 from app.routes.gps import router as gps_router
@@ -16,6 +18,11 @@ except Exception as e:
     print(f"Warning creating tables on startup: {e}")
 
 app = FastAPI(title="F.O. Pages API", description="Standalone backend for Field Officer ")
+
+# Ensure uploads directory exists and mount static files
+uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # Configure CORS
 app.add_middleware(

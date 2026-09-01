@@ -166,6 +166,17 @@ export const translations = {
     branch: 'BRANCH',
     site: 'SITE',
     sign_out_session: 'SIGN OUT SESSION',
+
+    // Visit Sessions & Check-Out
+    confirm_checkout_title: 'Confirm Check-Out',
+    confirm_checkout_desc: 'Are you sure you want to check out from this site? This will end your visit session.',
+    checked_in_success_title: 'Checked-In Successfully',
+    checked_in_success_desc: 'Check-In recorded successfully. Your visit session is now active. Please submit the visit report to proceed to check-out.',
+    cancel: 'Cancel',
+    checkout: 'Check-Out',
+    check_in: 'Check-In',
+    visit_completed_title: 'Visit Completed',
+    visit_completed_desc: 'You have checked out successfully! Visit record is complete.',
   },
 
   hi: {
@@ -333,6 +344,17 @@ export const translations = {
     branch: 'शाखा',
     site: 'साइट',
     sign_out_session: 'सत्र साइन आउट करें',
+
+    // Visit Sessions & Check-Out
+    confirm_checkout_title: 'चेक-आउट की पुष्टि करें',
+    confirm_checkout_desc: 'क्या आप वाकई इस साइट से चेक-आउट करना चाहते हैं? इससे आपका विजिट सत्र समाप्त हो जाएगा।',
+    checked_in_success_title: 'सफलतापूर्वक चेक-इन हुआ',
+    checked_in_success_desc: 'चेक-इन सफलतापूर्वक दर्ज हो गया है। आपका विजिट सत्र सक्रिय है। चेक-आउट करने के लिए कृपया विजिट रिपोर्ट जमा करें।',
+    cancel: 'रद्द करें',
+    checkout: 'चेक-आउट',
+    check_in: 'चेक-इन',
+    visit_completed_title: 'विजिट पूर्ण हुई',
+    visit_completed_desc: 'आप सफलतापूर्वक चेक-आउट हो गए हैं! विजिट रिकॉर्ड पूरा हो गया है।',
   },
 
   mr: {
@@ -500,5 +522,16 @@ export const translations = {
     branch: 'शाखा',
     site: 'साइट',
     sign_out_session: 'सत्र साइन आऊट करा',
+
+    // Visit Sessions & Check-Out
+    confirm_checkout_title: 'चेक-आउट पुष्टी करा',
+    confirm_checkout_desc: 'तुम्हाला खात्री आहे का की तुम्ही या साइटवरून चेक-आउट करू इच्छिता? यामुळे तुमचे भेट सत्र समाप्त होईल.',
+    checked_in_success_title: 'यशस्वीरित्या चेक-इन झाले',
+    checked_in_success_desc: 'चेक-इन यशस्वीरित्या नोंदवले गेले आहे. तुमचे भेट सत्र आता सक्रिय आहे. चेक-आउट करण्यासाठी कृपया भेट अहवाल सादर करा.',
+    cancel: 'रद्द करा',
+    checkout: 'चेक-आउट',
+    check_in: 'चेक-इन',
+    visit_completed_title: 'भेट पूर्ण झाली',
+    visit_completed_desc: 'तुम्ही यशस्वीरित्या चेक-आउट केले आहे! भेट नोंद पूर्ण झाली आहे.',
   },
 };

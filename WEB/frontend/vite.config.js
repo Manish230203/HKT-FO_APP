@@ -7,6 +7,16 @@ export default defineConfig({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      "/uploads": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
+      "/api": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
+    },
     hmr: {
       overlay: false,
     },

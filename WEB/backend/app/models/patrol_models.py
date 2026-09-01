@@ -179,8 +179,8 @@ class SiteVisitSession(Base):
     employee_id = Column("Employee", Integer, index=True, nullable=False)
     site_id = Column(Integer, index=True, nullable=True)
     site_name = Column(String(255), nullable=True)
-    start_time = Column(DateTime, default=datetime.now, index=True)
-    end_time = Column(DateTime, nullable=True)
+    start_time = Column("check_in_time", DateTime, default=datetime.now, index=True)
+    end_time = Column("check_out_time", DateTime, nullable=True)
     duration_minutes = Column(Float, default=0.0)
     status = Column(String(50), default="IN_PROGRESS", nullable=False) # IN_PROGRESS, COMPLETED
     raw_points_count = Column(Integer, default=1, nullable=False)

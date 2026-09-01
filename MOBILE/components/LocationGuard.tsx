@@ -22,7 +22,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
   const checkLocationStatus = async () => {
     try {
       setChecking(true);
-      
+
       // 1. Check if location services (GPS) are turned ON on device
       let servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled && Platform.OS === 'android') {
@@ -68,6 +68,19 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
       // Location Services are ON and 'Allow all the time' Permission is Granted!
       setIsLocationDisabled(false);
       setErrorMessage('');
+
+      // Auto prompt battery optimization on Android if not already bypassed
+      if (Platform.OS === 'android') {
+        try {
+          const Battery = require('expo-battery');
+          const isOptimizationEnabled = await Battery.isBatteryOptimizationEnabledAsync();
+          if (isOptimizationEnabled) {
+            await requestIgnoreBatteryOptimizations();
+          }
+        } catch (batErr) {
+          console.warn('Error checking battery optimization inside guard:', batErr);
+        }
+      }
     } catch (err) {
       console.warn('Error checking location status:', err);
     } finally {
@@ -122,7 +135,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         transparent={false}
         animationType="fade"
         hardwareAccelerated
-        onRequestClose={() => {}} // Prevent dismissing via hardware back button on Android
+        onRequestClose={() => { }} // Prevent dismissing via hardware back button on Android
       >
         <View style={styles.container}>
           <View style={styles.card}>
@@ -131,7 +144,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
             </View>
 
             <Text style={styles.title}>Location & Duty Setup Required</Text>
-            
+
             <Text style={styles.message}>
               {errorMessage || 'Field Officers must have Location (GPS) set to "Allow all the time" to perform duty actions in PatrolSync FO.'}
             </Text>

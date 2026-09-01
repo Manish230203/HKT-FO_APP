@@ -40,6 +40,17 @@ export function GeneralVisitReportTemplate({ report, hideTitle = false, hideLogo
 
   const reportIdStr = report?.formattedReportId || `${report?.reportIndex || "01"}-${clientName}-${siteName}-OGV-${formatDateToDMY(visitDate)}`;
 
+  const isEagle = 
+    report?.companyId === 4 || 
+    Number(report?.companyId) === 4 || 
+    String(report?.companyName || '').toLowerCase().includes('eagle') || 
+    String(report?.companyShortName || '').toLowerCase().includes('eispl') || 
+    String(report?.officer || '').toLowerCase().includes('anil bhosale') || 
+    String(report?.officer || '').toLowerCase().includes('bhosale');
+
+  const compName = isEagle ? "Eagle Industrial Services Pvt. Ltd." : (report?.companyName || "Unique Delta Force Security Pvt. Ltd.");
+  const compLogo = isEagle ? "/eagle_logo.png" : "/udf_logo.png";
+
   return (
     <div className="report-template-content bg-white text-slate-900 mb-0 p-2">
       {!hideHeader && (
@@ -47,19 +58,9 @@ export function GeneralVisitReportTemplate({ report, hideTitle = false, hideLogo
           {!hideLogo && (
             <div className="flex items-center gap-3 mb-4">
               <div className="shrink-0">
-                <svg width="60" height="26" viewBox="0 0 100 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M 5 12 L 35 12 L 30 17 L 35 22 L 5 22 Z" fill="#1A1A1A" />
-                  <path d="M 5 22 L 35 22 L 32 26 L 35 30 L 5 30 Z" fill="#E53E3E" />
-                  <circle cx="10" cy="17" r="1.5" fill="white" /><circle cx="20" cy="17" r="1.5" fill="white" /><circle cx="30" cy="17" r="1.5" fill="white" />
-                  <path d="M 95 12 L 65 12 L 70 17 L 65 22 L 95 22 Z" fill="#1A1A1A" />
-                  <path d="M 95 22 L 65 22 L 68 26 L 65 30 L 95 30 Z" fill="#E53E3E" />
-                  <circle cx="90" cy="17" r="1.5" fill="white" /><circle cx="80" cy="17" r="1.5" fill="white" /><circle cx="70" cy="17" r="1.5" fill="white" />
-                  <polygon points="50,2 54,16 68,16 57,25 61,38 50,30 39,38 43,25 32,16 46,16" fill="#00D2FF" />
-                  <circle cx="50" cy="21" r="7" fill="#00A3C4" />
-                  <text x="50" y="25" fontFamily="sans-serif" fontWeight="900" fontSize="11" fill="white" textAnchor="middle">U</text>
-                </svg>
+                <img src={compLogo} alt={compName} className="h-8 object-contain" />
               </div>
-              <div><h2 className="text-sm font-black tracking-tight text-slate-900 leading-none">Unique Delta Force Security Pvt. Ltd.</h2></div>
+              <div><h2 className="text-sm font-black tracking-tight text-slate-900 leading-none">{compName}</h2></div>
             </div>
           )}
           <div className="flex justify-between items-start gap-4">

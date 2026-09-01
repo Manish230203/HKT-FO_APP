@@ -60,6 +60,15 @@ def ingest_gps_locations_service(db: Session, employee_id: int, points: List[Dic
     except Exception as att_err:
         print("Warning checking duty status in ingest_gps_locations_service:", att_err)
 
+    from geopy.distance import geodesic
+
+    last_log = (
+        db.query(GPSLocationLog)
+        .filter(GPSLocationLog.employee_id == employee_id)
+        .order_by(GPSLocationLog.recorded_at.desc())
+        .first()
+    )
+
     saved_logs = []
     for pt in points:
         lat = float(pt.get("latitude", 0.0))
@@ -90,6 +99,20 @@ def ingest_gps_locations_service(db: Session, employee_id: int, points: List[Dic
         if accuracy is not None and accuracy > 150.0:
             continue
 
+        # Stationary Check:
+        # If the new ping is within < 15 meters of the officer's last recorded GPS point,
+        # update/overwrite the last row's recorded_at and battery_level (do NOT insert a new row).
+        if last_log:
+            try:
+                dist = geodesic((last_log.latitude, last_log.longitude), (lat, lon)).meters
+                if dist < 15.0:
+                    last_log.recorded_at = rec_time
+                    if battery is not None:
+                        last_log.battery_level = battery
+                    continue
+            except Exception as geo_err:
+                print("Warning calculating geodetic distance in ingestion:", geo_err)
+
         log_entry = GPSLocationLog(
             employee_id=employee_id,
             shift_id=shift_id,
@@ -102,6 +125,7 @@ def ingest_gps_locations_service(db: Session, employee_id: int, points: List[Dic
         )
         db.add(log_entry)
         saved_logs.append(log_entry)
+        last_log = log_entry
 
     db.commit()
 
@@ -147,7 +171,6 @@ def process_site_visit_engine(db: Session, employee_id: int):
     for log in gps_logs:
         if log.recorded_at and open_session.start_time and log.recorded_at >= open_session.start_time:
             duration = (log.recorded_at - open_session.start_time).total_seconds() / 60.0
-            open_session.end_time = log.recorded_at
             open_session.duration_minutes = round(duration, 2)
             open_session.raw_points_count += 1
             open_session.exit_latitude = log.latitude
@@ -610,6 +633,46 @@ def manual_site_check_out_service(
     if longitude: open_session.exit_longitude = longitude
 
     db.commit()
+
+    # Also automatically sync the check-out timestamp into the submitted visit report in MySQL
+    try:
+        from app.database import get_db_connection
+        raw_conn = get_db_connection()
+        if raw_conn:
+            c = raw_conn.cursor()
+            today_str = now.strftime("%Y-%m-%d")
+            checkout_formatted = now.strftime("%H:%M")
+            c.execute("""
+                UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
+                SET `check-out_time` = %s
+                WHERE site_id = %s 
+                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                  AND (`check-out_time` IS NULL OR `check-out_time` = '' OR `check-out_time` = 'Pending')
+                  AND (visit_date = %s OR created_on LIKE %s)
+            """, (checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            
+            c.execute("""
+                UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS
+                SET `check-out_time` = %s
+                WHERE site_id = %s 
+                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                  AND (`check-out_time` IS NULL OR `check-out_time` = '' OR `check-out_time` = 'Pending')
+                  AND (visit_date = %s OR created_on LIKE %s)
+            """, (checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            
+            c.execute("""
+                UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS
+                SET `check-out_time` = %s, end_time = %s
+                WHERE site_id = %s 
+                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                  AND (`check-out_time` IS NULL OR `check-out_time` = '' OR `check-out_time` = 'Pending')
+                  AND (visit_date = %s OR created_on LIKE %s)
+            """, (checkout_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            raw_conn.commit()
+            c.close()
+            raw_conn.close()
+    except Exception as db_sync_err:
+        logger.warning(f"Error updating report check-out time during checkout: {db_sync_err}")
 
     return {
         "success": True,
