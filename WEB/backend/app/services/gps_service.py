@@ -672,7 +672,7 @@ def manual_site_check_out_service(
             c.close()
             raw_conn.close()
     except Exception as db_sync_err:
-        logger.warning(f"Error updating report check-out time during checkout: {db_sync_err}")
+        print(f"Error updating report check-out time during checkout: {db_sync_err}")
 
     return {
         "success": True,

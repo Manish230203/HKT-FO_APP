@@ -156,14 +156,57 @@ export default function VisitsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let locationSubscription: Location.LocationSubscription | null = null;
+      let isSubscribed = true;
+
       loadStoredCheckIns();
-      fetchCurrentLocation();
       fetchActiveSession();
+      fetchCurrentLocation();
+
+      // Start real-time foreground location watching so distance updates dynamically
+      (async () => {
+        try {
+          // 1. Instant cached location pickup (0ms)
+          const lastKnown = await Location.getLastKnownPositionAsync();
+          if (lastKnown && lastKnown.coords && isSubscribed) {
+            setUserLocation(lastKnown.coords);
+          }
+
+          // 2. Active foreground GPS watcher
+          locationSubscription = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.Balanced,
+              timeInterval: 3000,
+              distanceInterval: 2,
+            },
+            (loc) => {
+              if (isSubscribed && loc && loc.coords) {
+                setUserLocation(loc.coords);
+              }
+            }
+          );
+        } catch (err) {
+          console.warn('Visits real-time location watcher warning:', err);
+        }
+      })();
+
+      return () => {
+        isSubscribed = false;
+        if (locationSubscription) {
+          locationSubscription.remove();
+        }
+      };
     }, [])
   );
 
   const fetchCurrentLocation = async () => {
     try {
+      // 1. Instant check from last known cache
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown && lastKnown.coords) {
+        setUserLocation(lastKnown.coords);
+      }
+      // 2. Fresh balanced location fix
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       if (loc && loc.coords) {
         setUserLocation(loc.coords);
@@ -223,19 +266,46 @@ export default function VisitsScreen() {
     }
 
     // 2. Perform Geofence Validation (Compare Site Lat/Long vs Officer Lat/Long)
-    if (pv.latitude && pv.longitude && userLocation) {
+    if (pv.latitude && pv.longitude) {
+      let currentCoords = userLocation;
+      if (!currentCoords) {
+        try {
+          const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (freshLoc && freshLoc.coords) {
+            currentCoords = freshLoc.coords;
+            setUserLocation(freshLoc.coords);
+          }
+        } catch (locErr) {
+          console.warn('Check-in location fix error:', locErr);
+        }
+      }
+
+      if (!currentCoords) {
+        Alert.alert(
+          'Location Required',
+          'Could not determine your GPS location. Please ensure location permissions and GPS are enabled.',
+          [
+            { text: 'Retry', onPress: fetchCurrentLocation },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+        return;
+      }
+
       const dist = calculateHaversineDistanceMeters(
-        userLocation.latitude,
-        userLocation.longitude,
+        currentCoords.latitude,
+        currentCoords.longitude,
         Number(pv.latitude),
         Number(pv.longitude)
       );
 
-      // Geofence cutoff: 200 meters
-      if (dist > 200) {
+      const allowedRadius = pv.radius !== null && pv.radius !== undefined ? Number(pv.radius) : 100;
+
+      // Geofence cutoff check
+      if (dist > allowedRadius) {
         Alert.alert(
           'Geofence Warning: Outside Site Radius',
-          `You are currently ${Math.round(dist)} meters away from ${pv.siteName || 'Site'}.\n\nPlease move within 200 meters of the site to check in.`,
+          `You are currently ${Math.round(dist)} meters away from ${pv.siteName || 'Site'}.\n\nPlease move within ${allowedRadius} meters of the site to check in.`,
           [
             { text: 'Refresh Location', onPress: fetchCurrentLocation },
             { text: 'OK', style: 'cancel' }
@@ -865,6 +935,26 @@ export default function VisitsScreen() {
                             </Text>
                           </View>
                         </View>
+                      ) : !userLocation ? (
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                              borderWidth: 1,
+                              borderColor: 'rgba(59, 130, 246, 0.4)',
+                              borderRadius: 8,
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                            }}
+                          >
+                            <ActivityIndicator size={12} color="#60A5FA" style={{ marginRight: 5 }} />
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#60A5FA' }}>
+                              Acquiring GPS...
+                            </Text>
+                          </View>
+                        </View>
                       ) : isOutsideGeofence ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
@@ -882,7 +972,7 @@ export default function VisitsScreen() {
                           >
                             <Navigation color="#EF4444" size={12} style={{ marginRight: 4 }} />
                             <Text style={{ fontSize: 11, fontWeight: '700', color: '#EF4444' }}>
-                              {distanceMeters ? `${distanceMeters}m Away` : 'Not at Site'}
+                              {distanceMeters !== null ? `${distanceMeters}m Away` : 'Not at Site'}
                             </Text>
                           </View>
                           <TouchableOpacity
