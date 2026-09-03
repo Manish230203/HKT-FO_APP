@@ -370,7 +370,7 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
         completed_reports = []
         try:
             query_counts = """
-                SELECT site_id, employee_oid, LOWER(TRIM(officer)) as off_name, DATE(COALESCE(visit_date, created_on)) as rep_date
+                SELECT site_id, employee_oid, LOWER(TRIM(officer)) as off_name, DATE(COALESCE(visit_date, created_on)) as rep_date, created_on as rep_created_at
                 FROM (
                     SELECT site_id, employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE site_id IS NOT NULL AND status = 'Completed'
                     UNION ALL
@@ -472,6 +472,17 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
                         in_period = (rep_d_str == target_d)
 
                     if in_period:
+                        # Ensure report was NOT created before this plan was created (with 60-second clock skew margin)
+                        rep_created_raw = rep.get("rep_created_at")
+                        if rep_created_raw and r.get("createdAt"):
+                            try:
+                                rep_dt = rep_created_raw if isinstance(rep_created_raw, datetime) else datetime.fromisoformat(str(rep_created_raw).replace('Z', ''))
+                                plan_dt = r["createdAt"] if isinstance(r["createdAt"], datetime) else datetime.fromisoformat(str(r["createdAt"]).replace('Z', ''))
+                                if (plan_dt - rep_dt).total_seconds() > 60:
+                                    continue
+                            except Exception:
+                                pass
+
                         rep_emp = str(rep["employee_oid"]) if rep.get("employee_oid") else None
                         rep_off = (rep.get("off_name") or "").strip()
                         if officer_id_str and rep_emp and officer_id_str == rep_emp:
@@ -796,8 +807,28 @@ def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = He
         visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
         visit_type = payload.get("visitType") or payload.get("visit_type") or "Night Round"
         shift = payload.get("shift") or "Night"
-        start_time = None
-        end_time = None
+        start_time = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
+        end_time = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
+
+        if not start_time or not end_time:
+            try:
+                cursor.execute("""
+                    SELECT check_in_time, check_out_time 
+                    FROM SITE_VISIT_SESSIONS 
+                    WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND site_id = %s 
+                      AND DATE(check_in_time) = %s
+                    ORDER BY id DESC LIMIT 1
+                """, (emp_oid, emp_oid, site_id, visit_date))
+                sess_row = cursor.fetchone()
+                if sess_row:
+                    if not start_time and sess_row.get("check_in_time"):
+                        start_time = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
+                    if not end_time and sess_row.get("check_out_time"):
+                        end_time = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
+            except Exception:
+                pass
+
         gps = payload.get("gps") or ""
         photos = payload.get("photos")
         guards = payload.get("guards")
@@ -833,7 +864,15 @@ def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = He
                 sr = cursor.fetchone()
                 if sr and sr.get("name"): s_name = sr["name"]
 
-            report_id = f"01-{c_name}-{s_name}-ONR-{date_fmt}"
+            visit_seq = 1
+            if site_id:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+
+            seq_str = f"{visit_seq:02d}"
+            report_id = f"{seq_str}-{c_name}-{s_name}-ONR-{date_fmt}"
         else:
             report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
 
@@ -1079,8 +1118,28 @@ def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = He
         visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
         visit_type = payload.get("visitType") or payload.get("visit_type") or "Scheduled"
         shift = payload.get("shift") or "Day"
-        start_time = None
-        end_time = None
+        start_time = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
+        end_time = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
+
+        if not start_time or not end_time:
+            try:
+                cursor.execute("""
+                    SELECT check_in_time, check_out_time 
+                    FROM SITE_VISIT_SESSIONS 
+                    WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND site_id = %s 
+                      AND DATE(check_in_time) = %s
+                    ORDER BY id DESC LIMIT 1
+                """, (emp_oid, emp_oid, site_id, visit_date))
+                sess_row = cursor.fetchone()
+                if sess_row:
+                    if not start_time and sess_row.get("check_in_time"):
+                        start_time = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
+                    if not end_time and sess_row.get("check_out_time"):
+                        end_time = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
+            except Exception:
+                pass
+
         gps = payload.get("gps") or ""
         photos = payload.get("photos")
         guards = payload.get("guards")
@@ -1115,7 +1174,15 @@ def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = He
                 sr = cursor.fetchone()
                 if sr and sr.get("name"): s_name = sr["name"]
 
-            report_id = f"01-{c_name}-{s_name}-ODV-{date_fmt}"
+            visit_seq = 1
+            if site_id:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+
+            seq_str = f"{visit_seq:02d}"
+            report_id = f"{seq_str}-{c_name}-{s_name}-ODV-{date_fmt}"
         else:
             report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
 
@@ -1509,13 +1576,41 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
 
             c_str = client_name or "Client"
             s_str = site_name or "Site"
-            report_id = f"01-{c_str}-{s_str}-OGV-{date_fmt}"
+            visit_seq = 1
+            if site_id:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+
+            seq_str = f"{visit_seq:02d}"
+            report_id = f"{seq_str}-{c_str}-{s_str}-OGV-{date_fmt}"
         else:
             report_id = str(payload.get("reportId") or payload.get("report_id"))
 
         gps_val = payload.get("gps") or ""
-        start_t = None
-        end_t = None
+        start_t = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
+        end_t = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
+        v_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
+
+        if not start_t or not end_t:
+            try:
+                cursor.execute("""
+                    SELECT check_in_time, check_out_time 
+                    FROM SITE_VISIT_SESSIONS 
+                    WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND site_id = %s 
+                      AND DATE(check_in_time) = %s
+                    ORDER BY id DESC LIMIT 1
+                """, (emp_oid, emp_oid, site_id, v_date))
+                sess_row = cursor.fetchone()
+                if sess_row:
+                    if not start_t and sess_row.get("check_in_time"):
+                        start_t = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
+                    if not end_t and sess_row.get("check_out_time"):
+                        end_t = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
+            except Exception:
+                pass
 
         cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (oid,))
         exists = cursor.fetchone()

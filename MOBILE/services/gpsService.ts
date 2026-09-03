@@ -32,7 +32,7 @@ class MobileGPSTracker {
   private employeeId: number | null = null;
   private shiftId: number | null = null;
   private lastLocation: Location.LocationObject | null = null;
-  private currentIntervalMs: number = 15000; // Default 15s (Moving)
+  private currentIntervalMs: number = 30000; // Default 30s
   private lastSentPoint: GPSPoint | null = null;
   private lastSentTime: number = 0;
   private hasActiveVisit: boolean = false;
@@ -118,9 +118,9 @@ class MobileGPSTracker {
     try {
       const config = this.hasActiveVisit ? {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 15000, // 15 seconds active visit
+        timeInterval: 30000, // 30 seconds active visit
         distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
-        deferredUpdatesInterval: 15000,
+        deferredUpdatesInterval: 30000,
         deferredUpdatesDistance: 0,
         showsBackgroundLocationIndicator: true,
         pausesUpdatesAutomatically: false,
@@ -133,9 +133,9 @@ class MobileGPSTracker {
         },
       } : {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 30000, // 30 seconds travelling
+        timeInterval: 90000, // 90 seconds travelling
         distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
-        deferredUpdatesInterval: 30000,
+        deferredUpdatesInterval: 90000,
         deferredUpdatesDistance: 0,
         showsBackgroundLocationIndicator: true,
         pausesUpdatesAutomatically: false,
@@ -169,9 +169,9 @@ class MobileGPSTracker {
 
     const timeDiffMs = Date.now() - this.lastSentTime;
 
-    // Heartbeat check: If stationary for > 2 minutes (120,000ms), send 1 heartbeat ping
-    if (timeDiffMs >= 120000) {
-      console.log('Heartbeat trigger: Stationary for > 2 minutes, sending location.');
+    // Heartbeat check: If stationary for > 3 minutes (180,000ms), send 1 heartbeat ping
+    if (timeDiffMs >= 180000) {
+      console.log('Heartbeat trigger: Stationary for > 3 minutes, sending location.');
       return true;
     }
 
@@ -220,7 +220,7 @@ class MobileGPSTracker {
         const state = JSON.parse(raw);
         if (state && state.active && state.employeeId) {
           try {
-            const attRes = await api.get(`/attendance/today-status?empOid=${state.employeeId}`);
+            const attRes = await api.get('/_AIP_getTodayStatus', { params: { empOid: state.employeeId } });
             const record = attRes.data?.record;
             const isPunchedIn = !!(record && record.check_in && !record.check_out);
             if (!isPunchedIn) {
@@ -389,9 +389,9 @@ class MobileGPSTracker {
     }
 
     if (spd > 0.5 || distanceMoved > 5.0) {
-      this.currentIntervalMs = this.hasActiveVisit ? 15000 : 30000;
+      this.currentIntervalMs = this.hasActiveVisit ? 30000 : 90000;
     } else {
-      this.currentIntervalMs = 120000; // 2 minutes when stationary
+      this.currentIntervalMs = 180000; // 3 minutes when stationary
     }
   }
 

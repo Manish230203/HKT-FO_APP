@@ -458,6 +458,38 @@ export default function DashboardScreen() {
         console.warn('General visit reports fetch warning:', err);
       }
 
+      compiled.sort((a: any, b: any) => {
+        const getTimestamp = (item: any) => {
+          const r = item.rawReport || {};
+          const created = r.created_on || r.createdOn || item.date;
+          const checkOut = r.check_out_time || r.checkOutTime || r['check-out_time'];
+          const checkIn = r.check_in_time || r.checkInTime || r['check-in_time'];
+
+          let timeMs = 0;
+          if (created) {
+            const dt = new Date(created);
+            if (!isNaN(dt.getTime())) timeMs = dt.getTime();
+          }
+
+          if (timeMs === 0 || (typeof created === 'string' && created.length <= 10)) {
+            const datePart = (item.date || created || '').slice(0, 10);
+            const timePart = checkOut || checkIn || '00:00';
+            const combined = new Date(`${datePart}T${timePart}:00`);
+            if (!isNaN(combined.getTime())) timeMs = combined.getTime();
+          }
+
+          return timeMs;
+        };
+
+        const tA = getTimestamp(a);
+        const tB = getTimestamp(b);
+        if (tA !== tB) return tB - tA;
+
+        const oidA = parseInt(String(a.rawReport?.oid || a.id || '0').replace(/\D/g, ''), 10) || 0;
+        const oidB = parseInt(String(b.rawReport?.oid || b.id || '0').replace(/\D/g, ''), 10) || 0;
+        return oidB - oidA;
+      });
+
       setCompletedVisits(compiled);
     } catch (e) {
       console.warn('Dashboard global data error handled:', e);

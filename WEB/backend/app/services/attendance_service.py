@@ -963,24 +963,26 @@ def is_within_radius(user_lat, user_long, site_lat, site_long, radius_meters):
     return geodesic((site_lat, site_long), (user_lat, user_long)).meters <= radius_meters
 
 def init_fo_location_table(cursor):
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS FIELD_OFFICER_ATTENDANCE_LOCATION (
-            oid BIGINT AUTO_INCREMENT PRIMARY KEY,
-            attendance_time_log BIGINT NOT NULL,
-            employee_oid BIGINT NOT NULL,
-            officer VARCHAR(255) NULL,
-            punch_type VARCHAR(10) NOT NULL,
-            latitude DECIMAL(10,8) NOT NULL,
-            longitude DECIMAL(11,8) NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT fk_fo_location_timelog
-                FOREIGN KEY (attendance_time_log) 
-                REFERENCES ATTENDANCE_TIME_LOG(oid) ON DELETE CASCADE,
-            CONSTRAINT fk_fo_location_employee
-                FOREIGN KEY (employee_oid) 
-                REFERENCES EMPLOYEE(oid) ON DELETE CASCADE
-        )
-    """)
+    # Table creation disabled/commented out
+    pass
+    # cursor.execute("""
+    #     CREATE TABLE IF NOT EXISTS FIELD_OFFICER_ATTENDANCE_LOCATION (
+    #         oid BIGINT AUTO_INCREMENT PRIMARY KEY,
+    #         attendance_time_log BIGINT NOT NULL,
+    #         employee_oid BIGINT NOT NULL,
+    #         officer VARCHAR(255) NULL,
+    #         punch_type VARCHAR(10) NOT NULL,
+    #         latitude DECIMAL(10,8) NOT NULL,
+    #         longitude DECIMAL(11,8) NOT NULL,
+    #         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    #         CONSTRAINT fk_fo_location_timelog
+    #             FOREIGN KEY (attendance_time_log) 
+    #             REFERENCES ATTENDANCE_TIME_LOG(oid) ON DELETE CASCADE,
+    #         CONSTRAINT fk_fo_location_employee
+    #             FOREIGN KEY (employee_oid) 
+    #             REFERENCES EMPLOYEE(oid) ON DELETE CASCADE
+    #     )
+    # """)
 
 def mark_attendance_logic(data):
     try:

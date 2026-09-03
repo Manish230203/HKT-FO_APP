@@ -592,6 +592,41 @@ def manual_site_check_in_service(
     db.commit()
     db.refresh(new_session)
 
+    # Sync check-in time into report tables if report already exists for today
+    try:
+        from app.database import get_db_connection
+        raw_conn = get_db_connection()
+        if raw_conn:
+            c = raw_conn.cursor()
+            today_str = new_session.start_time.strftime("%Y-%m-%d")
+            checkin_formatted = new_session.start_time.strftime("%H:%M")
+            c.execute("""
+                UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
+                SET `check-in_time` = %s
+                WHERE site_id = %s 
+                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                  AND (visit_date = %s OR created_on LIKE %s)
+            """, (checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            c.execute("""
+                UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS
+                SET `check-in_time` = %s
+                WHERE site_id = %s 
+                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                  AND (visit_date = %s OR created_on LIKE %s)
+            """, (checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            c.execute("""
+                UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS
+                SET `check-in_time` = %s, start_time = %s
+                WHERE site_id = %s 
+                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                  AND (visit_date = %s OR created_on LIKE %s)
+            """, (checkin_formatted, checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            raw_conn.commit()
+            c.close()
+            raw_conn.close()
+    except Exception as db_sync_err:
+        print(f"Error updating report check-in time during checkin: {db_sync_err}")
+
     return {
         "success": True,
         "message": f"Checked in successfully at {new_session.site_name}",
@@ -634,7 +669,7 @@ def manual_site_check_out_service(
 
     db.commit()
 
-    # Also automatically sync the check-out timestamp into the submitted visit report in MySQL
+    # Also automatically sync both check-in and check-out timestamps into the submitted visit report in MySQL
     try:
         from app.database import get_db_connection
         raw_conn = get_db_connection()
@@ -642,37 +677,41 @@ def manual_site_check_out_service(
             c = raw_conn.cursor()
             today_str = now.strftime("%Y-%m-%d")
             checkout_formatted = now.strftime("%H:%M")
+            checkin_formatted = open_session.start_time.strftime("%H:%M") if open_session.start_time else None
+            
             c.execute("""
                 UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
-                SET `check-out_time` = %s
+                SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                    `check-out_time` = %s
                 WHERE site_id = %s 
                   AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (`check-out_time` IS NULL OR `check-out_time` = '' OR `check-out_time` = 'Pending')
                   AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
             
             c.execute("""
                 UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS
-                SET `check-out_time` = %s
+                SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                    `check-out_time` = %s
                 WHERE site_id = %s 
                   AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (`check-out_time` IS NULL OR `check-out_time` = '' OR `check-out_time` = 'Pending')
                   AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
             
             c.execute("""
                 UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS
-                SET `check-out_time` = %s, end_time = %s
+                SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                    `check-out_time` = %s,
+                    start_time = COALESCE(NULLIF(start_time, ''), %s),
+                    end_time = %s
                 WHERE site_id = %s 
                   AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (`check-out_time` IS NULL OR `check-out_time` = '' OR `check-out_time` = 'Pending')
                   AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkout_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+            """, (checkin_formatted, checkout_formatted, checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
             raw_conn.commit()
             c.close()
             raw_conn.close()
     except Exception as db_sync_err:
-        print(f"Error updating report check-out time during checkout: {db_sync_err}")
+        print(f"Error updating report check-in/check-out time during checkout: {db_sync_err}")
 
     return {
         "success": True,

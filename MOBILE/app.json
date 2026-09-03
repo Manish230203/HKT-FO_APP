@@ -17,7 +17,8 @@
         ],
         "NSLocationWhenInUseUsageDescription": "Allow PatrolSync FO to access your location for attendance and site visit verification.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow PatrolSync FO to access your location for background duty tracking.",
-        "NSLocationAlwaysUsageDescription": "Allow PatrolSync FO to access your location in the background while screen is locked."
+        "NSLocationAlwaysUsageDescription": "Allow PatrolSync FO to access your location in the background while screen is locked.",
+        "NSLocationUsageDescription": "Allow PatrolSync FO to access your location for attendance and site visit verification."
       }
     },
     "android": {

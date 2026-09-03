@@ -442,17 +442,28 @@ export default function VisitsScreen() {
     const activeData = matchingPv ? activeCheckIns[String(matchingPv.id)] : Object.values(activeCheckIns).find((a: any) => Number(a?.siteId) === Number(siteId));
     if (activeData?.reportSubmitted) return true;
 
-    // 2. Check if a report exists in completedVisits for this site today
+    // 2. Check if a report exists in completedVisits for this site THAT WAS CREATED DURING/AFTER THE CURRENT ACTIVE SESSION START
+    if (!activeBackendSession || !activeBackendSession.start_time) return false;
+
+    const sessionStartMs = new Date(activeBackendSession.start_time).getTime() - 2 * 60 * 1000; // 2 min margin for clock differences
     const sNameNorm = (siteName || '').toLowerCase().trim();
-    const hasCompleted = completedVisits.some((cv) => {
+
+    const hasCompletedForThisSession = completedVisits.some((cv) => {
       const cvSiteId = cv.siteId || cv.rawReport?.site_id || cv.rawReport?.siteId;
       const cvSiteName = (cv.siteName || cv.rawReport?.site_name || '').toLowerCase().trim();
-      if (siteId && cvSiteId && Number(cvSiteId) === Number(siteId)) return true;
-      if (sNameNorm && cvSiteName && (cvSiteName === sNameNorm || cvSiteName.includes(sNameNorm) || sNameNorm.includes(cvSiteName))) return true;
-      return false;
+
+      const isSiteMatch = (siteId && cvSiteId && Number(cvSiteId) === Number(siteId)) ||
+                          (sNameNorm && cvSiteName && (cvSiteName === sNameNorm || cvSiteName.includes(sNameNorm) || sNameNorm.includes(cvSiteName)));
+      if (!isSiteMatch) return false;
+
+      const createdTimeStr = cv.rawReport?.created_on || cv.rawReport?.createdOn || cv.date;
+      if (!createdTimeStr) return false;
+
+      const reportCreatedMs = new Date(createdTimeStr).getTime();
+      return !isNaN(reportCreatedMs) && reportCreatedMs >= sessionStartMs;
     });
 
-    return hasCompleted;
+    return hasCompletedForThisSession;
   };
 
   const handleTopCheckOut = async () => {
@@ -672,10 +683,41 @@ export default function VisitsScreen() {
             emailAccess: r.emailAccess !== undefined ? r.emailAccess : (r.email_access !== undefined ? r.email_access : 1),
             companyName: r.companyName || r.company_name || user?.company_name || 'Unique Delta Force Security Pvt. Ltd.',
             companyShortName: r.companyShortName || r.company_short_name || 'UDF',
-            companyId: r.companyId || r.company_id || user?.company_id || 1,
             rawReport: r,
           });
         }
+      });
+
+      compiled.sort((a: any, b: any) => {
+        const getTimestamp = (item: any) => {
+          const r = item.rawReport || {};
+          const created = r.created_on || r.createdOn || item.date;
+          const checkOut = r.check_out_time || r.checkOutTime || r['check-out_time'];
+          const checkIn = r.check_in_time || r.checkInTime || r['check-in_time'];
+
+          let timeMs = 0;
+          if (created) {
+            const dt = new Date(created);
+            if (!isNaN(dt.getTime())) timeMs = dt.getTime();
+          }
+
+          if (timeMs === 0 || (typeof created === 'string' && created.length <= 10)) {
+            const datePart = (item.date || created || '').slice(0, 10);
+            const timePart = checkOut || checkIn || '00:00';
+            const combined = new Date(`${datePart}T${timePart}:00`);
+            if (!isNaN(combined.getTime())) timeMs = combined.getTime();
+          }
+
+          return timeMs;
+        };
+
+        const tA = getTimestamp(a);
+        const tB = getTimestamp(b);
+        if (tA !== tB) return tB - tA;
+
+        const oidA = parseInt(String(a.rawReport?.oid || a.id || '0').replace(/\D/g, ''), 10) || 0;
+        const oidB = parseInt(String(b.rawReport?.oid || b.id || '0').replace(/\D/g, ''), 10) || 0;
+        return oidB - oidA;
       });
 
       setCompletedVisits(compiled);
