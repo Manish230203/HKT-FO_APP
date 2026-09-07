@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import api from "@/services/api";
 
 export default function LiveGPSTracking() {
@@ -48,6 +49,11 @@ export default function LiveGPSTracking() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "LOCATION_UPDATE") {
+            fetchLiveLocations();
+          } else if (data.type === "LOCATION_VIOLATION") {
+            toast.error(`🚨 DUTY LOCATION VIOLATION: ${data.message || "Field Officer turned OFF Location (GPS) during active shift!"}`, {
+              duration: 10000,
+            });
             fetchLiveLocations();
           }
         } catch (e) {}

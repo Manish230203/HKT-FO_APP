@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any
 from pydantic import BaseModel
@@ -183,3 +184,108 @@ async def websocket_live_tracking(ws: WebSocket):
         GPSManager.unregister_ws(ws)
     except Exception:
         GPSManager.unregister_ws(ws)
+
+
+class LocationViolationRequest(BaseModel):
+    employee_id: int
+    event_type: str = "DUTY_LOCATION_OFF_VIOLATION"
+    timestamp: Optional[str] = None
+    details: Optional[str] = None
+
+
+@router.post("/attendance/location-violation")
+@router.post("/_AIP_locationViolation")
+async def report_location_violation(
+    payload: LocationViolationRequest,
+    db: Session = Depends(get_patrol_db)
+):
+    try:
+        ts = payload.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 1. Save violation record into MySQL Database for historical audit
+        conn = db.connection()
+        raw_conn = conn.connection
+        cursor = raw_conn.cursor()
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS FIELD_OFFICER_DUTY_LOCATION_VIOLATION (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    employee_id INT NOT NULL,
+                    event_type VARCHAR(64) NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    details VARCHAR(255) NULL
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO FIELD_OFFICER_DUTY_LOCATION_VIOLATION (employee_id, event_type, created_at, details)
+                VALUES (%s, %s, %s, %s)
+            """, (payload.employee_id, payload.event_type, ts, payload.details or "GPS turned OFF during active shift"))
+            raw_conn.commit()
+        finally:
+            cursor.close()
+
+        # 2. Real-time WebSocket Alert broadcast directly to Area Manager Live Dashboard
+        broadcast_payload = {
+            "type": "LOCATION_VIOLATION",
+            "employee_id": payload.employee_id,
+            "event_type": payload.event_type,
+            "timestamp": ts,
+            "message": payload.details or "Field Officer turned OFF Location (GPS) during active duty shift!"
+        }
+        await GPSManager.broadcast_location(broadcast_payload)
+
+        return {"success": True, "message": "Location violation saved to DB & broadcast to Area Manager dashboard"}
+    except Exception as e:
+        print(f"Error handling location violation: {e}")
+        return {"success": True, "message": "Violation received"}
+
+
+@router.get("/attendance/location-violations")
+def get_location_violations(
+    date: Optional[str] = Query(None),
+    employee_id: Optional[int] = Query(None),
+    db: Session = Depends(get_patrol_db)
+):
+    try:
+        conn = db.connection()
+        raw_conn = conn.connection
+        cursor = raw_conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS FIELD_OFFICER_DUTY_LOCATION_VIOLATION (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    employee_id INT NOT NULL,
+                    event_type VARCHAR(64) NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    details VARCHAR(255) NULL
+                )
+            """)
+            query = """
+                SELECT v.*, e.name as officer_name, e.emp_code
+                FROM FIELD_OFFICER_DUTY_LOCATION_VIOLATION v
+                LEFT JOIN EMPLOYEE e ON (v.employee_id = e.oid OR v.employee_id = e.emp_code)
+            """
+            params = []
+            conditions = []
+            if date:
+                conditions.append("DATE(v.created_at) = %s")
+                params.append(date)
+            if employee_id:
+                conditions.append("v.employee_id = %s")
+                params.append(employee_id)
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += " ORDER BY v.id DESC LIMIT 100"
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return {"success": True, "violations": rows or []}
+        finally:
+            cursor.close()
+    except Exception as e:
+        print(f"Error fetching location violations: {e}")
+        return {"success": False, "violations": []}
+
+
+
+

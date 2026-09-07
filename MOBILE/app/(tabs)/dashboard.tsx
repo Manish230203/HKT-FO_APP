@@ -467,12 +467,13 @@ export default function DashboardScreen() {
 
           let timeMs = 0;
           if (created) {
-            const dt = new Date(created);
+            const normCreated = typeof created === 'string' ? created.replace(' ', 'T') : created;
+            const dt = new Date(normCreated);
             if (!isNaN(dt.getTime())) timeMs = dt.getTime();
           }
 
-          if (timeMs === 0 || (typeof created === 'string' && created.length <= 10)) {
-            const datePart = (item.date || created || '').slice(0, 10);
+          if (timeMs === 0) {
+            const datePart = (item.date || (typeof created === 'string' ? created : '') || '').slice(0, 10);
             const timePart = checkOut || checkIn || '00:00';
             const combined = new Date(`${datePart}T${timePart}:00`);
             if (!isNaN(combined.getTime())) timeMs = combined.getTime();

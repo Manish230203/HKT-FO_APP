@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,110 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as Location from 'expo-location';
-import { MapPin, Settings, AlertTriangle, RefreshCw, BatteryCharging, Zap } from 'lucide-react-native';
+import * as Notifications from 'expo-notifications';
+import { MapPin, Settings, AlertTriangle, RefreshCw, BatteryCharging, Zap, ShieldCheck, ShieldAlert, CheckCircle2 } from 'lucide-react-native';
 import { requestIgnoreBatteryOptimizations, openAutoStartSettings } from '../services/batteryOptimizer';
+import { useAttendance } from '../context/AttendanceContext';
+import api from '../services/api';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function LocationGuard({ children }: { children: React.ReactNode }) {
+  const attendanceContext = useAttendance();
+  const todayRecord = attendanceContext?.todayRecord;
+  const isOnDuty = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+
   const [isLocationDisabled, setIsLocationDisabled] = useState<boolean>(false);
   const [checking, setChecking] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [yesCountdown, setYesCountdown] = useState<number>(30);
+  const isPromptingRef = useRef<boolean>(false);
+  const lastNotifTimeRef = useRef<number>(0);
+  const lastViolationReportTimeRef = useRef<number>(0);
+
+  // Request notification permissions on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+      } catch (err) {
+        console.warn('Notification permission error:', err);
+      }
+    })();
+  }, []);
+
+  const fireDutyGpsOffAlert = async () => {
+    // Limit to once every 12 seconds
+    if (Date.now() - lastNotifTimeRef.current < 12000) return;
+    lastNotifTimeRef.current = Date.now();
+
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '⚠️ WARNING: Duty Location (GPS) Turned OFF!',
+          body: 'Location is mandatory for your active shift. Tap here to turn on GPS immediately.',
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: null,
+      });
+    } catch (err) {
+      console.warn('Error scheduling GPS alert notification:', err);
+    }
+  };
+
+  const reportViolationToBackend = async () => {
+    if (Date.now() - lastViolationReportTimeRef.current < 60000) return; // Limit to once per minute
+    lastViolationReportTimeRef.current = Date.now();
+
+    try {
+      const empOid = todayRecord ? (todayRecord as any).employee_id : null;
+      await api.post('/attendance/location-violation', {
+        employee_id: empOid || 1,
+        event_type: 'DUTY_LOCATION_OFF_VIOLATION',
+        details: 'Field officer turned off Location (GPS) during active duty shift',
+      });
+    } catch (err) {
+      console.warn('Location violation backend report warning:', err);
+    }
+  };
+
+  // Countdown timer for psychological YES button lock
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isLocationDisabled && isOnDuty) {
+      setYesCountdown(30);
+      timer = setInterval(() => {
+        setYesCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isLocationDisabled, isOnDuty]);
+
+  const triggerNativeGpsPrompt = async () => {
+    if (Platform.OS === 'android' && !isPromptingRef.current) {
+      isPromptingRef.current = true;
+      try {
+        await Location.enableNetworkProviderAsync();
+      } catch (err) {
+        console.warn('Native GPS prompt dismissed or warning:', err);
+      } finally {
+        isPromptingRef.current = false;
+        checkLocationStatus();
+      }
+    } else {
+      checkLocationStatus();
+    }
+  };
 
   const checkLocationStatus = async () => {
     try {
@@ -36,7 +133,11 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
 
       if (!servicesEnabled) {
         setIsLocationDisabled(true);
-        setErrorMessage('High Accuracy Location / GPS is turned OFF on your mobile device. Please enable High Accuracy location mode to use PatrolSync FO.');
+        setErrorMessage(
+          isOnDuty
+            ? '🚨 MANDATORY DUTY COMPLIANCE: Location (GPS) has been turned OFF while you are punched in on active duty. Turning off location triggers an immediate compliance escalation to your Field Supervisor.'
+            : 'High Accuracy Location / GPS is turned OFF on your mobile device. Please enable High Accuracy location mode to use PatrolSync FO.'
+        );
         setChecking(false);
         return;
       }
@@ -98,16 +199,24 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
       }
     });
 
-    // Interval check every 5 seconds
+    // High-frequency 2-second check loop when on duty and location is disabled
     const interval = setInterval(() => {
       checkLocationStatus();
-    }, 5000);
+      // Continuous Auto-Re-Prompt Loop & System Alert Notification if location is disabled during active duty
+      if (isLocationDisabled && isOnDuty) {
+        fireDutyGpsOffAlert();
+        reportViolationToBackend();
+        if (Platform.OS === 'android') {
+          triggerNativeGpsPrompt();
+        }
+      }
+    }, 2500);
 
     return () => {
       subscription.remove();
       clearInterval(interval);
     };
-  }, []);
+  }, [isLocationDisabled, isOnDuty]);
 
   const handleOpenSettings = async () => {
     try {
@@ -139,33 +248,65 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
       >
         <View style={styles.container}>
           <View style={styles.card}>
-            <View style={styles.iconContainer}>
-              <AlertTriangle size={44} color="#FF5252" />
+            <View style={[styles.iconContainer, isOnDuty && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
+              {isOnDuty ? <ShieldAlert size={48} color="#EF4444" /> : <AlertTriangle size={44} color="#FF5252" />}
             </View>
 
-            <Text style={styles.title}>Location & Duty Setup Required</Text>
+            <Text style={styles.title}>
+              {isOnDuty ? '🚨 DUTY COMPLIANCE WARNING' : 'Location & Duty Setup Required'}
+            </Text>
 
             <Text style={styles.message}>
               {errorMessage || 'Field Officers must have Location (GPS) set to "Allow all the time" to perform duty actions in PatrolSync FO.'}
             </Text>
 
-            <View style={styles.infoBox}>
-              <MapPin size={20} color="#60A5FA" style={{ marginRight: 8 }} />
-              <Text style={styles.infoText}>
-                Your location ensures verified attendance and real-time site visits.
-              </Text>
-            </View>
+            {isOnDuty && (
+              <View style={styles.complianceBox}>
+                <Text style={styles.complianceTitle}>Are you sure you want to proceed with Location OFF?</Text>
+                <Text style={styles.complianceSub}>Location tracking is mandatory for your active shift attendance verification.</Text>
+              </View>
+            )}
 
+            {/* Primary Button: Keep Location ON (Highlights Green/Blue and triggers 1-tap GPS prompt) */}
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[styles.primaryButton, isOnDuty && styles.dutyKeepOnButton]}
               activeOpacity={0.8}
-              onPress={handleOpenSettings}
+              onPress={triggerNativeGpsPrompt}
             >
-              <Settings size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryButtonText}>Enable "Allow All The Time" Permission</Text>
+              <CheckCircle2 size={22} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryButtonText}>
+                {isOnDuty ? 'NO - KEEP LOCATION ON (RECOMMENDED)' : 'Enable 1-Tap High Accuracy GPS'}
+              </Text>
             </TouchableOpacity>
 
-            {Platform.OS === 'android' && (
+            {/* Psychological Hidden / Locked YES Button */}
+            {isOnDuty ? (
+              <View style={styles.hiddenYesContainer}>
+                <TouchableOpacity
+                  style={[styles.hiddenYesButton, yesCountdown > 0 && styles.disabledYesButton]}
+                  disabled={yesCountdown > 0}
+                  activeOpacity={0.9}
+                  onPress={handleOpenSettings}
+                >
+                  <Text style={styles.hiddenYesText}>
+                    {yesCountdown > 0
+                      ? `YES (Locked - Supervisor Alerting in ${yesCountdown}s...)`
+                      : 'YES (Proceed to Settings & Report Violation)'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.permissionButton}
+                activeOpacity={0.8}
+                onPress={handleOpenSettings}
+              >
+                <Settings size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.primaryButtonText}>Enable "Allow All The Time" Permission</Text>
+              </TouchableOpacity>
+            )}
+
+            {Platform.OS === 'android' && !isOnDuty && (
               <>
                 <TouchableOpacity
                   style={styles.batteryButton}
@@ -198,7 +339,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
               ) : (
                 <>
                   <RefreshCw size={18} color="#94A3B8" style={{ marginRight: 6 }} />
-                  <Text style={styles.secondaryButtonText}>I Turned It ON, Check Again</Text>
+                  <Text style={styles.secondaryButtonText}>I Turned It ON, Re-Check Location</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -335,5 +476,67 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#94A3B8',
+  },
+  complianceBox: {
+    width: '100%',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  complianceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FCA5A5',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  complianceSub: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  dutyKeepOnButton: {
+    backgroundColor: '#059669',
+    height: 56,
+  },
+  permissionButton: {
+    width: '100%',
+    height: 52,
+    backgroundColor: '#2563EB',
+    borderRadius: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  hiddenYesContainer: {
+    width: '100%',
+    marginBottom: 12,
+  },
+  hiddenYesButton: {
+    width: '100%',
+    height: 44,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+  },
+  disabledYesButton: {
+    backgroundColor: 'rgba(51, 65, 85, 0.4)',
+    borderColor: 'rgba(51, 65, 85, 0.6)',
+    opacity: 0.6,
+  },
+  hiddenYesText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#EF4444',
+    textAlign: 'center',
   },
 });
