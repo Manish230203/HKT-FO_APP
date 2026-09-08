@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import { Config } from '../constants/Config';
 import { getPunchRecords, savePunchRecord, updatePunchRecordsList } from '../services/db';
 import { gpsTracker } from '../services/gpsService';
+import { violationService } from '../services/violationService';
 
 export interface AttendanceRecord {
   date: string;
@@ -108,6 +109,10 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
 
       if (todayData?.success) {
         setTodayRecord(todayData.record);
+        if (todayData.record?.check_in && !todayData.record?.check_out) {
+          const pId = todayData.record.oid || todayData.record.id || todayData.record.punch_in_id;
+          if (pId) violationService.setPunchInId(pId).catch(() => {});
+        }
       }
 
       if (logsData?.success) {
@@ -214,7 +219,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
           // Non-blocking GPS tracking start/stop based on punch action
           if (result.action === 'PUNCH_OUT' || result.type === 'PUNCH_OUT' || result.status === 'PUNCH_OUT') {
             gpsTracker?.stopTracking()?.catch(() => {});
+            const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || (todayRecord as any)?.oid || (todayRecord as any)?.id || null;
+            violationService.handlePunchOut(Number(empOid), pId, new Date().toISOString()).catch(() => {});
           } else {
+            const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || null;
+            if (pId) violationService.setPunchInId(pId).catch(() => {});
             gpsTracker?.startTracking(Number(empOid))?.catch((err) => {
               console.warn('GPS start tracking warning:', err);
             });
@@ -339,7 +348,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
           // Non-blocking GPS tracking start/stop based on punch action
           if (result.action === 'PUNCH_OUT' || result.type === 'PUNCH_OUT' || result.status === 'PUNCH_OUT') {
             gpsTracker?.stopTracking()?.catch(() => {});
+            const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || (todayRecord as any)?.oid || (todayRecord as any)?.id || null;
+            violationService.handlePunchOut(Number(empOid), pId, new Date().toISOString()).catch(() => {});
           } else {
+            const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || null;
+            if (pId) violationService.setPunchInId(pId).catch(() => {});
             gpsTracker?.startTracking(Number(empOid))?.catch((err) => {
               console.warn('GPS start tracking warning:', err);
             });

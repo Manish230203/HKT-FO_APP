@@ -138,9 +138,10 @@ export default function CreateGeneralVisitScreen() {
           const initialSite = siteData.find((s) => String(s.id) === String(params.siteId));
           if (initialSite) {
             setSiteName(initialSite.name);
-            if (initialSite.clientId) {
-              setClientId(String(initialSite.clientId));
-              const parentClient = clientData.find((c) => String(c.id) === String(initialSite.clientId));
+            if (initialSite.client_id || (initialSite as any).clientId) {
+              const cId = String(initialSite.client_id || (initialSite as any).clientId);
+              setClientId(cId);
+              const parentClient = clientData.find((c) => String(c.id) === cId);
               if (parentClient) setClientName(parentClient.name);
             }
           }
@@ -282,9 +283,11 @@ export default function CreateGeneralVisitScreen() {
     (c.name || '').toLowerCase().includes(clientSearchQuery.toLowerCase())
   );
 
-  const filteredSites = sites.filter((s) =>
-    (s.name || '').toLowerCase().includes(siteSearchQuery.toLowerCase())
-  );
+  const filteredSites = sites.filter((s) => {
+    const matchesClient = clientId ? String(s.client_id || (s as any).clientId) === String(clientId) : false;
+    const matchesSearch = (s.name || '').toLowerCase().includes(siteSearchQuery.toLowerCase());
+    return matchesClient && matchesSearch;
+  });
 
   return (
     <KeyboardAvoidingView
@@ -497,7 +500,9 @@ export default function CreateGeneralVisitScreen() {
               keyExtractor={(item) => String(item.id)}
               ListEmptyComponent={
                 <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No sites found for this client.</Text>
+                  <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
+                    {!clientId ? (t('select_client_first') || 'Please select a client first.') : 'No sites found for this client.'}
+                  </Text>
                 </View>
               }
               renderItem={({ item }) => (

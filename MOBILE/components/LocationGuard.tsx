@@ -26,6 +26,8 @@ Notifications.setNotificationHandler({
   }),
 });
 
+import { violationService } from '../services/violationService';
+
 export default function LocationGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const attendanceContext = useAttendance();
@@ -38,7 +40,6 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
   const [yesCountdown, setYesCountdown] = useState<number>(30);
   const isPromptingRef = useRef<boolean>(false);
   const lastNotifTimeRef = useRef<number>(0);
-  const lastViolationReportTimeRef = useRef<number>(0);
 
   // Request notification permissions on mount
   useEffect(() => {
@@ -74,24 +75,6 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
     }
   };
 
-  const reportViolationToBackend = async () => {
-    if (Date.now() - lastViolationReportTimeRef.current < 60000) return; // Limit to once per minute
-    lastViolationReportTimeRef.current = Date.now();
-
-    try {
-      const empOid = user?.id || (user as any)?.oid || user?.employee_id || (todayRecord as any)?.employee_id || 10208;
-      console.log(`[LocationGuard] Sending duty location violation report for officer ID ${empOid}...`);
-      const response = await api.post('/attendance/location-violation', {
-        employee_id: empOid,
-        event_type: 'DUTY_LOCATION_OFF_VIOLATION',
-        details: 'Field officer turned off Location (GPS) during active duty shift',
-      });
-      console.log('[LocationGuard] Violation reported successfully:', response.data);
-    } catch (err) {
-      console.warn('[LocationGuard] Location violation backend report warning:', err);
-    }
-  };
-
   // Countdown timer for psychological YES button lock
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -124,6 +107,9 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
     try {
       setChecking(true);
 
+      const empOid = user?.id || (user as any)?.oid || user?.employee_id || (todayRecord as any)?.employee_id || 10208;
+      const punchInId = (todayRecord as any)?.id || (todayRecord as any)?.oid || (todayRecord as any)?.punch_in_id || null;
+
       // 1. Check if location services (GPS) are turned ON on device
       let servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled && Platform.OS === 'android') {
@@ -142,8 +128,8 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
             ? '🚨 MANDATORY DUTY COMPLIANCE: Location (GPS) has been turned OFF while you are punched in on active duty. Turning off location triggers an immediate compliance escalation to your Field Supervisor.'
             : 'High Accuracy Location / GPS is turned OFF on your mobile device. Please enable High Accuracy location mode to use VIGILO-FO.'
         );
-        if (isOnDuty) {
-          reportViolationToBackend();
+        if (isOnDuty && empOid) {
+          violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
           fireDutyGpsOffAlert();
         }
         setChecking(false);
@@ -157,8 +143,8 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         if (reqFg.status !== 'granted') {
           setIsLocationDisabled(true);
           setErrorMessage('Location permission is required for Field Officer operations. Please allow location access.');
-          if (isOnDuty) {
-            reportViolationToBackend();
+          if (isOnDuty && empOid) {
+            violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
             fireDutyGpsOffAlert();
           }
           setChecking(false);
@@ -173,8 +159,8 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         if (reqBg.status !== 'granted') {
           setIsLocationDisabled(true);
           setErrorMessage('Background Location Permission ("Allow all the time" / "Always Allow") is required so VIGILO-FO can track duty location while your screen is locked.');
-          if (isOnDuty) {
-            reportViolationToBackend();
+          if (isOnDuty && empOid) {
+            violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
             fireDutyGpsOffAlert();
           }
           setChecking(false);
@@ -183,6 +169,9 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
       }
 
       // Location Services are ON and 'Allow all the time' Permission is Granted!
+      if (isOnDuty && empOid) {
+        violationService.handleLocationStateChange(true, true, Number(empOid), punchInId);
+      }
       setIsLocationDisabled(false);
       setErrorMessage('');
 
@@ -221,7 +210,6 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
       // Continuous Auto-Re-Prompt Loop & System Alert Notification if location is disabled during active duty
       if (isLocationDisabled && isOnDuty) {
         fireDutyGpsOffAlert();
-        reportViolationToBackend();
         if (Platform.OS === 'android') {
           triggerNativeGpsPrompt();
         }

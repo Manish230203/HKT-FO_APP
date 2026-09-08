@@ -161,7 +161,7 @@ export default function DashboardScreen() {
   );
 
   const filteredModalSites = modalSites.filter((s) => {
-    const matchesClient = !newClientId ? true : String(s.client_id) === String(newClientId);
+    const matchesClient = newClientId ? String(s.client_id) === String(newClientId) : false;
     const matchesSearch = s.name.toLowerCase().includes(modalSiteSearch.toLowerCase()) ||
                           (s.client_name && s.client_name.toLowerCase().includes(modalSiteSearch.toLowerCase()));
     return matchesClient && matchesSearch;
@@ -809,7 +809,9 @@ export default function DashboardScreen() {
                   removeClippedSubviews
                   ListEmptyComponent={
                     <View style={{ padding: 20, alignItems: 'center' }}>
-                      <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>{t('no_sites_found')}</Text>
+                      <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
+                        {!newClientId ? t('select_client_first') : t('no_sites_found')}
+                      </Text>
                     </View>
                   }
                   renderItem={({ item }) => (

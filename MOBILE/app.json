@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A1128"
+      "backgroundColor": "#010F22"
     },
     "ios": {
       "supportsTablet": true,
@@ -29,7 +29,7 @@
       "package": "com.humankind.vigilofo",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0A1128"
+        "backgroundColor": "#010F22"
       },
       "permissions": [
         "CAMERA",

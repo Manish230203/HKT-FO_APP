@@ -15,6 +15,9 @@ import {
   Moon,
   Sun,
   ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
+  MapPinOff,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +27,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import api from "../services/api";
+import api, { getDutyLocationViolations } from "../services/api";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -49,6 +52,9 @@ export default function Dashboard() {
   // Planned visits state
   const [plannedVisits, setPlannedVisits] = useState([]);
   const [activeTab, setActiveTab] = useState("Planned");
+
+  // Duty location violations state
+  const [violations, setViolations] = useState([]);
 
   // Start Visit Modal State
   const [isStartVisitTypeModalOpen, setIsStartVisitTypeModalOpen] = useState(false);
@@ -128,6 +134,15 @@ export default function Dashboard() {
           }
         } catch (pvErr) {
           console.error("Failed to load planned visits from DB", pvErr);
+        }
+
+        // Fetch duty location violations
+        try {
+          const violParams = empOid ? { employee_oid: empOid } : {};
+          const violData = await getDutyLocationViolations(violParams);
+          setViolations(violData || []);
+        } catch (vErr) {
+          console.error("Failed to load duty location violations", vErr);
         }
       } catch (error) {
         console.error("Error loading dashboard metrics", error);
@@ -575,6 +590,96 @@ export default function Dashboard() {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Duty Location Violations Card */}
+      <Card className="rounded-[14px] border border-amber-500/20 bg-card shadow-sm">
+        <CardHeader className="border-b pb-4 px-6 bg-amber-500/5 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+              <ShieldAlert className="h-4.5 w-4.5 text-amber-500" /> Duty Location Violations
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Real-time monitor of GPS OFF events during active duty shifts
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1 text-xs font-bold rounded-full">
+              {violations.filter((v) => v.location_restored_at === null || v.location_restored_at === undefined || v.location_restored_at === "").length} Unresolved
+            </Badge>
+            <Badge className="bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30 px-3 py-1 text-xs font-bold rounded-full">
+              {violations.length} Total Events
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          {violations.length === 0 ? (
+            <div className="text-center py-8 text-xs text-muted-foreground italic">
+              No duty location violations recorded.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader className="bg-muted/40">
+                  <TableRow>
+                    <TableHead className="font-bold text-xs">Officer / Emp Code</TableHead>
+                    <TableHead className="font-bold text-xs">Branch</TableHead>
+                    <TableHead className="font-bold text-xs">Location OFF Time</TableHead>
+                    <TableHead className="font-bold text-xs">Restored Time</TableHead>
+                    <TableHead className="font-bold text-xs">Duration</TableHead>
+                    <TableHead className="font-bold text-xs">Status</TableHead>
+                    <TableHead className="font-bold text-xs text-right">Punch Log</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {violations.slice(0, 10).map((v, idx) => {
+                    const isUnresolved = v.location_restored_at === null || v.location_restored_at === undefined || v.location_restored_at === "";
+                    const offTimeStr = v.location_off_at || v.created_at || "—";
+                    const restoredTimeStr = v.location_restored_at || "—";
+                    return (
+                      <TableRow key={v.oid || v.id || idx} className="hover:bg-muted/20">
+                        <TableCell className="font-bold text-foreground text-xs">
+                          {v.employee_name || v.officer_name || `Officer #${v.employee_oid || v.employee_id}`}
+                          {v.employee_code && (
+                            <span className="block text-[11px] font-normal text-muted-foreground">
+                              {v.employee_code}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {v.branch || "Headquarters"}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono text-amber-600 dark:text-amber-400 font-semibold">
+                          {offTimeStr}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                          {restoredTimeStr}
+                        </TableCell>
+                        <TableCell className="text-xs font-medium text-foreground">
+                          {v.duration ? `${v.duration} min` : (isUnresolved ? "Active" : "—")}
+                        </TableCell>
+                        <TableCell>
+                          {isUnresolved ? (
+                            <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold text-[11px] flex items-center gap-1 w-fit">
+                              <AlertTriangle className="h-3 w-3" /> Unresolved
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold text-[11px] flex items-center gap-1 w-fit">
+                              <ShieldCheck className="h-3 w-3" /> Restored
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                          Punch #{v.punch_in_id || "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -1,4 +1,3 @@
-import { useState, useEffect, useRef } from "react";
 import {
   Building2,
   CheckCircle2,
@@ -6,7 +5,10 @@ import {
   Download,
   AlertCircle,
   Filter,
-  Calendar
+  Calendar,
+  ShieldAlert,
+  ShieldCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import api from "../../services/api";
+import api, { getDutyLocationViolations } from "../../services/api";
 import { useToast } from "@/hooks/use-toast";
 
 export default function GuardAttendance() {
@@ -56,15 +58,27 @@ export default function GuardAttendance() {
   // Tabs: Pending, Approved
   const [activeTab, setActiveTab] = useState("Pending");
 
-  // Regularize Dialog Modal States (Time Log Editor - Admin)
-  const [isRegOpen, setIsRegOpen] = useState(false);
-  const [selectedGuard, setSelectedGuard] = useState(null);
-  const [inTime, setInTime] = useState("");
-  const [outTime, setOutTime] = useState("");
-  const [setHours, setSetHours] = useState("");
-  const [regReason, setRegReason] = useState("Out attendance not marked (manually marked)");
-  const [otBareBy, setOtBareBy] = useState("NONE");
-  const [newAttendanceDate, setNewAttendanceDate] = useState("");
+  // Duty Location Violations Modal States
+  const [isViolationModalOpen, setIsViolationModalOpen] = useState(false);
+  const [selectedGuardViolations, setSelectedGuardViolations] = useState([]);
+  const [violationLoading, setViolationLoading] = useState(false);
+  const [selectedViolationGuard, setSelectedViolationGuard] = useState(null);
+
+  const handleOpenDutyViolations = async (r) => {
+    setSelectedViolationGuard(r);
+    setIsViolationModalOpen(true);
+    setViolationLoading(true);
+    try {
+      const empId = r.empOid || r.empId || r.employee_id || r.employee_oid;
+      const res = await getDutyLocationViolations(empId ? { employee_oid: empId } : {});
+      setSelectedGuardViolations(res || []);
+    } catch (e) {
+      console.error("Failed to load officer location violations", e);
+      setSelectedGuardViolations([]);
+    } finally {
+      setViolationLoading(false);
+    }
+  };
 
   const formatDMY = (dateStr) => {
     if (!dateStr) return "";
@@ -595,14 +609,24 @@ export default function GuardAttendance() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenRegularize(r)}
-                        className="text-xs text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 font-bold"
-                      >
-                        Regularize
-                      </Button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenRegularize(r)}
+                          className="text-xs text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 font-bold"
+                        >
+                          Regularize
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenDutyViolations(r)}
+                          className="text-xs text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900/50 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-bold flex items-center gap-1"
+                        >
+                          <ShieldAlert className="h-3 w-3" /> Violations
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -788,6 +812,83 @@ export default function GuardAttendance() {
                   Save
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Duty Location Violations Modal */}
+      <Dialog open={isViolationModalOpen} onOpenChange={setIsViolationModalOpen}>
+        <DialogContent className="max-w-3xl p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              Duty Location Violations Audit — {selectedViolationGuard?.guardName || selectedViolationGuard?.empId || "Officer"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+              Audit log of GPS OFF events recorded for this field officer during active duty shifts
+            </DialogDescription>
+          </DialogHeader>
+
+          {violationLoading ? (
+            <div className="py-8 text-center text-xs text-slate-400">Loading duty location violations...</div>
+          ) : selectedGuardViolations.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400 italic">
+              No duty location violations recorded for this officer.
+            </div>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800 mt-2">
+              <Table>
+                <TableHeader className="bg-slate-50 dark:bg-slate-850">
+                  <TableRow>
+                    <TableHead className="font-bold text-xs">OFF Time</TableHead>
+                    <TableHead className="font-bold text-xs">RESTORED Time</TableHead>
+                    <TableHead className="font-bold text-xs">Duration</TableHead>
+                    <TableHead className="font-bold text-xs">Punch In ID</TableHead>
+                    <TableHead className="font-bold text-xs">Punch Out ID</TableHead>
+                    <TableHead className="font-bold text-xs">Status</TableHead>
+                    <TableHead className="font-bold text-xs">Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedGuardViolations.map((v, idx) => {
+                    const isUnresolved = v.location_restored_at === null || v.location_restored_at === undefined || v.location_restored_at === "";
+                    return (
+                      <TableRow key={v.oid || v.id || idx}>
+                        <TableCell className="font-mono text-xs text-amber-600 dark:text-amber-400 font-semibold whitespace-nowrap">
+                          {v.location_off_at || v.created_at || "—"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-semibold whitespace-nowrap">
+                          {v.location_restored_at || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                          {v.duration ? `${v.duration} min` : (isUnresolved ? "Active" : "—")}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-500">
+                          #{v.punch_in_id || "—"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-500">
+                          #{v.punch_out_id || "—"}
+                        </TableCell>
+                        <TableCell>
+                          {isUnresolved ? (
+                            <Badge className="bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 text-[10px] font-bold">
+                              Unresolved
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 text-[10px] font-bold">
+                              Restored
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-500 dark:text-slate-400 max-w-[200px] truncate">
+                          {v.details || "GPS OFF during shift"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
           )}
         </DialogContent>

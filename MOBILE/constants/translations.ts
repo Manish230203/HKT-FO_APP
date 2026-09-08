@@ -63,6 +63,7 @@ export const translations = {
     failed_assign_visit_db: 'Failed to assign visit to DB.',
     search_client: 'Search Client...',
     search_site: 'Search Site by Name...',
+    select_client_first: 'Please select a client first.',
     no_sites_found: 'No sites found for this selection.',
     all_clients: 'All Clients (Show All Sites)',
 
@@ -241,6 +242,7 @@ export const translations = {
     failed_assign_visit_db: 'डेटाबेस में विज़िट असाइन करने में विफल।',
     search_client: 'क्लाइंट खोजें...',
     search_site: 'साइट का नाम खोजें...',
+    select_client_first: 'कृपया पहले एक क्लाइंट चुनें।',
     no_sites_found: 'इस चयन के लिए कोई साइट नहीं मिली।',
     all_clients: 'सभी क्लाइंट (सभी साइटें देखें)',
 
@@ -419,6 +421,7 @@ export const translations = {
     failed_assign_visit_db: 'डेटाबेसमध्ये भेट नियुक्त करण्यात अयशस्वी.',
     search_client: 'क्लायंट शोधा...',
     search_site: 'साइटचे नाव शोधा...',
+    select_client_first: 'कृपया आधी एक क्लायंट निवडा.',
     no_sites_found: 'या निवडीसाठी कोणतीही साइट सापडली नाही.',
     all_clients: 'सर्व क्लायंट (सर्व साइट्स पहा)',
 

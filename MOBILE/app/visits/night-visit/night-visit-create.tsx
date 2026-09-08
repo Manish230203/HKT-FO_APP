@@ -273,9 +273,10 @@ export default function CreateNightVisitReportScreen() {
   );
 
   const filteredSites = sites.filter((s) => {
-    const matchesClient = !clientId ? true : String(s.client_id) === String(clientId);
+    const matchesClient = clientId ? String(s.client_id) === String(clientId) : false;
     const matchesSearch = s.name.toLowerCase().includes(siteSearchQuery.toLowerCase()) ||
                           (s.client_name && s.client_name.toLowerCase().includes(siteSearchQuery.toLowerCase()));
+    return matchesClient && matchesSearch;
   });
 
   // Handlers for Temporary Guards
@@ -856,7 +857,9 @@ export default function CreateNightVisitReportScreen() {
               keyExtractor={(item) => String(item.id)}
               ListEmptyComponent={
                 <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No sites found for this selection.</Text>
+                  <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
+                    {!clientId ? (t('select_client_first') || 'Please select a client first.') : 'No sites found for this client.'}
+                  </Text>
                 </View>
               }
               renderItem={({ item }) => (

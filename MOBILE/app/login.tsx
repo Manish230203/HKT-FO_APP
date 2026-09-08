@@ -37,7 +37,7 @@ export default function LoginScreen() {
       if (res.success) {
         router.replace('/(tabs)/dashboard');
       } else {
-        setErrorMessage(res.message || t('invalid_credentials'));
+        setErrorMessage((res as any).message || (res as any).error || t('invalid_credentials'));
       }
     } catch (err: any) {
       console.error('Login Error:', err);
@@ -48,12 +48,12 @@ export default function LoginScreen() {
   };
 
   return (
-    <SwipeableBackWrapper targetRoute="/lang/lang-selection">
+    <SwipeableBackWrapper fallbackRoute="/lang/lang-selection">
       <SafeAreaView style={styles.container}>
         {/* Top Header Bar with Back Button */}
-        <View style={styles.topBar}>
+        <View style={styles.topNav}>
           <TouchableOpacity
-            style={styles.backButton}
+            style={styles.backBtn}
             onPress={() => router.replace('/lang/lang-selection')}
             activeOpacity={0.7}
           >

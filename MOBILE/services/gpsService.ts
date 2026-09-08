@@ -309,7 +309,7 @@ class MobileGPSTracker {
 
   private lastViolationReportTime = 0;
 
-  public async reportLocationViolation(details?: string) {
+  public async reportLocationViolation(details?: string, eventType = 'DUTY_LOCATION_OFF_VIOLATION') {
     if (!this.employeeId) {
       const session = await getUserSession();
       if (session && session.user && session.user.oid) {
@@ -318,15 +318,21 @@ class MobileGPSTracker {
     }
     if (!this.employeeId) return;
 
-    if (Date.now() - this.lastViolationReportTime < 60000) return; // Limit to once per minute
-    this.lastViolationReportTime = Date.now();
+    if (eventType === 'DUTY_LOCATION_OFF_VIOLATION' && Date.now() - this.lastViolationReportTime < 45000) return; // Limit to once per 45s
+    if (eventType === 'DUTY_LOCATION_OFF_VIOLATION') {
+      this.lastViolationReportTime = Date.now();
+    }
 
     try {
-      console.log(`[gpsService] Reporting duty location violation for officer #${this.employeeId}...`);
+      const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      console.log(`[gpsService] Reporting duty location violation (${eventType}) for officer #${this.employeeId}...`);
       await api.post('/attendance/location-violation', {
         employee_id: this.employeeId,
-        event_type: 'DUTY_LOCATION_OFF_VIOLATION',
+        event_type: eventType,
         details: details || 'Field officer turned off Location (GPS) during active duty shift',
+        timestamp: nowIso,
+        location_off_at: eventType === 'DUTY_LOCATION_OFF_VIOLATION' ? nowIso : undefined,
+        location_restored_at: eventType === 'DUTY_LOCATION_RESTORED' ? nowIso : undefined,
       });
       console.log('[gpsService] Duty location violation reported to backend successfully');
     } catch (err) {

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { History, Calendar, MapPin, Navigation, ArrowLeft, Clock, ShieldCheck } from "lucide-react";
+import { History, Calendar, MapPin, Navigation, ArrowLeft, Clock, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import api from "@/services/api";
+import api, { getDutyLocationViolations } from "@/services/api";
 
 export default function TrackHistory() {
   const [searchParams] = useSearchParams();
@@ -15,18 +15,21 @@ export default function TrackHistory() {
   const [employeeId, setEmployeeId] = useState(initialEmpId);
   const [date, setDate] = useState(initialDate);
   const [data, setData] = useState(null);
+  const [violations, setViolations] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const fetchHistory = async () => {
     if (!employeeId || !date) return;
     setLoading(true);
     try {
-      const res = await api.get("/gps/history", {
-        params: { employee_id: employeeId, date },
-      });
+      const [res, violData] = await Promise.all([
+        api.get("/gps/history", { params: { employee_id: employeeId, date } }),
+        getDutyLocationViolations({ employee_oid: employeeId, date }),
+      ]);
       if (res.data) {
         setData(res.data);
       }
+      setViolations(violData || []);
     } catch (err) {
       console.error("Error fetching track history:", err);
     } finally {
@@ -127,6 +130,76 @@ export default function TrackHistory() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Duty Location Violation Timeline Events */}
+          <Card className="border border-amber-500/30 shadow-sm bg-amber-500/5">
+            <CardHeader className="p-4 border-b border-amber-500/20 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-amber-500" /> Duty Location Violation Events ({violations.length})
+              </CardTitle>
+              <span className="text-[11px] text-muted-foreground">Timeline log only</span>
+            </CardHeader>
+            <CardContent className="p-0">
+              {violations.length === 0 ? (
+                <div className="text-center py-6 text-xs text-muted-foreground italic">
+                  No location violations recorded on this date.
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {violations.map((v, idx) => {
+                    const isUnresolved = v.location_restored_at === null || v.location_restored_at === undefined || v.location_restored_at === "";
+                    return (
+                      <div key={v.oid || v.id || idx} className="p-4 space-y-2 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+                              Location OFF
+                            </Badge>
+                            <span className="text-xs font-mono font-semibold text-foreground">
+                              {v.location_off_at || v.created_at}
+                            </span>
+                          </div>
+                          {isUnresolved ? (
+                            <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-[10px] font-bold">
+                              Unresolved
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                              Restored
+                            </Badge>
+                          )}
+                        </div>
+
+                        {v.location_restored_at && (
+                          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                Location RESTORED
+                              </Badge>
+                              <span className="font-mono text-foreground font-semibold">
+                                {v.location_restored_at}
+                              </span>
+                            </div>
+                            {v.duration && (
+                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                Duration: {v.duration} min
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {v.details && (
+                          <p className="text-[11px] text-muted-foreground italic">
+                            {v.details}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Deduplicated Site Visit Sessions */}
           <Card className="border border-border shadow-sm">

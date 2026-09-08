@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 
 // Safe Storage Helper to eliminate SecureStore 2048-byte overflow warning
-const setStorageItem = async (key: string, value: string) => {
+export const setStorageItem = async (key: string, value: string) => {
   try {
     if (Platform.OS === 'web') {
       localStorage.setItem(key, value);
@@ -23,7 +23,7 @@ const setStorageItem = async (key: string, value: string) => {
   }
 };
 
-const getStorageItem = async (key: string): Promise<string | null> => {
+export const getStorageItem = async (key: string): Promise<string | null> => {
   try {
     if (Platform.OS === 'web') {
       return localStorage.getItem(key);
@@ -41,7 +41,7 @@ const getStorageItem = async (key: string): Promise<string | null> => {
   }
 };
 
-const deleteStorageItem = async (key: string) => {
+export const deleteStorageItem = async (key: string) => {
   try {
     if (Platform.OS === 'web') {
       localStorage.removeItem(key);
