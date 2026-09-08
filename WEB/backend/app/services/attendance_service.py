@@ -1468,7 +1468,7 @@ def get_today_status_logic(empOid: int):
 
         # 2. Query today's status
         query = """
-            SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
+            SELECT atl.oid as oid, atl.oid as id, atl.oid as punch_in_id, ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
                    loc_in.latitude as check_in_lat, loc_in.longitude as check_in_long,
                    loc_out.latitude as check_out_lat, loc_out.longitude as check_out_long
             FROM ATTENDANCE_TIME_LOG atl

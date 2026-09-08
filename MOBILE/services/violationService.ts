@@ -52,6 +52,22 @@ class ViolationService {
     await setStorageItem(VIOLATION_STATE_KEY, state);
   }
 
+  private getLocalFormattedTimestamp(ts?: number | Date | string): string {
+    if (typeof ts === 'string' && ts.length === 19 && !ts.includes('T')) {
+      return ts;
+    }
+    const d = ts ? (typeof ts === 'number' || typeof ts === 'string' ? new Date(ts) : ts) : new Date();
+    if (isNaN(d.getTime())) return new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const mins = pad(d.getMinutes());
+    const secs = pad(d.getSeconds());
+    return `${year}-${month}-${day} ${hours}:${mins}:${secs}`;
+  }
+
   // Handle Location Provider ON/OFF state transition
   public async handleLocationStateChange(
     isLocationOn: boolean,
@@ -68,7 +84,7 @@ class ViolationService {
 
     const currentState = await this.getViolationState();
     const activePunchInId = punchInId || (await this.getPunchInId());
-    const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const nowIso = this.getLocalFormattedTimestamp();
 
     // ON -> OFF transition
     if (!isLocationOn && currentState === 'ON') {
