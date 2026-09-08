@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 import os
 from app.routes.officer_patrol import router as officer_router
 from app.routes.attendance import router as attendance_router
@@ -17,7 +18,53 @@ import uvicorn
 # except Exception as e:
 #     print(f"Warning creating tables on startup: {e}")
 
-app = FastAPI(title="F.O. Pages API", description="Standalone backend for Field Officer ")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    try:
+        from app.database import get_db_connection
+        conn = get_db_connection()
+        if conn:
+            c = None
+            try:
+                c = conn.cursor()
+                tables = [
+                    "FIELD_OFFICER_DAY_VISIT_REPORTS",
+                    "FIELD_OFFICER_NIGHT_VISIT_REPORTS",
+                    "FIELD_OFFICER_GENERAL_VISIT_REPORTS"
+                ]
+                for tbl in tables:
+                    sql = f"""
+                        UPDATE {tbl} r
+                        JOIN (
+                            SELECT Employee, site_id, DATE(check_in_time) as s_date,
+                                   MIN(DATE_FORMAT(check_in_time, '%H:%i')) as session_check_in,
+                                   MAX(DATE_FORMAT(check_out_time, '%H:%i')) as session_check_out
+                            FROM SITE_VISIT_SESSIONS
+                            GROUP BY Employee, site_id, DATE(check_in_time)
+                        ) svs ON (
+                            (svs.Employee = r.employee_oid OR svs.Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = r.employee_oid LIMIT 1))
+                            AND svs.site_id = r.site_id
+                            AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+                        )
+                        SET r.`check-in_time` = svs.session_check_in,
+                            r.`check-out_time` = COALESCE(NULLIF(r.`check-out_time`, ''), svs.session_check_out)
+                        WHERE r.`check-in_time` IS NULL OR r.`check-in_time` = '';
+                    """
+                    c.execute(sql)
+                conn.commit()
+                print("Successfully backfilled missing report check-in times from SITE_VISIT_SESSIONS.")
+            finally:
+                if c:
+                    try: c.close()
+                    except Exception: pass
+                try: conn.close()
+                except Exception: pass
+    except Exception as e:
+        print(f"Report check-in time backfill warning: {e}")
+    yield
+
+app = FastAPI(title="F.O. Pages API", description="Standalone backend for Field Officer", lifespan=lifespan)
 
 # Ensure uploads directory exists and mount static files
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
@@ -47,44 +94,6 @@ app.include_router(gps_router)
 app.include_router(patrol_router)
 app.include_router(admin_router)
 
-
-@app.on_event("startup")
-def sync_missing_report_checkin_times():
-    try:
-        from app.database import get_db_connection
-        conn = get_db_connection()
-        if conn:
-            c = conn.cursor()
-            tables = [
-                "FIELD_OFFICER_DAY_VISIT_REPORTS",
-                "FIELD_OFFICER_NIGHT_VISIT_REPORTS",
-                "FIELD_OFFICER_GENERAL_VISIT_REPORTS"
-            ]
-            for tbl in tables:
-                sql = f"""
-                    UPDATE {tbl} r
-                    JOIN (
-                        SELECT Employee, site_id, DATE(check_in_time) as s_date,
-                               MIN(DATE_FORMAT(check_in_time, '%H:%i')) as session_check_in,
-                               MAX(DATE_FORMAT(check_out_time, '%H:%i')) as session_check_out
-                        FROM SITE_VISIT_SESSIONS
-                        GROUP BY Employee, site_id, DATE(check_in_time)
-                    ) svs ON (
-                        (svs.Employee = r.employee_oid OR svs.Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = r.employee_oid LIMIT 1))
-                        AND svs.site_id = r.site_id
-                        AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
-                    )
-                    SET r.`check-in_time` = svs.session_check_in,
-                        r.`check-out_time` = COALESCE(NULLIF(r.`check-out_time`, ''), svs.session_check_out)
-                    WHERE r.`check-in_time` IS NULL OR r.`check-in_time` = '';
-                """
-                c.execute(sql)
-            conn.commit()
-            c.close()
-            conn.close()
-            print("Successfully backfilled missing report check-in times from SITE_VISIT_SESSIONS.")
-    except Exception as e:
-        print(f"Report check-in time backfill warning: {e}")
 
 @app.get("/")
 def read_root():

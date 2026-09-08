@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import mysql.connector
 from mysql.connector import pooling
 import threading
@@ -62,6 +63,37 @@ def get_db_connection():
         print(f"Error connecting to database: {err}")
         return None
 
+@contextmanager
+def get_db_cursor(dictionary=False, commit=False):
+    """
+    Context manager that guarantees connection and cursor are closed properly.
+    Usage:
+        with get_db_cursor(dictionary=True, commit=True) as (conn, cursor):
+            cursor.execute(...)
+    """
+    conn = get_db_connection()
+    if conn is None:
+        raise RuntimeError("Could not establish database connection")
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=dictionary)
+        yield conn, cursor
+        if commit:
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 # --- SQLALCHEMY ORM ENGINE & SESSIONS ---
 SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
@@ -72,7 +104,7 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_size=3,
     max_overflow=2,
-    pool_recycle=3600
+    pool_recycle=1800
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -81,5 +113,9 @@ def get_patrol_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
+

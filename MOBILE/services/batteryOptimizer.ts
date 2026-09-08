@@ -3,7 +3,7 @@ import * as Application from 'expo-application';
 
 /**
  * Trigger Android System Battery Optimization Bypass Dialog
- * "Allow PatrolSync FO to ignore battery optimizations?"
+ * "Allow VIGILO-FO to ignore battery optimizations?"
  */
 export const requestIgnoreBatteryOptimizations = async (): Promise<boolean> => {
   if (Platform.OS !== 'android') return true;

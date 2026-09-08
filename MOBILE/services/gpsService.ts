@@ -126,7 +126,7 @@ class MobileGPSTracker {
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         foregroundService: {
-          notificationTitle: 'PatrolSync FO Duty Active',
+          notificationTitle: 'VIGILO-FO Duty Active',
           notificationBody: 'Location tracking is active for field officer verification.',
           notificationColor: '#00599B',
           killServiceOnDestroy: false,
@@ -141,7 +141,7 @@ class MobileGPSTracker {
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         foregroundService: {
-          notificationTitle: 'PatrolSync FO Duty Active',
+          notificationTitle: 'VIGILO-FO Duty Active',
           notificationBody: 'Location tracking is active for field officer verification.',
           notificationColor: '#00599B',
           killServiceOnDestroy: false,
@@ -307,6 +307,33 @@ class MobileGPSTracker {
     }
   }
 
+  private lastViolationReportTime = 0;
+
+  public async reportLocationViolation(details?: string) {
+    if (!this.employeeId) {
+      const session = await getUserSession();
+      if (session && session.user && session.user.oid) {
+        this.employeeId = Number(session.user.oid);
+      }
+    }
+    if (!this.employeeId) return;
+
+    if (Date.now() - this.lastViolationReportTime < 60000) return; // Limit to once per minute
+    this.lastViolationReportTime = Date.now();
+
+    try {
+      console.log(`[gpsService] Reporting duty location violation for officer #${this.employeeId}...`);
+      await api.post('/attendance/location-violation', {
+        employee_id: this.employeeId,
+        event_type: 'DUTY_LOCATION_OFF_VIOLATION',
+        details: details || 'Field officer turned off Location (GPS) during active duty shift',
+      });
+      console.log('[gpsService] Duty location violation reported to backend successfully');
+    } catch (err) {
+      console.warn('[gpsService] Error reporting location violation:', err);
+    }
+  }
+
   private scheduleNextFix() {
     if (!this.isTracking) return;
 
@@ -322,13 +349,28 @@ class MobileGPSTracker {
     if (!this.employeeId) return;
 
     try {
+      // 1. Check if location services (GPS) are enabled on device
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        console.warn('[gpsService] GPS location services disabled during active shift!');
+        await this.reportLocationViolation('Field officer turned off Location (GPS) during active duty shift');
+        return;
+      }
+
       let location: Location.LocationObject | null = null;
       try {
         location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.BestForNavigation,
         });
       } catch (err) {
-        console.warn('getCurrentPositionAsync BestForNavigation fix warning, checking last known position:', err);
+        console.warn('getCurrentPositionAsync BestForNavigation fix warning:', err);
+        // Verify again if location services were turned off during fix attempt
+        const checkServices = await Location.hasServicesEnabledAsync();
+        if (!checkServices) {
+          console.warn('[gpsService] GPS turned off during position fix attempt');
+          await this.reportLocationViolation('Field officer turned off Location (GPS) during active duty shift');
+          return;
+        }
         location = await Location.getLastKnownPositionAsync();
       }
 

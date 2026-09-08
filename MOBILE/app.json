@@ -1,29 +1,34 @@
 {
   "expo": {
-    "name": "PatrolSync FO",
+    "name": "VIGILO-FO",
     "slug": "fo-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "fomobile",
+    "icon": "./assets/icon.png",
+    "scheme": "vigilofo",
     "userInterfaceStyle": "dark",
     "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
       "backgroundColor": "#0A1128"
     },
     "ios": {
       "supportsTablet": true,
+      "icon": "./assets/icon.png",
       "infoPlist": {
         "UIBackgroundModes": [
           "location"
         ],
-        "NSLocationWhenInUseUsageDescription": "Allow PatrolSync FO to access your location for attendance and site visit verification.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow PatrolSync FO to access your location for background duty tracking.",
-        "NSLocationAlwaysUsageDescription": "Allow PatrolSync FO to access your location in the background while screen is locked.",
-        "NSLocationUsageDescription": "Allow PatrolSync FO to access your location for attendance and site visit verification."
+        "NSLocationWhenInUseUsageDescription": "Allow VIGILO-FO to access your location for attendance and site visit verification.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow VIGILO-FO to access your location for background duty tracking.",
+        "NSLocationAlwaysUsageDescription": "Allow VIGILO-FO to access your location in the background while screen is locked.",
+        "NSLocationUsageDescription": "Allow VIGILO-FO to access your location for attendance and site visit verification."
       }
     },
     "android": {
-      "package": "com.humankind.patrolsyncfo",
+      "package": "com.humankind.vigilofo",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A1128"
       },
       "permissions": [
@@ -45,6 +50,7 @@
       ]
     },
     "web": {
+      "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -52,13 +58,13 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow PatrolSync FO to access your location for attendance and site visit verification.",
-          "locationAlwaysAndWhenInUsePermission": "Allow PatrolSync FO to access your location for background duty tracking.",
-          "locationAlwaysPermission": "Allow PatrolSync FO to access your location in the background while screen is locked.",
+          "locationWhenInUsePermission": "Allow VIGILO-FO to access your location for attendance and site visit verification.",
+          "locationAlwaysAndWhenInUsePermission": "Allow VIGILO-FO to access your location for background duty tracking.",
+          "locationAlwaysPermission": "Allow VIGILO-FO to access your location in the background while screen is locked.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true,
           "foregroundService": {
-            "notificationTitle": "PatrolSync FO Duty Active",
+            "notificationTitle": "VIGILO-FO Duty Active",
             "notificationBody": "Location tracking is active for field officer verification.",
             "notificationColor": "#00599B",
             "foregroundServiceType": "location"
@@ -68,7 +74,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow PatrolSync FO to access your camera for site observation photos."
+          "cameraPermission": "Allow VIGILO-FO to access your camera for site observation photos."
         }
       ]
     ],

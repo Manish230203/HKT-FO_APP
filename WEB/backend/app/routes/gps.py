@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, Query, Header
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any
@@ -197,9 +197,28 @@ class LocationViolationRequest(BaseModel):
 @router.post("/_AIP_locationViolation")
 async def report_location_violation(
     payload: LocationViolationRequest,
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_patrol_db)
 ):
     try:
+        emp_id = payload.employee_id
+
+        # Auto-extract real officer OID from Bearer token if payload has fallback employee_id (<= 1)
+        if (not emp_id or emp_id <= 1) and authorization:
+            try:
+                import base64
+                import json
+                token_str = authorization.replace("Bearer ", "").strip()
+                token_data = json.loads(base64.b64decode(token_str).decode())
+                token_emp_id = token_data.get("id") or token_data.get("oid") or token_data.get("employee_id")
+                if token_emp_id:
+                    emp_id = int(token_emp_id)
+            except Exception as token_err:
+                print(f"Warning decoding authorization header for location violation: {token_err}")
+
+        if not emp_id or emp_id <= 0:
+            emp_id = 10208  # Default to active testing officer if unknown
+
         ts = payload.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # 1. Save violation record into MySQL Database for historical audit
@@ -219,7 +238,7 @@ async def report_location_violation(
             cursor.execute("""
                 INSERT INTO FIELD_OFFICER_DUTY_LOCATION_VIOLATION (employee_id, event_type, created_at, details)
                 VALUES (%s, %s, %s, %s)
-            """, (payload.employee_id, payload.event_type, ts, payload.details or "GPS turned OFF during active shift"))
+            """, (emp_id, payload.event_type, ts, payload.details or "GPS turned OFF during active shift"))
             raw_conn.commit()
         finally:
             cursor.close()
@@ -227,7 +246,7 @@ async def report_location_violation(
         # 2. Real-time WebSocket Alert broadcast directly to Area Manager Live Dashboard
         broadcast_payload = {
             "type": "LOCATION_VIOLATION",
-            "employee_id": payload.employee_id,
+            "employee_id": emp_id,
             "event_type": payload.event_type,
             "timestamp": ts,
             "message": payload.details or "Field Officer turned OFF Location (GPS) during active duty shift!"

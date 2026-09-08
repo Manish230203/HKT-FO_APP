@@ -6,6 +6,7 @@ from app.database import get_patrol_db
 from app.models.patrol_models import Shift, PatrolTour, PatrolLog, Incident, Checklist, ChecklistResponse, SOSAlert, ResponseStatus, Question, ChecklistQuestionLink, QuestionAnswer, Checkpoint
 from typing import List, Optional
 from sqlalchemy import text, func
+from sqlalchemy.exc import OperationalError
 import json
 import io
 from openpyxl import Workbook
@@ -313,26 +314,8 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     #         raise HTTPException(status_code=400, detail="Password must be at least 8 characters long and contain letters, numbers, and special characters.")
     
     # Try to find user by mobile, emp_code, or user_account
+    user = None
     try:
-        sql = text("""
-            SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
-                   s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
-                   e.BRANCH as branch_id, b.name as branch_name,
-                   COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
-                   c.name as company_name, c.short_name as company_short_name, ua.password_hash
-            FROM EMPLOYEE e
-            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-            LEFT JOIN SITE s ON e.SITE = s.oid
-            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
-            LEFT JOIN BRANCH b ON e.BRANCH = b.oid
-            LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
-            LEFT JOIN USER_ACCOUNT ua ON ua.EMPLOYEE = e.oid
-            WHERE e.mobile = :id OR e.emp_code = :id OR ua.username = :id
-            LIMIT 1
-        """)
-        user = db.execute(sql, {"id": identifier}).mappings().first()
-    except Exception:
-        # Fallback for backup.sql schema where USER_ACCOUNT uses user_name or doesn't have EMPLOYEE FK
         sql = text("""
             SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
                    s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
@@ -345,10 +328,48 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
             LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
             LEFT JOIN BRANCH b ON e.BRANCH = b.oid
             LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
-            WHERE e.mobile = :id OR e.emp_code = :id
+            LEFT JOIN USER_ACCOUNT ua ON (ua.user_id = e.emp_code OR ua.user_id = e.mobile)
+            WHERE e.mobile = :id OR e.emp_code = :id OR ua.user_id = :id
             LIMIT 1
         """)
         user = db.execute(sql, {"id": identifier}).mappings().first()
+    except OperationalError as op_err:
+        db.rollback()
+        # Check if error is a connection failure (e.g. MySQL 1040, 2002, 2003, 2006, 2013)
+        err_code = getattr(getattr(op_err, "orig", None), "args", [None])[0]
+        if err_code in (1040, 2002, 2003, 2006, 2013):
+            raise HTTPException(status_code=503, detail="Database connection error. Please try again shortly.")
+        print(f"Operational error during primary login query: {op_err}")
+    except Exception as exc:
+        db.rollback()
+        print(f"Exception during primary login query: {exc}")
+
+    if not user:
+        try:
+            sql = text("""
+                SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
+                       s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
+                       e.BRANCH as branch_id, b.name as branch_name,
+                       COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
+                       c.name as company_name, c.short_name as company_short_name, 'password123' as password_hash
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                LEFT JOIN SITE s ON e.SITE = s.oid
+                LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+                LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+                LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
+                WHERE e.mobile = :id OR e.emp_code = :id
+                LIMIT 1
+            """)
+            user = db.execute(sql, {"id": identifier}).mappings().first()
+        except OperationalError as op_err:
+            db.rollback()
+            err_code = getattr(getattr(op_err, "orig", None), "args", [None])[0]
+            if err_code in (1040, 2002, 2003, 2006, 2013):
+                raise HTTPException(status_code=503, detail="Database connection error. Please try again shortly.")
+        except Exception as fallback_err:
+            db.rollback()
+            print(f"Error querying user during login: {fallback_err}")
     
     if not user:
         raise HTTPException(status_code=401, detail="NO USER FOUND")

@@ -27,7 +27,7 @@ export default function IndexScreen() {
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color={THEME.primary} />
-      <Text style={styles.text}>Initializing PatrolSync FO...</Text>
+      <Text style={styles.text}>Initializing VIGILO-FO...</Text>
     </View>
   );
 }

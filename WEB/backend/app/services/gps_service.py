@@ -186,16 +186,21 @@ def get_live_manager_gps_service(db: Session) -> List[Dict[str, Any]]:
     conn = get_db_connection()
     employees_dict = {}
     if conn:
+        cursor = None
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("SELECT oid, name, emp_code FROM EMPLOYEE")
             rows = cursor.fetchall()
             for r in rows:
                 employees_dict[r['oid']] = r
-            cursor.close()
-            conn.close()
         except Exception as e:
             print(f"Error fetching employees: {e}")
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            try: conn.close()
+            except Exception: pass
 
     # Fetch latest GPS point for each employee today
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -336,6 +341,7 @@ def get_planned_vs_actual_visits_service(db: Session, date_str: Optional[str] = 
     # 1. Primary Source of Truth: Query existing FIELD_OFFICER_ASSIGNED_VISITS and FIELD_OFFICER_VISIT_FREQUENCY
     conn = get_db_connection()
     if conn:
+        cursor = None
         try:
             cursor = conn.cursor(dictionary=True)
             target_date_str = target_date.strftime("%Y-%m-%d")
@@ -373,10 +379,14 @@ def get_planned_vs_actual_visits_service(db: Session, date_str: Optional[str] = 
                     "required_frequency": int(r["required_frequency"] or 1),
                     "min_duration_minutes": 15
                 })
-            cursor.close()
-            conn.close()
         except Exception as err:
             print(f"Error querying FIELD_OFFICER_ASSIGNED_VISITS: {err}")
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            try: conn.close()
+            except Exception: pass
 
     # Fallback to PlannedVisitSchedule ORM table if no rows in primary tables
     if not planned_schedules:
@@ -567,16 +577,21 @@ def manual_site_check_in_service(
     if not site_name and site_id:
         conn = get_db_connection()
         if conn:
+            cursor = None
             try:
                 cursor = conn.cursor(dictionary=True)
                 cursor.execute("SELECT name FROM SITE WHERE oid = %s", (site_id,))
                 row = cursor.fetchone()
                 if row and row.get("name"):
                     site_name = row["name"]
-                cursor.close()
-                conn.close()
             except Exception:
                 pass
+            finally:
+                if cursor:
+                    try: cursor.close()
+                    except Exception: pass
+                try: conn.close()
+                except Exception: pass
 
     new_session = SiteVisitSession(
         employee_id=employee_id,
@@ -597,33 +612,39 @@ def manual_site_check_in_service(
         from app.database import get_db_connection
         raw_conn = get_db_connection()
         if raw_conn:
-            c = raw_conn.cursor()
-            today_str = new_session.start_time.strftime("%Y-%m-%d")
-            checkin_formatted = new_session.start_time.strftime("%H:%M")
-            c.execute("""
-                UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
-                SET `check-in_time` = %s
-                WHERE site_id = %s 
-                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
-            c.execute("""
-                UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS
-                SET `check-in_time` = %s
-                WHERE site_id = %s 
-                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
-            c.execute("""
-                UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS
-                SET `check-in_time` = %s, start_time = %s
-                WHERE site_id = %s 
-                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkin_formatted, checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
-            raw_conn.commit()
-            c.close()
-            raw_conn.close()
+            c = None
+            try:
+                c = raw_conn.cursor()
+                today_str = new_session.start_time.strftime("%Y-%m-%d")
+                checkin_formatted = new_session.start_time.strftime("%H:%M")
+                c.execute("""
+                    UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
+                    SET `check-in_time` = %s
+                    WHERE site_id = %s 
+                      AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND (visit_date = %s OR created_on LIKE %s)
+                """, (checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                c.execute("""
+                    UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS
+                    SET `check-in_time` = %s
+                    WHERE site_id = %s 
+                      AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND (visit_date = %s OR created_on LIKE %s)
+                """, (checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                c.execute("""
+                    UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS
+                    SET `check-in_time` = %s, start_time = %s
+                    WHERE site_id = %s 
+                      AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND (visit_date = %s OR created_on LIKE %s)
+                """, (checkin_formatted, checkin_formatted, site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                raw_conn.commit()
+            finally:
+                if c:
+                    try: c.close()
+                    except Exception: pass
+                try: raw_conn.close()
+                except Exception: pass
     except Exception as db_sync_err:
         print(f"Error updating report check-in time during checkin: {db_sync_err}")
 
@@ -674,42 +695,48 @@ def manual_site_check_out_service(
         from app.database import get_db_connection
         raw_conn = get_db_connection()
         if raw_conn:
-            c = raw_conn.cursor()
-            today_str = now.strftime("%Y-%m-%d")
-            checkout_formatted = now.strftime("%H:%M")
-            checkin_formatted = open_session.start_time.strftime("%H:%M") if open_session.start_time else None
-            
-            c.execute("""
-                UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
-                SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
-                    `check-out_time` = %s
-                WHERE site_id = %s 
-                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
-            
-            c.execute("""
-                UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS
-                SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
-                    `check-out_time` = %s
-                WHERE site_id = %s 
-                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
-            
-            c.execute("""
-                UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS
-                SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
-                    `check-out_time` = %s,
-                    start_time = COALESCE(NULLIF(start_time, ''), %s),
-                    end_time = %s
-                WHERE site_id = %s 
-                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (visit_date = %s OR created_on LIKE %s)
-            """, (checkin_formatted, checkout_formatted, checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
-            raw_conn.commit()
-            c.close()
-            raw_conn.close()
+            c = None
+            try:
+                c = raw_conn.cursor()
+                today_str = now.strftime("%Y-%m-%d")
+                checkout_formatted = now.strftime("%H:%M")
+                checkin_formatted = open_session.start_time.strftime("%H:%M") if open_session.start_time else None
+                
+                c.execute("""
+                    UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
+                    SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                        `check-out_time` = %s
+                    WHERE site_id = %s 
+                      AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND (visit_date = %s OR created_on LIKE %s)
+                """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                
+                c.execute("""
+                    UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS
+                    SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                        `check-out_time` = %s
+                    WHERE site_id = %s 
+                      AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND (visit_date = %s OR created_on LIKE %s)
+                """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                
+                c.execute("""
+                    UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS
+                    SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                        `check-out_time` = %s,
+                        start_time = COALESCE(NULLIF(start_time, ''), %s),
+                        end_time = %s
+                    WHERE site_id = %s 
+                      AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                      AND (visit_date = %s OR created_on LIKE %s)
+                """, (checkin_formatted, checkout_formatted, checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                raw_conn.commit()
+            finally:
+                if c:
+                    try: c.close()
+                    except Exception: pass
+                try: raw_conn.close()
+                except Exception: pass
     except Exception as db_sync_err:
         print(f"Error updating report check-in/check-out time during checkout: {db_sync_err}")
 

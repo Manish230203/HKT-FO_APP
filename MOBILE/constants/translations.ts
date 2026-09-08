@@ -8,7 +8,7 @@ export const translations = {
     continue: 'Continue',
     
     // Login
-    login_title: 'F.O. Mobile App',
+    login_title: 'VIGILO-FO',
     login_subtitle: 'Field Officer Sign In',
     mobile_number: 'Mobile Number',
     mobile_placeholder: 'Enter 10-digit mobile number',
@@ -186,7 +186,7 @@ export const translations = {
     continue: 'आगे बढ़ें',
     
     // Login
-    login_title: 'एफ.ओ. मोबाइल ॲप',
+    login_title: 'VIGILO-FO',
     login_subtitle: 'फील्ड ऑफिसर साइन इन',
     mobile_number: 'मोबाइल नंबर',
     mobile_placeholder: '10-अंकों का मोबाइल नंबर दर्ज करें',
@@ -364,7 +364,7 @@ export const translations = {
     continue: 'पुढे जा',
     
     // Login
-    login_title: 'एफ.ओ. मोबाईल ॲप',
+    login_title: 'VIGILO-FO',
     login_subtitle: 'फील्ड ऑफिसर साइन इन',
     mobile_number: 'मोबाईल नंबर',
     mobile_placeholder: '10-अंकी मोबाईल नंबर प्रविष्ट करा',

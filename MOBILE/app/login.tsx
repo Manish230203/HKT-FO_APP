@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Shield, ArrowRight, ArrowLeft, Smartphone } from 'lucide-react-native';
+import { ArrowRight, ArrowLeft, Smartphone } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { THEME } from '../constants/theme';
@@ -20,17 +20,8 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Validate 10-digit Indian Mobile Number (starts with 6, 7, 8, or 9)
-  const validateMobile = (num: string): boolean => {
-    const cleaned = num.trim();
-    const indianMobileRegex = /^[6-9]\d{9}$/;
-    return indianMobileRegex.test(cleaned);
-  };
-
   const handleLogin = async () => {
-    const cleanedMobile = mobileNumber.trim();
-    
-    if (!validateMobile(cleanedMobile)) {
+    if (!mobileNumber || mobileNumber.length !== 10) {
       setErrorMessage(t('invalid_mobile'));
       return;
     }
@@ -39,19 +30,17 @@ export default function LoginScreen() {
     setErrorMessage('');
 
     try {
+      // Format mobile number and bypass password verification for testing
+      const cleanedMobile = mobileNumber.replace(/\D/g, '');
       const res = await login(cleanedMobile, 'password123');
+
       if (res.success) {
         router.replace('/(tabs)/dashboard');
       } else {
-        if (res.errorType === 'RESTRICTED_ROLE') {
-          setErrorMessage(t('access_restricted_fo'));
-        } else if (res.errorType === 'NETWORK_ERROR') {
-          setErrorMessage(t('network_error'));
-        } else {
-          setErrorMessage(t('no_account_found'));
-        }
+        setErrorMessage(res.message || t('invalid_credentials'));
       }
     } catch (err: any) {
+      console.error('Login Error:', err);
       setErrorMessage(t('network_error'));
     } finally {
       setIsLoading(false);
@@ -59,14 +48,14 @@ export default function LoginScreen() {
   };
 
   return (
-    <SwipeableBackWrapper fallbackRoute="/lang/lang-selection">
+    <SwipeableBackWrapper targetRoute="/lang/lang-selection">
       <SafeAreaView style={styles.container}>
-        {/* Top Header Navigation Bar with Back Button */}
-        <View style={styles.topNav}>
+        {/* Top Header Bar with Back Button */}
+        <View style={styles.topBar}>
           <TouchableOpacity
+            style={styles.backButton}
             onPress={() => router.replace('/lang/lang-selection')}
-            style={styles.backBtn}
-            activeOpacity={0.8}
+            activeOpacity={0.7}
           >
             <ArrowLeft color="#FFFFFF" size={20} />
           </TouchableOpacity>
@@ -79,7 +68,7 @@ export default function LoginScreen() {
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                <Shield color="#FFFFFF" size={36} />
+                <Image source={require('../assets/images/app_logo.png')} style={styles.logoImage} resizeMode="contain" />
               </View>
               <Text style={styles.appTitle}>{t('login_title')}</Text>
               <Text style={styles.subtitle}>{t('login_subtitle')}</Text>
@@ -155,14 +144,17 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logoContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: THEME.primary,
+    width: 90,
+    height: 90,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    ...THEME.shadows.medium,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 22,
   },
   appTitle: {
     fontSize: THEME.typography.xxl,

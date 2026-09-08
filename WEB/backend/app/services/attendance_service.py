@@ -1345,142 +1345,162 @@ def get_attendance_logs_logic(empOid: int):
     if conn is None:
         return {"success": False, "message": "Database connection failed"}
     
-    cursor = conn.cursor(dictionary=True)
-
-    # 1. Fetch all sites with valid coordinates for distance comparison
-    sites_with_coords = []
+    cursor = None
     try:
-        cursor.execute("SELECT oid, name, latitude, longitude FROM SITE WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
-        sites_with_coords = cursor.fetchall()
-    except Exception as s_err:
-        print("Warning fetching sites with coords:", s_err)
+        cursor = conn.cursor(dictionary=True)
 
-    query = """
-        SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
-               s.start_time, s.end_time, st.name as site_name, COALESCE(ar.duty_type, 'REGULAR') as duty_type,
-               loc_in.latitude as check_in_lat, loc_in.longitude as check_in_long,
-               loc_out.latitude as check_out_lat, loc_out.longitude as check_out_long
-        FROM ATTENDANCE_TIME_LOG atl
-        JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
-        LEFT JOIN ATTENDANCE_ROW ar ON ac.ATTENDANCE_ROW = ar.oid
-        LEFT JOIN SITE st ON ac.ATTENDANCE_SITE = st.oid
-        LEFT JOIN SHIFT_DESIGNATION_COUNT sdc ON atl.SHIFT_DESIGNATION_COUNT = sdc.oid
-        LEFT JOIN SHIFT s ON sdc.SHIFT = s.oid
-        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_in ON (loc_in.attendance_time_log = atl.oid AND loc_in.punch_type = 'IN')
-        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_out ON (loc_out.attendance_time_log = atl.oid AND loc_out.punch_type = 'OUT')
-        WHERE ac.EMPLOYEE = %s 
-        ORDER BY ac.attendance_date DESC, atl.in_time DESC 
-        LIMIT 20
-    """
-    cursor.execute(query, (empOid,))
-    logs = cursor.fetchall()
-    
-    for log in logs:
-        log["date"] = log["date"].isoformat() if log.get("date") else None
-        log["check_in"] = log["check_in"].isoformat() if log.get("check_in") else None
-        log["check_out"] = log["check_out"].isoformat() if log.get("check_out") else None
-        log.pop("start_time", None)
-        log.pop("end_time", None)
+        # 1. Fetch all sites with valid coordinates for distance comparison
+        sites_with_coords = []
+        try:
+            cursor.execute("SELECT oid, name, latitude, longitude FROM SITE WHERE latitude IS NOT NULL AND longitude IS NOT NULL")
+            sites_with_coords = cursor.fetchall()
+        except Exception as s_err:
+            print("Warning fetching sites with coords:", s_err)
 
-        # Coordinate matching logic:
-        # Compare punch-in lat/long against sites in DB
-        c_lat = log.get("check_in_lat")
-        c_lon = log.get("check_in_long")
+        query = """
+            SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
+                   s.start_time, s.end_time, st.name as site_name, COALESCE(ar.duty_type, 'REGULAR') as duty_type,
+                   loc_in.latitude as check_in_lat, loc_in.longitude as check_in_long,
+                   loc_out.latitude as check_out_lat, loc_out.longitude as check_out_long
+            FROM ATTENDANCE_TIME_LOG atl
+            JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+            LEFT JOIN ATTENDANCE_ROW ar ON ac.ATTENDANCE_ROW = ar.oid
+            LEFT JOIN SITE st ON ac.ATTENDANCE_SITE = st.oid
+            LEFT JOIN SHIFT_DESIGNATION_COUNT sdc ON atl.SHIFT_DESIGNATION_COUNT = sdc.oid
+            LEFT JOIN SHIFT s ON sdc.SHIFT = s.oid
+            LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_in ON (loc_in.attendance_time_log = atl.oid AND loc_in.punch_type = 'IN')
+            LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_out ON (loc_out.attendance_time_log = atl.oid AND loc_out.punch_type = 'OUT')
+            WHERE ac.EMPLOYEE = %s 
+            ORDER BY ac.attendance_date DESC, atl.in_time DESC 
+            LIMIT 20
+        """
+        cursor.execute(query, (empOid,))
+        logs = cursor.fetchall()
+        
+        for log in logs:
+            log["date"] = log["date"].isoformat() if log.get("date") else None
+            log["check_in"] = log["check_in"].isoformat() if log.get("check_in") else None
+            log["check_out"] = log["check_out"].isoformat() if log.get("check_out") else None
+            log.pop("start_time", None)
+            log.pop("end_time", None)
 
-        matched_site = None
-        if c_lat is not None and c_lon is not None:
-            from app.services.gps_service import haversine_distance_meters
-            try:
-                clat_f = float(c_lat)
-                clon_f = float(c_lon)
-                min_dist = float('inf')
-                for st_row in sites_with_coords:
-                    try:
-                        slat_f = float(st_row["latitude"])
-                        slon_f = float(st_row["longitude"])
-                        radius = float(st_row.get("geofence_radius") or 300.0)
-                        dist = haversine_distance_meters(clat_f, clon_f, slat_f, slon_f)
-                        if dist <= radius and dist < min_dist:
-                            min_dist = dist
-                            matched_site = st_row["name"]
-                    except Exception:
-                        continue
-            except Exception as dist_err:
-                print("Distance calc error:", dist_err)
+            # Coordinate matching logic:
+            # Compare punch-in lat/long against sites in DB
+            c_lat = log.get("check_in_lat")
+            c_lon = log.get("check_in_long")
 
-        log["check_in_lat"] = float(log["check_in_lat"]) if log.get("check_in_lat") is not None else None
-        log["check_in_long"] = float(log["check_in_long"]) if log.get("check_in_long") is not None else None
-        log["check_out_lat"] = float(log["check_out_lat"]) if log.get("check_out_lat") is not None else None
-        log["check_out_long"] = float(log["check_out_long"]) if log.get("check_out_long") is not None else None
-
-        if matched_site:
-            log["site_name"] = matched_site
-        else:
-            # If coordinates were recorded but did NOT match any site in DB, clear site_name so UI shows coordinates only
+            matched_site = None
             if c_lat is not None and c_lon is not None:
-                log["site_name"] = None
-            elif not log.get("site_name"):
-                log["site_name"] = None
+                from app.services.gps_service import haversine_distance_meters
+                try:
+                    clat_f = float(c_lat)
+                    clon_f = float(c_lon)
+                    min_dist = float('inf')
+                    for st_row in sites_with_coords:
+                        try:
+                            slat_f = float(st_row["latitude"])
+                            slon_f = float(st_row["longitude"])
+                            radius = float(st_row.get("geofence_radius") or 300.0)
+                            dist = haversine_distance_meters(clat_f, clon_f, slat_f, slon_f)
+                            if dist <= radius and dist < min_dist:
+                                min_dist = dist
+                                matched_site = st_row["name"]
+                        except Exception:
+                            continue
+                except Exception as dist_err:
+                    print("Distance calc error:", dist_err)
 
-    cursor.close()
-    conn.close()
-    return {"success": True, "logs": logs}
+            log["check_in_lat"] = float(log["check_in_lat"]) if log.get("check_in_lat") is not None else None
+            log["check_in_long"] = float(log["check_in_long"]) if log.get("check_in_long") is not None else None
+            log["check_out_lat"] = float(log["check_out_lat"]) if log.get("check_out_lat") is not None else None
+            log["check_out_long"] = float(log["check_out_long"]) if log.get("check_out_long") is not None else None
+
+            if matched_site:
+                log["site_name"] = matched_site
+            else:
+                # If coordinates were recorded but did NOT match any site in DB, clear site_name so UI shows coordinates only
+                if c_lat is not None and c_lon is not None:
+                    log["site_name"] = None
+                elif not log.get("site_name"):
+                    log["site_name"] = None
+
+        return {"success": True, "logs": logs}
+    except Exception as e:
+        print(f"Error in get_attendance_logs_logic: {e}")
+        return {"success": False, "message": str(e)}
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def get_today_status_logic(empOid: int):
     conn = get_db_connection()
     if conn is None:
         return {"success": False, "message": "Database connection failed"}
     
-    today = get_ist_today()
-    cursor = conn.cursor(dictionary=True)
-
-    # 1. Auto-close any stale unclosed open logs older than 16 hours first
+    cursor = None
     try:
-        now_dt = datetime.now()
-        cursor.execute("""
-            SELECT atl.oid, atl.in_time, atl.ATTENDANCE_CELL 
+        today = get_ist_today()
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Auto-close any stale unclosed open logs older than 16 hours first
+        try:
+            now_dt = datetime.now()
+            cursor.execute("""
+                SELECT atl.oid, atl.in_time, atl.ATTENDANCE_CELL 
+                FROM ATTENDANCE_TIME_LOG atl
+                JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+                WHERE ac.EMPLOYEE = %s AND atl.out_time IS NULL
+            """, (empOid,))
+            stale_logs = cursor.fetchall()
+            for s_log in stale_logs:
+                in_t = s_log.get("in_time")
+                if in_t and (now_dt - in_t).total_seconds() > 16 * 3600:
+                    auto_out = in_t + timedelta(hours=16)
+                    cursor.execute("UPDATE ATTENDANCE_TIME_LOG SET out_time = %s WHERE oid = %s", (auto_out, s_log["oid"]))
+                    cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'PRESENT' WHERE oid = %s", (s_log["ATTENDANCE_CELL"],))
+            conn.commit()
+        except Exception as stale_err:
+            print("Error auto-closing stale open logs:", stale_err)
+
+        # 2. Query today's status
+        query = """
+            SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
+                   loc_in.latitude as check_in_lat, loc_in.longitude as check_in_long,
+                   loc_out.latitude as check_out_lat, loc_out.longitude as check_out_long
             FROM ATTENDANCE_TIME_LOG atl
             JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
-            WHERE ac.EMPLOYEE = %s AND atl.out_time IS NULL
-        """, (empOid,))
-        stale_logs = cursor.fetchall()
-        for s_log in stale_logs:
-            in_t = s_log.get("in_time")
-            if in_t and (now_dt - in_t).total_seconds() > 16 * 3600:
-                auto_out = in_t + timedelta(hours=16)
-                cursor.execute("UPDATE ATTENDANCE_TIME_LOG SET out_time = %s WHERE oid = %s", (auto_out, s_log["oid"]))
-                cursor.execute("UPDATE ATTENDANCE_CELL SET attendance_state = 'PRESENT' WHERE oid = %s", (s_log["ATTENDANCE_CELL"],))
-        conn.commit()
-    except Exception as stale_err:
-        print("Error auto-closing stale open logs:", stale_err)
+            LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_in ON (loc_in.attendance_time_log = atl.oid AND loc_in.punch_type = 'IN')
+            LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_out ON (loc_out.attendance_time_log = atl.oid AND loc_out.punch_type = 'OUT')
+            WHERE ac.EMPLOYEE = %s AND ac.attendance_date = %s
+            ORDER BY atl.oid DESC LIMIT 1
+        """
+        cursor.execute(query, (empOid, today))
+        record = cursor.fetchone()
 
-    # 2. Query today's status
-    query = """
-        SELECT ac.attendance_date as date, atl.in_time as check_in, atl.out_time as check_out, 'PRESENT' as status,
-               loc_in.latitude as check_in_lat, loc_in.longitude as check_in_long,
-               loc_out.latitude as check_out_lat, loc_out.longitude as check_out_long
-        FROM ATTENDANCE_TIME_LOG atl
-        JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
-        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_in ON (loc_in.attendance_time_log = atl.oid AND loc_in.punch_type = 'IN')
-        LEFT JOIN FIELD_OFFICER_ATTENDANCE_LOCATION loc_out ON (loc_out.attendance_time_log = atl.oid AND loc_out.punch_type = 'OUT')
-        WHERE ac.EMPLOYEE = %s AND ac.attendance_date = %s
-        ORDER BY atl.oid DESC LIMIT 1
-    """
-    cursor.execute(query, (empOid, today))
-    record = cursor.fetchone()
-
-    # 3. Only look for open logs if today's record is still currently IN (open)
-    if not record or (record.get("check_in") and record.get("check_out")):
-        record = None # Today is fully completed / absent, do NOT fall back to past days!
-    
-    if record:
-        record["date"] = record["date"].isoformat() if record["date"] else None
-        record["check_in"] = record["check_in"].isoformat() if record["check_in"] else None
-        record["check_out"] = record["check_out"].isoformat() if record["check_out"] else None
-    
-    cursor.close()
-    conn.close()
-    return {"success": True, "record": record}
+        # 3. Only look for open logs if today's record is still currently IN (open)
+        if not record or (record.get("check_in") and record.get("check_out")):
+            record = None # Today is fully completed / absent, do NOT fall back to past days!
+        
+        if record:
+            record["date"] = record["date"].isoformat() if record["date"] else None
+            record["check_in"] = record["check_in"].isoformat() if record["check_in"] else None
+            record["check_out"] = record["check_out"].isoformat() if record["check_out"] else None
+        
+        return {"success": True, "record": record}
+    except Exception as e:
+        print(f"Error in get_today_status_logic: {e}")
+        return {"success": False, "message": str(e)}
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def get_monthly_stats_logic(empOid: int):
     conn = get_db_connection()

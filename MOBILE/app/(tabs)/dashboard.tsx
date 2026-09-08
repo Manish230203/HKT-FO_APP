@@ -1029,16 +1029,12 @@ const styles = StyleSheet.create({
 
   /* LOGO CONTAINER - RIGHT ALIGNED */
   companyLogoContainer: {
-    width: 76,
-    height: 76,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
+    width: 90,
+    height: 60,
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    padding: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
     marginLeft: 12,
+    backgroundColor: 'transparent',
   },
   companyLogoImage: {
     width: '100%',

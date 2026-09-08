@@ -15,6 +15,7 @@ import * as Notifications from 'expo-notifications';
 import { MapPin, Settings, AlertTriangle, RefreshCw, BatteryCharging, Zap, ShieldCheck, ShieldAlert, CheckCircle2 } from 'lucide-react-native';
 import { requestIgnoreBatteryOptimizations, openAutoStartSettings } from '../services/batteryOptimizer';
 import { useAttendance } from '../context/AttendanceContext';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 Notifications.setNotificationHandler({
@@ -26,6 +27,7 @@ Notifications.setNotificationHandler({
 });
 
 export default function LocationGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const attendanceContext = useAttendance();
   const todayRecord = attendanceContext?.todayRecord;
   const isOnDuty = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
@@ -77,14 +79,16 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
     lastViolationReportTimeRef.current = Date.now();
 
     try {
-      const empOid = todayRecord ? (todayRecord as any).employee_id : null;
-      await api.post('/attendance/location-violation', {
-        employee_id: empOid || 1,
+      const empOid = user?.id || (user as any)?.oid || user?.employee_id || (todayRecord as any)?.employee_id || 10208;
+      console.log(`[LocationGuard] Sending duty location violation report for officer ID ${empOid}...`);
+      const response = await api.post('/attendance/location-violation', {
+        employee_id: empOid,
         event_type: 'DUTY_LOCATION_OFF_VIOLATION',
         details: 'Field officer turned off Location (GPS) during active duty shift',
       });
+      console.log('[LocationGuard] Violation reported successfully:', response.data);
     } catch (err) {
-      console.warn('Location violation backend report warning:', err);
+      console.warn('[LocationGuard] Location violation backend report warning:', err);
     }
   };
 
@@ -136,8 +140,12 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         setErrorMessage(
           isOnDuty
             ? '🚨 MANDATORY DUTY COMPLIANCE: Location (GPS) has been turned OFF while you are punched in on active duty. Turning off location triggers an immediate compliance escalation to your Field Supervisor.'
-            : 'High Accuracy Location / GPS is turned OFF on your mobile device. Please enable High Accuracy location mode to use PatrolSync FO.'
+            : 'High Accuracy Location / GPS is turned OFF on your mobile device. Please enable High Accuracy location mode to use VIGILO-FO.'
         );
+        if (isOnDuty) {
+          reportViolationToBackend();
+          fireDutyGpsOffAlert();
+        }
         setChecking(false);
         return;
       }
@@ -149,6 +157,10 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         if (reqFg.status !== 'granted') {
           setIsLocationDisabled(true);
           setErrorMessage('Location permission is required for Field Officer operations. Please allow location access.');
+          if (isOnDuty) {
+            reportViolationToBackend();
+            fireDutyGpsOffAlert();
+          }
           setChecking(false);
           return;
         }
@@ -160,7 +172,11 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         const reqBg = await Location.requestBackgroundPermissionsAsync();
         if (reqBg.status !== 'granted') {
           setIsLocationDisabled(true);
-          setErrorMessage('Background Location Permission ("Allow all the time" / "Always Allow") is required so PatrolSync FO can track duty location while your screen is locked.');
+          setErrorMessage('Background Location Permission ("Allow all the time" / "Always Allow") is required so VIGILO-FO can track duty location while your screen is locked.');
+          if (isOnDuty) {
+            reportViolationToBackend();
+            fireDutyGpsOffAlert();
+          }
           setChecking(false);
           return;
         }
@@ -257,7 +273,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
             </Text>
 
             <Text style={styles.message}>
-              {errorMessage || 'Field Officers must have Location (GPS) set to "Allow all the time" to perform duty actions in PatrolSync FO.'}
+              {errorMessage || 'Field Officers must have Location (GPS) set to "Allow all the time" to perform duty actions in VIGILO-FO.'}
             </Text>
 
             {isOnDuty && (
