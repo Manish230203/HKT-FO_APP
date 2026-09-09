@@ -30,7 +30,9 @@ import {
   ChevronDown,
   X,
   Building,
+  Calendar,
 } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -149,6 +151,51 @@ export default function DashboardScreen() {
     return d.toISOString().split('T')[0];
   });
   const [creatingVisit, setCreatingVisit] = useState(false);
+
+  // Date Picker State
+  const [activeDatePicker, setActiveDatePicker] = useState<'visit' | 'start' | 'end' | null>(null);
+
+  const parseDateString = (str: string): Date => {
+    if (!str) return new Date();
+    const parts = str.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return new Date(year, month, day);
+      }
+    }
+    return new Date();
+  };
+
+  const formatDateString = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleDatePickerChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      const currentTarget = activeDatePicker;
+      setActiveDatePicker(null);
+      if (event.type === 'set' && selectedDate) {
+        const formatted = formatDateString(selectedDate);
+        if (currentTarget === 'visit') setNewVisitDate(formatted);
+        else if (currentTarget === 'start') setNewStartDate(formatted);
+        else if (currentTarget === 'end') setNewEndDate(formatted);
+      }
+    } else {
+      // iOS
+      if (selectedDate) {
+        const formatted = formatDateString(selectedDate);
+        if (activeDatePicker === 'visit') setNewVisitDate(formatted);
+        else if (activeDatePicker === 'start') setNewStartDate(formatted);
+        else if (activeDatePicker === 'end') setNewEndDate(formatted);
+      }
+    }
+  };
 
   // Sub-modal Pickers
   const [pickerClientVisible, setPickerClientVisible] = useState(false);
@@ -893,37 +940,76 @@ export default function DashboardScreen() {
                   {newPlanningType === 'SINGLE' ? (
                     <>
                       <Text style={styles.fieldLabel}>{t('visit_date')}</Text>
-                      <TextInput
-                        style={styles.modalInput}
-                        value={newVisitDate}
-                        onChangeText={setNewVisitDate}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor="#64748B"
-                      />
+                      <TouchableOpacity
+                        style={styles.pickerBtn}
+                        onPress={() => setActiveDatePicker('visit')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.pickerBtnText}>{newVisitDate || 'YYYY-MM-DD'}</Text>
+                        <Calendar color="#3B82F6" size={20} />
+                      </TouchableOpacity>
                     </>
                   ) : (
                     <View style={{ flexDirection: 'row', gap: 10 }}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.fieldLabel}>{t('start_date')}</Text>
-                        <TextInput
-                          style={styles.modalInput}
-                          value={newStartDate}
-                          onChangeText={setNewStartDate}
-                          placeholder="YYYY-MM-DD"
-                          placeholderTextColor="#64748B"
-                        />
+                        <TouchableOpacity
+                          style={styles.pickerBtn}
+                          onPress={() => setActiveDatePicker('start')}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.pickerBtnText}>{newStartDate || 'YYYY-MM-DD'}</Text>
+                          <Calendar color="#3B82F6" size={20} />
+                        </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.fieldLabel}>{t('end_date')}</Text>
-                        <TextInput
-                          style={styles.modalInput}
-                          value={newEndDate}
-                          onChangeText={setNewEndDate}
-                          placeholder="YYYY-MM-DD"
-                          placeholderTextColor="#64748B"
-                        />
+                        <TouchableOpacity
+                          style={styles.pickerBtn}
+                          onPress={() => setActiveDatePicker('end')}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.pickerBtnText}>{newEndDate || 'YYYY-MM-DD'}</Text>
+                          <Calendar color="#3B82F6" size={20} />
+                        </TouchableOpacity>
                       </View>
                     </View>
+                  )}
+
+                  {/* Native Calendar Date Picker Component */}
+                  {activeDatePicker !== null && (
+                    Platform.OS === 'ios' ? (
+                      <Modal transparent animationType="fade" visible={activeDatePicker !== null} onRequestClose={() => setActiveDatePicker(null)}>
+                        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+                          <View style={{ backgroundColor: '#1E293B', borderRadius: 16, padding: 20, width: '85%', alignItems: 'center' }}>
+                            <DateTimePicker
+                              value={parseDateString(
+                                activeDatePicker === 'visit' ? newVisitDate : activeDatePicker === 'start' ? newStartDate : newEndDate
+                              )}
+                              mode="date"
+                              display="inline"
+                              themeVariant="dark"
+                              onChange={handleDatePickerChange}
+                            />
+                            <TouchableOpacity
+                              style={{ marginTop: 14, backgroundColor: '#3B82F6', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 }}
+                              onPress={() => setActiveDatePicker(null)}
+                            >
+                              <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </Modal>
+                    ) : (
+                      <DateTimePicker
+                        value={parseDateString(
+                          activeDatePicker === 'visit' ? newVisitDate : activeDatePicker === 'start' ? newStartDate : newEndDate
+                        )}
+                        mode="date"
+                        display="calendar"
+                        onChange={handleDatePickerChange}
+                      />
+                    )
                   )}
 
                   <Text style={styles.fieldLabel}>{t('assigned_officer')}</Text>
