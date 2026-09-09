@@ -373,7 +373,7 @@ export default function MarkAttendanceScreen() {
                 {t('user_label')}: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
               </Text>
               <Text style={styles.sessionIdText}>
-                {t('session_id')}: AMA-{user?.employee_id || 'EMP002'}
+                {t('session_id')}: {user?.employee_id || 'EMP002'}
               </Text>
             </View>
 
@@ -431,12 +431,6 @@ export default function MarkAttendanceScreen() {
               <View style={[styles.reticleCorner, styles.bottomLeftReticle]} />
               <View style={[styles.reticleCorner, styles.bottomRightReticle]} />
               <View style={[styles.reticleCorner, styles.topLeftReticle]} />
-
-              {/* Center Floating Translucent Pill */}
-              <View style={styles.floatingPill}>
-                <User color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
-                <Text style={styles.floatingPillText}>{t('position_face')}</Text>
-              </View>
             </View>
 
             {/* AUTO-CAPTURE & LIVENESS STATUS BOX */}
