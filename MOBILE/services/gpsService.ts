@@ -126,8 +126,8 @@ class MobileGPSTracker {
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         foregroundService: {
-          notificationTitle: 'VIGILO-FO Duty Active',
-          notificationBody: 'Location tracking is active for field officer verification.',
+          notificationTitle: 'VIGILO-OFFICER Duty Active',
+          notificationBody: 'Location tracking is active for officer verification.',
           notificationColor: '#00599B',
           killServiceOnDestroy: false,
         },
@@ -141,8 +141,8 @@ class MobileGPSTracker {
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         foregroundService: {
-          notificationTitle: 'VIGILO-FO Duty Active',
-          notificationBody: 'Location tracking is active for field officer verification.',
+          notificationTitle: 'VIGILO-OFFICER Duty Active',
+          notificationBody: 'Location tracking is active for officer verification.',
           notificationColor: '#00599B',
           killServiceOnDestroy: false,
         },

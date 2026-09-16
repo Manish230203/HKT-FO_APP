@@ -16,6 +16,7 @@ import { MapPin, Settings, AlertTriangle, RefreshCw, BatteryCharging, Zap, Shiel
 import { requestIgnoreBatteryOptimizations, openAutoStartSettings } from '../services/batteryOptimizer';
 import { useAttendance } from '../context/AttendanceContext';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import api from '../services/api';
 
 Notifications.setNotificationHandler({
@@ -30,6 +31,7 @@ import { violationService } from '../services/violationService';
 
 export default function LocationGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const attendanceContext = useAttendance();
   const todayRecord = attendanceContext?.todayRecord;
   const isOnDuty = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
@@ -125,8 +127,8 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         setIsLocationDisabled(true);
         setErrorMessage(
           isOnDuty
-            ? '🚨 MANDATORY DUTY COMPLIANCE: Location (GPS) has been turned OFF while you are punched in on active duty. Turning off location triggers an immediate compliance escalation to your Field Supervisor.'
-            : 'High Accuracy Location / GPS is turned OFF on your mobile device. Please enable High Accuracy location mode to use VIGILO-FO.'
+            ? t('duty_gps_off_error')
+            : t('gps_off_error')
         );
         if (isOnDuty && empOid) {
           violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
@@ -142,7 +144,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         const reqFg = await Location.requestForegroundPermissionsAsync();
         if (reqFg.status !== 'granted') {
           setIsLocationDisabled(true);
-          setErrorMessage('Location permission is required for Field Officer operations. Please allow location access.');
+          setErrorMessage(t('fg_perm_required'));
           if (isOnDuty && empOid) {
             violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
             fireDutyGpsOffAlert();
@@ -158,7 +160,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         const reqBg = await Location.requestBackgroundPermissionsAsync();
         if (reqBg.status !== 'granted') {
           setIsLocationDisabled(true);
-          setErrorMessage('Background Location Permission ("Allow all the time" / "Always Allow") is required so VIGILO-FO can track duty location while your screen is locked.');
+          setErrorMessage(t('bg_perm_required'));
           if (isOnDuty && empOid) {
             violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
             fireDutyGpsOffAlert();
@@ -257,17 +259,17 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
             </View>
 
             <Text style={styles.title}>
-              {isOnDuty ? '🚨 DUTY COMPLIANCE WARNING' : 'Location & Duty Setup Required'}
+              {isOnDuty ? t('duty_compliance_warning') : t('location_setup_required')}
             </Text>
 
             <Text style={styles.message}>
-              {errorMessage || 'Field Officers must have Location (GPS) set to "Allow all the time" to perform duty actions in VIGILO-FO.'}
+              {errorMessage || t('gps_off_error')}
             </Text>
 
             {isOnDuty && (
               <View style={styles.complianceBox}>
-                <Text style={styles.complianceTitle}>Are you sure you want to proceed with Location OFF?</Text>
-                <Text style={styles.complianceSub}>Location tracking is mandatory for your active shift attendance verification.</Text>
+                <Text style={styles.complianceTitle}>{t('proceed_location_off_title')}</Text>
+                <Text style={styles.complianceSub}>{t('proceed_location_off_sub')}</Text>
               </View>
             )}
 
@@ -279,7 +281,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
             >
               <CheckCircle2 size={22} color="#FFFFFF" style={{ marginRight: 8 }} />
               <Text style={styles.primaryButtonText}>
-                {isOnDuty ? 'NO - KEEP LOCATION ON (RECOMMENDED)' : 'Enable 1-Tap High Accuracy GPS'}
+                {isOnDuty ? t('keep_location_on_rec') : t('enable_1tap_gps')}
               </Text>
             </TouchableOpacity>
 
@@ -294,8 +296,8 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
                 >
                   <Text style={styles.hiddenYesText}>
                     {yesCountdown > 0
-                      ? `YES (Locked - Supervisor Alerting in ${yesCountdown}s...)`
-                      : 'YES (Proceed to Settings & Report Violation)'}
+                      ? t('locked_yes_text', { count: yesCountdown })
+                      : t('proceed_settings_yes')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -306,7 +308,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
                 onPress={handleOpenSettings}
               >
                 <Settings size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.primaryButtonText}>Enable "Allow All The Time" Permission</Text>
+                <Text style={styles.primaryButtonText}>{t('enable_allow_always')}</Text>
               </TouchableOpacity>
             )}
 
@@ -318,7 +320,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
                   onPress={requestIgnoreBatteryOptimizations}
                 >
                   <BatteryCharging size={18} color="#FBBF24" style={{ marginRight: 8 }} />
-                  <Text style={styles.batteryButtonText}>1-Tap Bypass Battery Saver</Text>
+                  <Text style={styles.batteryButtonText}>{t('bypass_battery_saver')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -327,7 +329,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
                   onPress={openAutoStartSettings}
                 >
                   <Zap size={18} color="#34D399" style={{ marginRight: 8 }} />
-                  <Text style={styles.autoStartButtonText}>OEM Auto-Start Settings (Xiaomi/Vivo/Oppo/Samsung)</Text>
+                  <Text style={styles.autoStartButtonText}>{t('oem_autostart_settings')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -343,7 +345,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
               ) : (
                 <>
                   <RefreshCw size={18} color="#94A3B8" style={{ marginRight: 6 }} />
-                  <Text style={styles.secondaryButtonText}>I Turned It ON, Re-Check Location</Text>
+                  <Text style={styles.secondaryButtonText}>{t('recheck_location')}</Text>
                 </>
               )}
             </TouchableOpacity>

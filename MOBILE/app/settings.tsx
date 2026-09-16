@@ -166,6 +166,20 @@ export default function SettingsScreen() {
               </View>
               <ChevronRight color="#64748B" size={18} />
             </TouchableOpacity>
+
+            <View style={styles.divider} />
+
+            <TouchableOpacity
+              style={styles.itemRow}
+              onPress={() => router.push('/consent')}
+            >
+              <Shield color="#94A3B8" size={20} />
+              <View style={styles.itemTextCol}>
+                <Text style={styles.itemMainText}>Privacy & Cookie Policy</Text>
+                <Text style={styles.itemSubText}>REVIEW CONSENT & DATA TERMS</Text>
+              </View>
+              <ChevronRight color="#64748B" size={18} />
+            </TouchableOpacity>
           </View>
 
           {/* 3. Notifications & Email Updates Card */}

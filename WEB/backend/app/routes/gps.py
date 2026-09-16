@@ -129,6 +129,8 @@ def get_live_officer_locations(db: Session = Depends(get_patrol_db)):
 
 
 @router.get("/gps/history")
+@router.get("/tracking/history")
+@router.get("/api/v1/tracking/history")
 def get_track_history(
     employee_id: int = Query(...),
     date: str = Query(...),

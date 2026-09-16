@@ -8,7 +8,7 @@ export const translations = {
     continue: 'Continue',
     
     // Login
-    login_title: 'VIGILO-FO',
+    login_title: 'VIGILO-OFFICER',
     login_subtitle: 'Field Officer Sign In',
     mobile_number: 'Mobile Number',
     mobile_placeholder: 'Enter 10-digit mobile number',
@@ -178,6 +178,46 @@ export const translations = {
     check_in: 'Check-In',
     visit_completed_title: 'Visit Completed',
     visit_completed_desc: 'You have checked out successfully! Visit record is complete.',
+
+    // Privacy & Consent Policy
+    privacy_policy_title: 'Privacy Policy',
+    privacy_policy_subtitle: 'We respect your privacy.',
+    privacy_p1: '1. The app processes limited personal data (such as identifiers and device details) solely to enable essential functionality.',
+    privacy_p2: '2. All information is handled in accordance with applicable data protection and compliance requirements.',
+    privacy_p3: '3. During usage, the app may capture photos, official documents, and location data to support the smooth functioning of your job responsibilities and organizational operations. These records are retained strictly for compliance, verification, and operational purposes.',
+    privacy_p4: '4. Personal information is never sold or disclosed to external parties for marketing or commercial use.',
+    privacy_p5: '5. You maintain full control over your data and can review, manage, or delete it at any time through the app settings.',
+
+    cookie_policy_title: 'Cookie Policy',
+    cookie_policy_subtitle: 'Our app uses cookies and similar technologies to improve your experience.',
+    cookie_p1: '1. Essential cookies: Required for the app to function properly.',
+    cookie_p2: '2. Performance cookies: Help us monitor and enhance app performance.',
+    cookie_p3: '3. Analytics cookies: Collect anonymous usage data to improve features.',
+    cookie_p4: '4. Preference cookies: Remember your settings and choices.',
+    cookie_footer: 'You can manage or change your cookie preferences anytime in the Cookie Preference Center.',
+
+    consent_notice_title: 'Consent Notice',
+    consent_notice_text: 'We value your privacy. By continuing, you consent to the collection and use of your personal information in accordance with our Privacy Policy and Cookie Policy. This includes the processing of photos, official documents, and location data strictly for compliance, verification, and organizational operations.',
+
+    accept_and_continue: 'Accept & Continue',
+
+    // Location Guard Alerts & Messages
+    duty_compliance_warning: '🚨 MANDATORY DUTY COMPLIANCE WARNING',
+    location_setup_required: 'Location & Duty Setup Required',
+    duty_gps_off_error: '🚨 MANDATORY DUTY COMPLIANCE: Location (GPS) has been turned OFF while you are punched in on active duty. Turning off location triggers an immediate compliance escalation to your Field Supervisor.',
+    gps_off_error: 'High Accuracy Location / GPS is turned OFF on your mobile device. Please enable High Accuracy location mode to use VIGILO-O.',
+    fg_perm_required: 'Location permission is required for Officer operations. Please allow location access.',
+    bg_perm_required: 'Background Location Permission ("Allow all the time" / "Always Allow") is required so VIGILO-O can track duty location while your screen is locked.',
+    proceed_location_off_title: 'Are you sure you want to proceed with Location OFF?',
+    proceed_location_off_sub: 'Location tracking is mandatory for your active shift attendance verification.',
+    keep_location_on_rec: 'NO - KEEP LOCATION ON (RECOMMENDED)',
+    enable_1tap_gps: 'Enable 1-Tap High Accuracy GPS',
+    locked_yes_text: 'YES (Locked - Supervisor Alerting in {count}s...)',
+    proceed_settings_yes: 'YES (Proceed to Settings & Report Violation)',
+    enable_allow_always: 'Enable "Allow All The Time" Permission',
+    bypass_battery_saver: '1-Tap Bypass Battery Saver',
+    oem_autostart_settings: 'OEM Auto-Start Settings (Xiaomi/Vivo/Oppo/Samsung)',
+    recheck_location: 'I Turned It ON, Re-Check Location',
   },
 
   hi: {
@@ -187,7 +227,7 @@ export const translations = {
     continue: 'आगे बढ़ें',
     
     // Login
-    login_title: 'VIGILO-FO',
+    login_title: 'VIGILO-OFFICER',
     login_subtitle: 'फील्ड ऑफिसर साइन इन',
     mobile_number: 'मोबाइल नंबर',
     mobile_placeholder: '10-अंकों का मोबाइल नंबर दर्ज करें',
@@ -357,6 +397,46 @@ export const translations = {
     check_in: 'चेक-इन',
     visit_completed_title: 'विजिट पूर्ण हुई',
     visit_completed_desc: 'आप सफलतापूर्वक चेक-आउट हो गए हैं! विजिट रिकॉर्ड पूरा हो गया है।',
+
+    // Privacy & Consent Policy
+    privacy_policy_title: 'गोपनीयता नीति (Privacy Policy)',
+    privacy_policy_subtitle: 'हम आपकी निजता और गोपनीयता का सम्मान करते हैं।',
+    privacy_p1: '1. ऐप आवश्यक कार्यक्षमता को सक्षम करने के लिए केवल सीमित व्यक्तिगत डेटा (जैसे पहचानकर्ता और डिवाइस विवरण) को संसाधित करता है।',
+    privacy_p2: '2. सभी जानकारी लागू डेटा सुरक्षा और अनुपालन आवश्यकताओं के अनुसार संभाली जाती है।',
+    privacy_p3: '3. उपयोग के दौरान, ऐप आपकी नौकरी की जिम्मेदारियों और संगठनात्मक संचालन के सुचारू संचालन का समर्थन करने के लिए फोटो, आधिकारिक दस्तावेज और स्थान (location) डेटा एकत्र कर सकता है। ये रिकॉर्ड कड़ाई से अनुपालन, सत्यापन और परिचालन उद्देश्यों के लिए रखे जाते हैं।',
+    privacy_p4: '4. व्यक्तिगत जानकारी कभी भी मार्केटिंग या व्यावसायिक उपयोग के लिए बाहरी पक्षों को बेची या साझा नहीं की जाती है।',
+    privacy_p5: '5. आप अपने डेटा पर पूर्ण नियंत्रण बनाए रखते हैं और ऐप सेटिंग्स के माध्यम से किसी भी समय इसकी समीक्षा, प्रबंधन या इसे हटा सकते हैं।',
+
+    cookie_policy_title: 'कुकी नीति (Cookie Policy)',
+    cookie_policy_subtitle: 'हमारा ऐप आपके अनुभव को बेहतर बनाने के लिए कुकीज़ और समान तकनीकों का उपयोग करता है।',
+    cookie_p1: '1. आवश्यक कुकीज़: ऐप को ठीक से काम करने के लिए आवश्यक हैं।',
+    cookie_p2: '2. प्रदर्शन कुकीज़: ऐप के प्रदर्शन की निगरानी और सुधार करने में हमारी सहायता करती हैं।',
+    cookie_p3: '3. विश्लेषण कुकीज़: सुविधाओं को बेहतर बनाने के लिए गुमनाम उपयोग डेटा एकत्र करती हैं।',
+    cookie_p4: '4. प्राथमिकता कुकीज़: आपकी सेटिंग्स और विकल्पों को याद रखती हैं।',
+    cookie_footer: 'आप कुकी प्राथमिकता केंद्र में किसी भी समय अपनी कुकी प्राथमिकताओं को प्रबंधित या बदल सकते हैं।',
+
+    consent_notice_title: 'सहमति सूचना (Consent Notice)',
+    consent_notice_text: 'हम आपकी गोपनीयता का सम्मान करते हैं। जारी रखकर, आप हमारी गोपनीयता नीति और कुकी नीति के अनुसार अपनी व्यक्तिगत जानकारी के संग्रह और उपयोग के लिए सहमति देते हैं। इसमें कड़ाई से अनुपालन, सत्यापन और संगठनात्मक संचालन के लिए फोटो, आधिकारिक दस्तावेजों और स्थान डेटा का प्रसंस्करण शामिल है।',
+
+    accept_and_continue: 'स्वीकार करें और आगे बढ़ें',
+
+    // Location Guard Alerts & Messages
+    duty_compliance_warning: '🚨 अनिवार्य कर्तव्य अनुपालन चेतावनी',
+    location_setup_required: 'स्थान और कर्तव्य सेटअप आवश्यक है',
+    duty_gps_off_error: '🚨 अनिवार्य कर्तव्य अनुपालन: सक्रिय ड्यूटी पर पंच-इन होने पर स्थान (GPS) बंद कर दिया गया है। स्थान बंद करने से आपके पर्यवेक्षक को तत्काल अलर्ट जाता है।',
+    gps_off_error: 'आपके मोबाइल डिवाइस पर उच्च सटीकता स्थान / GPS बंद है। VIGILO-O का उपयोग करने के लिए कृपया उच्च सटीकता स्थान सक्षम करें।',
+    fg_perm_required: 'अधिकारी संचालन के लिए स्थान अनुमति आवश्यक है। कृपया स्थान पहुंच की अनुमति दें।',
+    bg_perm_required: 'बैकग्राउंड लोकेशन अनुमति ("हर समय अनुमति दें") आवश्यक है ताकि स्क्रीन लॉक होने पर भी VIGILO-O ड्यूटी लोकेशन ट्रैक कर सके।',
+    proceed_location_off_title: 'क्या आप सुनिश्चित हैं कि आप स्थान बंद करके आगे बढ़ना चाहते हैं?',
+    proceed_location_off_sub: 'आपकी सक्रिय पाली उपस्थिति सत्यापन के लिए स्थान ट्रैकिंग अनिवार्य है।',
+    keep_location_on_rec: 'नहीं - स्थान चालू रखें (अनुशंसित)',
+    enable_1tap_gps: '1-टैप उच्च सटीकता जीपीएस सक्षम करें',
+    locked_yes_text: 'हाँ (लॉक किया गया - {count}से में पर्यवेक्षक अलर्ट...)',
+    proceed_settings_yes: 'हाँ (सेटिंग्स पर जाएँ और उल्लंघन रिपोर्ट करें)',
+    enable_allow_always: '"हर समय अनुमति दें" सक्षम करें',
+    bypass_battery_saver: '1-टैप बैटरी सेवर बाईपास करें',
+    oem_autostart_settings: 'OEM ऑटो-स्टार्ट सेटिंग्स (Xiaomi/Vivo/Oppo/Samsung)',
+    recheck_location: 'मैंने इसे चालू कर दिया है, पुनः स्थान जांचें',
   },
 
   mr: {
@@ -366,7 +446,7 @@ export const translations = {
     continue: 'पुढे जा',
     
     // Login
-    login_title: 'VIGILO-FO',
+    login_title: 'VIGILO-OFFICER',
     login_subtitle: 'फील्ड ऑफिसर साइन इन',
     mobile_number: 'मोबाईल नंबर',
     mobile_placeholder: '10-अंकी मोबाईल नंबर प्रविष्ट करा',
@@ -536,5 +616,45 @@ export const translations = {
     check_in: 'चेक-इन',
     visit_completed_title: 'भेट पूर्ण झाली',
     visit_completed_desc: 'तुम्ही यशस्वीरित्या चेक-आउट केले आहे! भेट नोंद पूर्ण झाली आहे.',
+
+    // Privacy & Consent Policy
+    privacy_policy_title: 'गोपनीयता धोरण (Privacy Policy)',
+    privacy_policy_subtitle: 'आम्ही तुमच्या गोपनीयतेचा आदर करतो.',
+    privacy_p1: '1. ॲप आवश्यक कार्यक्षमता सक्षम करण्यासाठी केवळ मर्यादित वैयक्तिक डेटा (जसे की ओळखकर्ते आणि डिव्हाइस तपशील) प्रक्रिया करते.',
+    privacy_p2: '2. सर्व माहिती लागू डेटा संरक्षण आणि अनुपालन आवश्यकतांनुसार हाताळली जाते.',
+    privacy_p3: '3. वापरादरम्यान, ॲप तुमच्या नोकरीच्या जबाबदाऱ्या आणि संस्थात्मक ऑपरेशन्सचे सुरळीत कामकाज समर्थित करण्यासाठी फोटो, अधिकृत दस्तऐवज आणि स्थान (location) डेटा कॅप्चर करू शकते. या नोंदी कठोरपणे अनुपालन, पडताळणी आणि ऑपरेशनल उद्देशांसाठी ठेवल्या जातात.',
+    privacy_p4: '4. वैयक्तिक माहिती कधीही मार्केटिंग किंवा व्यावसायिक वापरासाठी बाह्य पक्षांना विकली किंवा उघड केली जात नाही.',
+    privacy_p5: '5. तुम्ही तुमच्या डेटावर पूर्ण नियंत्रण ठेवता आणि ॲप सेटिंग्सद्वारे कधीही त्याचे पुनरावलोकन, व्यवस्थापन किंवा हटवू शकता.',
+
+    cookie_policy_title: 'कुकी धोरण (Cookie Policy)',
+    cookie_policy_subtitle: 'आमचे ॲप तुमचा अनुभव सुधारण्यासाठी कुकीज आणि तत्सम तंत्रज्ञान वापरते.',
+    cookie_p1: '1. आवश्यक कुकीज: ॲप योग्यरित्या कार्य करण्यासाठी आवश्यक आहेत.',
+    cookie_p2: '2. कार्यप्रदर्शन कुकीज: आम्हाला ॲपच्या कार्यक्षमतेचे निरीक्षण आणि सुधारणा करण्यात मदत करतात.',
+    cookie_p3: '3. विश्लेषण कुकीज: वैशिष्ट्ये सुधारण्यासाठी अनामित वापर डेटा गोळा करतात.',
+    cookie_p4: '4. प्राधान्य कुकीज: तुमच्या सेटिंग्स आणि निवडी लक्षात ठेवतात.',
+    cookie_footer: 'तुम्ही कुकी प्राधान्य केंद्रामध्ये तुमच्या कुकी प्राधान्यांचे कधीही व्यवस्थापन किंवा बदल करू शकता.',
+
+    consent_notice_title: 'संमती सूचना (Consent Notice)',
+    consent_notice_text: 'आम्ही तुमच्या गोपनीयतेला मूल्य देतो. पुढे चालू ठेवून, तुम्ही आमच्या गोपनीयता धोरण आणि कुकी धोरणानुसार तुमच्या वैयक्तिक माहितीच्या संकलन आणि वापरास संमती देता. यामध्ये फोटो, अधिकृत दस्तऐवज आणि स्थान डेटाची प्रक्रिया केवळ अनुपालन, पडताळणी आणि संस्थात्मक ऑपरेशन्ससाठी समाविष्ट आहे.',
+
+    accept_and_continue: 'स्वीकारा आणि पुढे जा',
+
+    // Location Guard Alerts & Messages
+    duty_compliance_warning: '🚨 अनिवार्य कर्तव्य अनुपालन इशारा',
+    location_setup_required: 'स्थान आणि कर्तव्य सेटअप आवश्यक आहे',
+    duty_gps_off_error: '🚨 अनिवार्य कर्तव्य अनुपालन: सक्रिय कर्तव्य बजावताना स्थान (GPS) बंद केले आहे. स्थान बंद केल्याने तुमच्या पर्यवेक्षकाला त्वरित इशारा जातो.',
+    gps_off_error: 'तुमच्या मोबाईल डिव्हाइसवर उच्च अचूकता स्थान / GPS बंद आहे. VIGILO-O वापरण्यासाठी कृपया उच्च अचूकता स्थान सक्षम करा.',
+    fg_perm_required: 'अधिकारी ऑपरेशन्ससाठी स्थान परवानगी आवश्यक आहे. कृपया स्थान प्रवेशास अनुमती द्या.',
+    bg_perm_required: 'बॅकग्राउंड लोकेशन परवानगी ("सर्व वेळ अनुमती द्या") आवश्यक आहे जेणेकरून तुमची स्क्रीन लॉक असताना VIGILO-O ड्यूटी लोकेशन ट्रॅक करू शकेल.',
+    proceed_location_off_title: 'तुम्हाला नक्की स्थान बंद करून पुढे जायचे आहे का?',
+    proceed_location_off_sub: 'तुमच्या सक्रिय शिफ्ट हजेरी पडताळणीसाठी स्थान ट्रॅकिंग अनिवार्य आहे.',
+    keep_location_on_rec: 'नाही - स्थान चालू ठेवा (शिफारस केलेले)',
+    enable_1tap_gps: '1-टॅप उच्च अचूकता जीपीएस सक्षम करा',
+    locked_yes_text: 'होय (लॉक केले - {count}से मध्ये पर्यवेक्षक अलर्ट...)',
+    proceed_settings_yes: 'होय (सेटिंग्जवर जा आणि उल्लंघन नोंदवा)',
+    enable_allow_always: '"सर्व वेळ अनुमती द्या" परवानगी सक्षम करा',
+    bypass_battery_saver: '1-टॅप बॅटरी सेव्हर बायपास करा',
+    oem_autostart_settings: 'OEM ऑटो-स्टार्ट सेटिंग्स (Xiaomi/Vivo/Oppo/Samsung)',
+    recheck_location: 'मी ते चालू केले आहे, पुन्हा स्थान तपासा',
   },
 };

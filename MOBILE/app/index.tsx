@@ -2,22 +2,33 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { getLanguageSetting } from '../services/db';
+import { getLanguageSetting, getConsentSetting } from '../services/db';
 import { THEME } from '../constants/theme';
 
 export default function IndexScreen() {
-  const { isLoading } = useAuth();
+  const { isLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     checkAppFlow();
-  }, [isLoading]);
+  }, [isLoading, user]);
 
   const checkAppFlow = async () => {
     if (isLoading) return;
 
     try {
-      router.replace('/lang/lang-selection');
+      const savedLang = await getLanguageSetting();
+      const consentAccepted = await getConsentSetting();
+
+      if (!savedLang) {
+        router.replace('/lang/lang-selection');
+      } else if (!consentAccepted) {
+        router.replace('/consent');
+      } else if (user) {
+        router.replace('/(tabs)/dashboard');
+      } else {
+        router.replace('/login');
+      }
     } catch (e) {
       console.error('Error during initial navigation check', e);
       router.replace('/lang/lang-selection');
@@ -27,7 +38,7 @@ export default function IndexScreen() {
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color={THEME.primary} />
-      <Text style={styles.text}>Initializing VIGILO-FO...</Text>
+      <Text style={styles.text}>Initializing VIGILO-OFFICER...</Text>
     </View>
   );
 }

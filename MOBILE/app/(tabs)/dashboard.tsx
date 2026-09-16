@@ -39,6 +39,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { getPlannedVisits, createPlannedVisit, getSites, getClients, Site, Client, PlannedVisit } from '../../services/siteService';
 import { getPunchRecords } from '../../services/db';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits } from '../../services/visitService';
+import { getConsentSetting } from '../../services/db';
 
 export default function DashboardScreen() {
   const { user, profileImage } = useAuth();
@@ -49,6 +50,15 @@ export default function DashboardScreen() {
   const [greeting, setGreeting] = useState('Good Afternoon');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      const consentAccepted = await getConsentSetting();
+      if (!consentAccepted) {
+        router.replace('/consent');
+      }
+    })();
+  }, []);
 
   const getCompanyLogo = () => {
     const compId = user?.company_id || (profileData as any)?.company_id;

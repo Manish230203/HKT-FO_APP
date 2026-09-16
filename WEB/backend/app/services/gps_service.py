@@ -1,6 +1,7 @@
 import math
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, get_db_connection
 from app.models.patrol_models import GPSLocationLog, SiteVisitSession, PlannedVisitSchedule
@@ -254,7 +255,47 @@ def get_live_manager_gps_service(db: Session) -> List[Dict[str, Any]]:
     return result
 
 
+def ensure_track_history_config_table(db: Optional[Session] = None):
+    sql = """
+        CREATE TABLE IF NOT EXISTS FIELD_OFFICER_TRACK_HISTORY_CONFIG (
+            oid BIGINT AUTO_INCREMENT PRIMARY KEY,
+            employee_oid BIGINT NOT NULL,
+            is_enabled TINYINT NOT NULL DEFAULT 1,
+            effective_from DATETIME NOT NULL,
+            effective_to DATETIME NULL DEFAULT NULL,
+            updated_by VARCHAR(100) NULL DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_emp_config (employee_oid, effective_from, effective_to)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+    if db is not None:
+        try:
+            db.execute(text(sql))
+            db.commit()
+        except Exception as err:
+            db.rollback()
+            print(f"Warning creating FIELD_OFFICER_TRACK_HISTORY_CONFIG via SQLAlchemy: {err}")
+    else:
+        conn = get_db_connection()
+        if conn:
+            cursor = None
+            try:
+                cursor = conn.cursor()
+                cursor.execute(sql)
+                conn.commit()
+            except Exception as err:
+                print(f"Warning creating FIELD_OFFICER_TRACK_HISTORY_CONFIG via raw SQL: {err}")
+            finally:
+                if cursor:
+                    try: cursor.close()
+                    except Exception: pass
+                try: conn.close()
+                except Exception: pass
+
+
 def get_track_history_service(db: Session, employee_id: int, date_str: str) -> Dict[str, Any]:
+    ensure_track_history_config_table(db)
+
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
@@ -263,43 +304,151 @@ def get_track_history_service(db: Session, employee_id: int, date_str: str) -> D
     start_dt = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
     end_dt = start_dt + timedelta(days=1)
 
+    # 1. Fetch duty attendance periods for this officer overlapping target date
+    duty_sql = text("""
+        SELECT atl.oid, atl.in_time, atl.out_time
+        FROM ATTENDANCE_TIME_LOG atl
+        JOIN ATTENDANCE_CELL ac ON atl.ATTENDANCE_CELL = ac.oid
+        WHERE ac.EMPLOYEE = :emp_id
+          AND (
+            (atl.in_time >= :start_dt AND atl.in_time < :end_dt)
+            OR (atl.out_time >= :start_dt AND atl.out_time < :end_dt)
+            OR (atl.in_time < :start_dt AND (atl.out_time IS NULL OR atl.out_time >= :start_dt))
+          )
+        ORDER BY atl.in_time ASC
+    """)
+    duty_periods = db.execute(duty_sql, {
+        "emp_id": employee_id,
+        "start_dt": start_dt,
+        "end_dt": end_dt
+    }).mappings().all()
+
+    # Build duty windows
+    raw_duty_windows = []
+    if duty_periods:
+        for dp in duty_periods:
+            in_t = dp.get("in_time") or start_dt
+            out_t = dp.get("out_time") or end_dt
+            w_start = max(in_t, start_dt)
+            w_end = min(out_t, end_dt)
+            if w_start < w_end:
+                raw_duty_windows.append((w_start, w_end))
+    else:
+        # Fallback to full day if no attendance log exists on that date
+        raw_duty_windows.append((start_dt, end_dt))
+
+    # 2. Fetch temporal track history config entries for this employee
+    cfg_sql = text("""
+        SELECT is_enabled, effective_from, effective_to
+        FROM FIELD_OFFICER_TRACK_HISTORY_CONFIG
+        WHERE employee_oid = :emp_id
+        ORDER BY effective_from ASC
+    """)
+    config_entries = db.execute(cfg_sql, {"emp_id": employee_id}).mappings().all()
+
+    def is_enabled_at_timestamp(ts: datetime) -> bool:
+        if not config_entries:
+            return True
+        ts_clean = ts.replace(microsecond=0) if hasattr(ts, 'replace') else ts
+        first_from = config_entries[0]["effective_from"].replace(microsecond=0) if hasattr(config_entries[0]["effective_from"], 'replace') else config_entries[0]["effective_from"]
+        
+        if ts_clean < first_from:
+            return True
+
+        for cfg in config_entries:
+            ef_from = cfg["effective_from"].replace(microsecond=0) if hasattr(cfg["effective_from"], 'replace') else cfg["effective_from"]
+            ef_to = cfg["effective_to"].replace(microsecond=0) if (cfg.get("effective_to") and hasattr(cfg["effective_to"], 'replace')) else cfg.get("effective_to")
+            
+            if ts_clean >= ef_from:
+                if ef_to is None or ts_clean < ef_to:
+                    return int(cfg["is_enabled"]) == 1
+        return int(config_entries[-1]["is_enabled"]) == 1
+
+    # 3. Intersect duty windows with enabled configuration intervals
+    active_enabled_windows = []
+    for (d_start, d_end) in raw_duty_windows:
+        boundaries = {d_start, d_end}
+        for cfg in config_entries:
+            ef_from = cfg.get("effective_from")
+            ef_to = cfg.get("effective_to")
+            if ef_from and d_start <= ef_from <= d_end:
+                boundaries.add(ef_from)
+            if ef_to and d_start <= ef_to <= d_end:
+                boundaries.add(ef_to)
+
+        sorted_boundaries = sorted(list(boundaries))
+        for idx in range(len(sorted_boundaries) - 1):
+            s_start = sorted_boundaries[idx]
+            s_end = sorted_boundaries[idx + 1]
+            mid_ts = s_start + (s_end - s_start) / 2
+            if is_enabled_at_timestamp(mid_ts):
+                active_enabled_windows.append((s_start, s_end))
+
+    # 4. Fetch raw GPS logs for the day
     logs = db.query(GPSLocationLog).filter(
         GPSLocationLog.employee_id == employee_id,
         GPSLocationLog.recorded_at >= start_dt,
         GPSLocationLog.recorded_at < end_dt
     ).order_by(GPSLocationLog.recorded_at.asc()).all()
 
+    # 5. Extract waypoints per enabled window into distinct route_segments
+    route_segments = []
+    all_waypoints = []
+    grand_total_distance = 0.0
+    segment_counter = 1
+
+    for (w_start, w_end) in active_enabled_windows:
+        seg_logs = [l for l in logs if w_start <= l.recorded_at <= w_end]
+        if not seg_logs:
+            continue
+
+        seg_points = []
+        seg_distance = 0.0
+
+        for i, log in enumerate(seg_logs):
+            if i > 0:
+                prev = seg_logs[i - 1]
+                dist = haversine_distance_meters(prev.latitude, prev.longitude, log.latitude, log.longitude)
+                time_diff = (log.recorded_at - prev.recorded_at).total_seconds()
+                if time_diff > 0:
+                    speed_kmh = (dist / time_diff) * 3.6
+                    if speed_kmh < 150:
+                        seg_distance += dist
+                else:
+                    seg_distance += dist
+
+            pt_dict = {
+                "id": log.id,
+                "segment_id": segment_counter,
+                "latitude": log.latitude,
+                "longitude": log.longitude,
+                "accuracy": log.accuracy,
+                "speed": log.speed,
+                "battery_level": log.battery_level,
+                "recorded_at": log.recorded_at.isoformat()
+            }
+            seg_points.append(pt_dict)
+            all_waypoints.append(pt_dict)
+
+        grand_total_distance += seg_distance
+
+        route_segments.append({
+            "segment_id": segment_counter,
+            "start_time": seg_points[0]["recorded_at"],
+            "end_time": seg_points[-1]["recorded_at"],
+            "total_distance_km": round(seg_distance / 1000.0, 2),
+            "total_points": len(seg_points),
+            "waypoints": seg_points
+        })
+
+        segment_counter += 1
+
+    # Fetch site visit sessions
     visits = db.query(SiteVisitSession).filter(
         SiteVisitSession.employee_id == employee_id,
         SiteVisitSession.start_time >= start_dt,
         SiteVisitSession.start_time < end_dt
     ).order_by(SiteVisitSession.start_time.asc()).all()
-
-    points = []
-    total_distance = 0.0
-
-    for i, log in enumerate(logs):
-        if i > 0:
-            prev = logs[i-1]
-            dist = haversine_distance_meters(prev.latitude, prev.longitude, log.latitude, log.longitude)
-            # Filter out GPS jumps (> 150km/h equivalent)
-            time_diff = (log.recorded_at - prev.recorded_at).total_seconds()
-            if time_diff > 0:
-                speed_kmh = (dist / time_diff) * 3.6
-                if speed_kmh < 150:
-                    total_distance += dist
-            else:
-                total_distance += dist
-
-        points.append({
-            "id": log.id,
-            "latitude": log.latitude,
-            "longitude": log.longitude,
-            "accuracy": log.accuracy,
-            "speed": log.speed,
-            "battery_level": log.battery_level,
-            "recorded_at": log.recorded_at.isoformat()
-        })
 
     visit_sessions = []
     for v in visits:
@@ -318,9 +467,11 @@ def get_track_history_service(db: Session, employee_id: int, date_str: str) -> D
         "success": True,
         "employee_id": employee_id,
         "date": start_dt.strftime("%Y-%m-%d"),
-        "total_distance_km": round(total_distance / 1000.0, 2),
-        "total_points": len(points),
-        "points": points,
+        "total_distance_km": round(grand_total_distance / 1000.0, 2),
+        "total_points": len(all_waypoints),
+        "route_segments": route_segments,
+        "points": all_waypoints,
+        "waypoints": all_waypoints,
         "site_visit_sessions": visit_sessions
     }
 

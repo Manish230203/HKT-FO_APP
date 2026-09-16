@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowRight, ArrowLeft, Smartphone } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { getConsentSetting } from '../services/db';
 import { THEME } from '../constants/theme';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -19,6 +20,15 @@ export default function LoginScreen() {
   const [mobileNumber, setMobileNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      const consentAccepted = await getConsentSetting();
+      if (!consentAccepted) {
+        router.replace('/consent');
+      }
+    })();
+  }, []);
 
   const handleLogin = async () => {
     if (!mobileNumber || mobileNumber.length !== 10) {
@@ -70,7 +80,9 @@ export default function LoginScreen() {
               <View style={styles.logoContainer}>
                 <Image source={require('../assets/images/app_logo.png')} style={styles.logoImage} resizeMode="contain" />
               </View>
-              <Text style={styles.appTitle}>{t('login_title')}</Text>
+              <Text style={styles.appTitle}>
+                <Text style={{ color: '#60A5FA' }}>VIGILO-OFFICER</Text>
+              </Text>
               <Text style={styles.subtitle}>{t('login_subtitle')}</Text>
             </View>
 

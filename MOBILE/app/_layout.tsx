@@ -34,6 +34,7 @@ export default function RootLayout() {
                 name="lang/lang-selection"
                 options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
+              <Stack.Screen name="consent" options={{ headerShown: false, gestureEnabled: false }} />
               <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen

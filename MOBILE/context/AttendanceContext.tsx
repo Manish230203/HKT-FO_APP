@@ -108,7 +108,7 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
       ]);
 
       if (todayData?.success) {
-        setTodayRecord(todayData.record);
+        setTodayRecord(todayData.record || ({ no_active_session: true } as any));
         if (todayData.record?.check_in && !todayData.record?.check_out) {
           const pId = todayData.record.oid || todayData.record.id || todayData.record.punch_in_id;
           if (pId) violationService.setPunchInId(pId).catch(() => {});

@@ -81,6 +81,7 @@ export const getUserSession = async () => {
 export const clearUserSession = async () => {
   try {
     await deleteStorageItem('fo_user_session');
+    await deleteStorageItem('fo_punch_records');
   } catch (e) {
     console.error("Clear user session failed", e);
   }
@@ -100,6 +101,24 @@ export const getLanguageSetting = async () => {
   } catch (e) {
     console.error("Get language setting failed", e);
     return null;
+  }
+};
+
+export const saveConsentSetting = async (accepted: boolean) => {
+  try {
+    await setStorageItem('user_consent_accepted', accepted ? 'true' : 'false');
+  } catch (e) {
+    console.error("Save consent setting failed", e);
+  }
+};
+
+export const getConsentSetting = async (): Promise<boolean> => {
+  try {
+    const res = await getStorageItem('user_consent_accepted');
+    return res === 'true';
+  } catch (e) {
+    console.error("Get consent setting failed", e);
+    return false;
   }
 };
 
@@ -165,7 +184,7 @@ export const getPunchRecords = async (empId?: string): Promise<any[]> => {
         String(r.employeeId || '').toLowerCase() === empStr ||
         (r.officerName && r.officerName.toLowerCase().includes(empStr))
     );
-    return filtered.length > 0 ? filtered : all;
+    return filtered;
   } catch (e) {
     console.error("Get punch records failed", e);
     return [];

@@ -477,7 +477,7 @@ def approve_regularization_logic(reg_id: int, approved_by_name: str):
         shift_name = reg["shift_name"]
         
         # 2. Fetch Employee details
-        cursor.execute("SELECT designation, company_designation, site FROM employee WHERE oid = %s", (emp_oid,))
+        cursor.execute("SELECT designation, company_designation, site, track_history_enabled FROM employee WHERE oid = %s", (emp_oid,))
         emp = cursor.fetchone()
         if not emp:
             cursor.close()
@@ -486,6 +486,8 @@ def approve_regularization_logic(reg_id: int, approved_by_name: str):
             
         designation = emp["designation"] or emp["company_designation"]
         user_assigned_site = emp["site"]
+        emp_track_enabled = emp.get("track_history_enabled")
+        emp_track_enabled_val = 1 if emp_track_enabled is None or int(emp_track_enabled) == 1 else 0
         
         # 3. Find/Create ATTENDANCE_ROW
         year_month = duty_date.replace(day=1)
@@ -581,14 +583,14 @@ def approve_regularization_logic(reg_id: int, approved_by_name: str):
 
             if reg_for == "Punch In":
                 cursor.execute("""
-                    INSERT INTO ATTENDANCE_TIME_LOG (oid, in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
-                    VALUES (%s, %s, %s, %s)
-                """, (next_log_oid, datetime_str, cell_oid, sdc_oid))
+                    INSERT INTO ATTENDANCE_TIME_LOG (oid, in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT, track_history_enabled_at_punch_in)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (next_log_oid, datetime_str, cell_oid, sdc_oid, emp_track_enabled_val))
             else:
                 cursor.execute("""
-                    INSERT INTO ATTENDANCE_TIME_LOG (oid, out_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
-                    VALUES (%s, %s, %s, %s)
-                """, (next_log_oid, datetime_str, cell_oid, sdc_oid))
+                    INSERT INTO ATTENDANCE_TIME_LOG (oid, out_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT, track_history_enabled_at_punch_in)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (next_log_oid, datetime_str, cell_oid, sdc_oid, emp_track_enabled_val))
                 
         # 7. Update ATTENDANCE_CELL state based on active log
         cursor.execute("SELECT in_time, out_time FROM ATTENDANCE_TIME_LOG WHERE ATTENDANCE_CELL = %s LIMIT 1", (cell_oid,))
@@ -1001,7 +1003,7 @@ def mark_attendance_logic(data):
         today = get_ist_today()
 
         cursor.execute("""
-            SELECT e.oid, e.site, e.name, e.emp_code, e.active, e.DESIGNATION, e.COMPANY_DESIGNATION, d.name as designation_name
+            SELECT e.oid, e.site, e.name, e.emp_code, e.active, e.DESIGNATION, e.COMPANY_DESIGNATION, e.track_history_enabled, d.name as designation_name
             FROM EMPLOYEE e
             LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
             WHERE e.oid = %s
@@ -1233,10 +1235,13 @@ def mark_attendance_logic(data):
             next_log_res = cursor.fetchone()
             next_log_oid = next_log_res["next_oid"] if next_log_res else 1
 
+            emp_track_enabled = user.get("track_history_enabled")
+            emp_track_enabled_val = 1 if emp_track_enabled is None or int(emp_track_enabled) == 1 else 0
+
             cursor.execute("""
-                INSERT INTO ATTENDANCE_TIME_LOG (oid, in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT)
-                VALUES (%s, %s, %s, %s)
-            """, (next_log_oid, now, cell_oid, sdc_oid))
+                INSERT INTO ATTENDANCE_TIME_LOG (oid, in_time, ATTENDANCE_CELL, SHIFT_DESIGNATION_COUNT, track_history_enabled_at_punch_in)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (next_log_oid, now, cell_oid, sdc_oid, emp_track_enabled_val))
             log_oid = next_log_oid
             officer_name = user.get("name") or user.get("NAME") or ""
             try:

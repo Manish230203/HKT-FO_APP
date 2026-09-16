@@ -10,6 +10,8 @@ import { THEME } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 
+import { getConsentSetting } from '../../services/db';
+
 export default function LanguageSelectionScreen() {
   const { language, setLanguage, t } = useLanguage();
   const { user } = useAuth();
@@ -23,7 +25,10 @@ export default function LanguageSelectionScreen() {
 
   const handleContinue = async () => {
     await setLanguage(selectedLang);
-    if (user) {
+    const consentAccepted = await getConsentSetting();
+    if (!consentAccepted) {
+      router.replace('/consent');
+    } else if (user) {
       router.replace('/(tabs)/dashboard');
     } else {
       router.replace('/login');

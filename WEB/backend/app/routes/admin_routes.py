@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_patrol_db
 from app.models.patrol_models import Shift, PatrolTour, PatrolLog, Incident, Checklist, ChecklistResponse, SOSAlert, ResponseStatus, Question, ChecklistQuestionLink, QuestionAnswer, Checkpoint
-from typing import List, Optional
+from typing import List, Optional, Union
+from pydantic import BaseModel
 from sqlalchemy import text, func
 from sqlalchemy.exc import OperationalError
 import json
@@ -428,6 +429,7 @@ def get_current_admin(authorization: Optional[str] = Header(None), db: Session =
                 """)
                 emp = db.execute(sql, {"oid": emp_id}).mappings().first()
                 if emp:
+                    data["id"] = emp["oid"]
                     data["name"] = emp["name"]
                     data["role"] = emp["role_name"] or data.get("role") or "Staff"
                     data["employee_id"] = emp["emp_code"]
@@ -441,24 +443,11 @@ def get_current_admin(authorization: Optional[str] = Header(None), db: Session =
                     data["company_id"] = emp.get("company_id") or 1
                     data["company_name"] = emp.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if emp.get("company_id") == 4 else "Unique Delta Force")
                     data["company_short_name"] = emp.get("company_short_name") or ("EISPL" if emp.get("company_id") == 4 else "UDF")
-            return data
-        except Exception:
-            pass
-    return {
-        "id": 10208,
-        "name": "Manish Kenjale",
-        "role": "FIELD OFFICER",
-        "employee_id": "EMP003",
-        "site_id": 192,
-        "site_name": "UDF KASARWADI PUNE",
-        "client_id": 13,
-        "client_name": "Unique Delta Force Pvt. Ltd.",
-        "branch_id": 6,
-        "branch_name": "Pune",
-        "date_of_joining": "2016-08-29",
-        "company_id": 1,
-        "company_name": "Unique Delta Force"
-    }
+                    return data
+        except Exception as err:
+            print(f"Error decoding token in /auth/me: {err}")
+    
+    raise HTTPException(status_code=401, detail="Unauthorized token or missing authentication header")
 
 @router.get("/patrol/search")
 def global_search(q: str = "", db: Session = Depends(get_patrol_db)):
@@ -2690,3 +2679,207 @@ def get_guards_by_site(site_id: Optional[int] = Query(None), db: Session = Depen
         params["site_id"] = site_id
     rows = db.execute(text(query), params).mappings().all()
     return [{"id": f"g_{r['oid']}", "name": r["name"], "employeeId": r["emp_code"], "present": True} for r in rows]
+
+# --- AREA MANAGER TRACK HISTORY CONTROL & RBAC APIs ---
+
+class TrackHistoryToggleRequest(BaseModel):
+    track_history_enabled: Union[int, bool]
+
+@router.get("/api/v1/employees/track-history")
+@router.get("/admin/employees/track-history")
+def get_employees_track_history_list(
+    branch_id: Optional[int] = Query(None),
+    site_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_patrol_db)
+):
+    role = (current_user.get("role") or "").lower()
+    user_branch = current_user.get("branch_id")
+    user_site = current_user.get("site_id")
+
+    query = """
+        SELECT e.oid as id, e.name, e.emp_code, d.name as designation,
+               e.BRANCH as branch_id, b.name as branch_name,
+               e.SITE as site_id, s.name as site_name,
+               COALESCE(e.track_history_enabled, 1) as track_history_enabled
+        FROM EMPLOYEE e
+        LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+        LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+        LEFT JOIN SITE s ON e.SITE = s.oid
+        WHERE e.active = 1
+    """
+    params = {}
+
+    # RBAC Scoping
+    if role in ["area manager", "supervisor", "field officer", "main gate supervisor"]:
+        if user_branch:
+            query += " AND (e.BRANCH = :user_branch OR s.BRANCH = :user_branch)"
+            params["user_branch"] = user_branch
+        elif user_site:
+            query += " AND e.SITE = :user_site"
+            params["user_site"] = user_site
+        else:
+            return {"success": True, "employees": []}
+
+    if branch_id:
+        query += " AND e.BRANCH = :branch_id"
+        params["branch_id"] = branch_id
+    if site_id:
+        query += " AND e.SITE = :site_id"
+        params["site_id"] = site_id
+    if search:
+        query += " AND (e.name LIKE :search OR e.emp_code LIKE :search)"
+        params["search"] = f"%{search}%"
+
+    query += " ORDER BY e.name ASC LIMIT 200"
+
+    rows = db.execute(text(query), params).mappings().all()
+    employees = []
+    for r in rows:
+        employees.append({
+            "id": r["id"],
+            "employee_id": r["id"],
+            "name": r["name"],
+            "emp_code": r["emp_code"],
+            "designation": r["designation"] or "Security Officer",
+            "branch_id": r["branch_id"],
+            "branch_name": r["branch_name"] or "N/A",
+            "site_id": r["site_id"],
+            "site_name": r["site_name"] or "Unassigned",
+            "track_history_enabled": int(r["track_history_enabled"])
+        })
+    return {"success": True, "employees": employees}
+
+
+@router.get("/api/v1/employees/{emp_id}/track-history")
+@router.get("/admin/employees/{emp_id}/track-history")
+def get_employee_track_history_setting(
+    emp_id: Union[int, str],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_patrol_db)
+):
+    sql = text("""
+        SELECT e.oid as id, e.name, e.emp_code, e.BRANCH as branch_id, e.SITE as site_id,
+               COALESCE(e.track_history_enabled, 1) as track_history_enabled
+        FROM EMPLOYEE e
+        WHERE e.oid = :emp_id OR e.emp_code = :emp_id
+        LIMIT 1
+    """)
+    emp = db.execute(sql, {"emp_id": emp_id}).mappings().first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    role = (current_user.get("role") or "").lower()
+    user_branch = current_user.get("branch_id")
+    user_site = current_user.get("site_id")
+
+    # Enforce RBAC
+    if role in ["area manager", "supervisor", "field officer", "main gate supervisor"]:
+        is_authorized = (user_branch and emp["branch_id"] == user_branch) or (user_site and emp["site_id"] == user_site)
+        if not is_authorized:
+            raise HTTPException(status_code=403, detail="Unauthorized: Officer is outside your branch or site assignment")
+
+    return {
+        "success": True,
+        "employee_id": emp["id"],
+        "emp_code": emp["emp_code"],
+        "name": emp["name"],
+        "track_history_enabled": int(emp["track_history_enabled"])
+    }
+
+
+from app.services.gps_service import ensure_track_history_config_table
+
+
+@router.patch("/api/v1/employees/{emp_id}/track-history")
+@router.patch("/admin/employees/{emp_id}/track-history")
+def toggle_employee_track_history(
+    emp_id: Union[int, str],
+    payload: TrackHistoryToggleRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_patrol_db)
+):
+    db.expire_all()
+    sql = text("""
+        SELECT e.oid as id, e.name, e.emp_code, e.BRANCH as branch_id, e.SITE as site_id,
+               COALESCE(e.track_history_enabled, 1) as track_history_enabled
+        FROM EMPLOYEE e
+        WHERE e.oid = :emp_id OR e.emp_code = :emp_id
+        LIMIT 1
+    """)
+    emp = db.execute(sql, {"emp_id": emp_id}).mappings().first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    role = (current_user.get("role") or "").lower()
+    user_branch = current_user.get("branch_id")
+    user_site = current_user.get("site_id")
+
+    # Enforce RBAC: Area Manager / Supervisor can only modify officers in their branch or site
+    if role in ["area manager", "supervisor", "field officer", "main gate supervisor"]:
+        is_authorized = (user_branch and emp["branch_id"] == user_branch) or (user_site and emp["site_id"] == user_site)
+        if not is_authorized:
+            raise HTTPException(status_code=403, detail="Unauthorized: Officer is outside your branch or site assignment")
+
+    ensure_track_history_config_table(db)
+
+    new_val = 1 if payload.track_history_enabled in [1, True, "1", "true", "True"] else 0
+
+    open_cfg_sql = text("""
+        SELECT is_enabled, effective_from
+        FROM FIELD_OFFICER_TRACK_HISTORY_CONFIG
+        WHERE employee_oid = :emp_oid AND effective_to IS NULL
+        ORDER BY effective_from DESC
+        LIMIT 1
+    """)
+    current_cfg = db.execute(open_cfg_sql, {"emp_oid": emp["id"]}).mappings().first()
+
+    if current_cfg is not None:
+        current_val = int(current_cfg["is_enabled"])
+    else:
+        current_val = int(emp["track_history_enabled"])
+
+    if new_val == current_val:
+        return {
+            "success": True,
+            "employee_id": emp["id"],
+            "emp_code": emp["emp_code"],
+            "name": emp["name"],
+            "track_history_enabled": current_val,
+            "effective_from": current_cfg["effective_from"].isoformat() if current_cfg and current_cfg.get("effective_from") else None,
+            "message": f"Track History is already {'ENABLED' if current_val == 1 else 'DISABLED'}."
+        }
+
+    now_dt = datetime.now()
+
+    # Close current open interval
+    close_sql = text("""
+        UPDATE FIELD_OFFICER_TRACK_HISTORY_CONFIG
+        SET effective_to = :now
+        WHERE employee_oid = :emp_oid AND effective_to IS NULL
+    """)
+    db.execute(close_sql, {"now": now_dt, "emp_oid": emp["id"]})
+
+    # Insert new interval
+    updater_name = current_user.get("name") or current_user.get("username") or str(current_user.get("id", "system"))
+    insert_sql = text("""
+        INSERT INTO FIELD_OFFICER_TRACK_HISTORY_CONFIG (employee_oid, is_enabled, effective_from, effective_to, updated_by)
+        VALUES (:emp_oid, :val, :now, NULL, :updated_by)
+    """)
+    db.execute(insert_sql, {"emp_oid": emp["id"], "val": new_val, "now": now_dt, "updated_by": updater_name})
+
+    # Update EMPLOYEE current state flag
+    update_emp_sql = text("UPDATE EMPLOYEE SET track_history_enabled = :val WHERE oid = :actual_oid")
+    db.execute(update_emp_sql, {"val": new_val, "actual_oid": emp["id"]})
+    db.commit()
+
+    return {
+        "success": True,
+        "employee_id": emp["id"],
+        "emp_code": emp["emp_code"],
+        "name": emp["name"],
+        "track_history_enabled": new_val,
+        "effective_from": now_dt.isoformat(),
+        "message": f"Track History immediately {'ENABLED' if new_val == 1 else 'DISABLED'}."
+    }

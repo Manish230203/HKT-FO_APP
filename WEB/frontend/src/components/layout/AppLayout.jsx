@@ -334,7 +334,7 @@ export function AppLayout({ children }) {
               </button>
 
               <h1 className="text-xl font-semibold tracking-tight text-slate-800 dark:text-slate-200">
-                Field Officer Management
+                VIGILO-Officer Management
               </h1>
             </div>
             <div className="flex items-center gap-4">

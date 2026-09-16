@@ -200,3 +200,15 @@ class PlannedVisitSchedule(Base):
     required_frequency = Column(Integer, default=1, nullable=False)
     min_duration_minutes = Column(Integer, default=15, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+
+
+class FieldOfficerTrackHistoryConfig(Base):
+    __tablename__ = "FIELD_OFFICER_TRACK_HISTORY_CONFIG"
+    id = Column("oid", Integer, primary_key=True, index=True, autoincrement=True)
+    employee_oid = Column(Integer, index=True, nullable=False)
+    is_enabled = Column(Integer, nullable=False, default=1)
+    effective_from = Column(DateTime, nullable=False)
+    effective_to = Column(DateTime, nullable=True)
+    updated_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
