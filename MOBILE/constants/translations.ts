@@ -8,7 +8,7 @@ export const translations = {
     continue: 'Continue',
     
     // Login
-    login_title: 'VIGILO-OFFICER',
+    login_title: 'VIGILO-O',
     login_subtitle: 'Field Officer Sign In',
     mobile_number: 'Mobile Number',
     mobile_placeholder: 'Enter 10-digit mobile number',
@@ -147,6 +147,21 @@ export const translations = {
     camera_perm_req: 'Camera Permission Required',
     camera_perm_desc: 'Camera permission is required to capture profile photo.',
     
+    // System Permissions & Battery Onboarding
+    perm_setup_title: 'Required Location & Battery Setup',
+    perm_setup_subtitle: 'Complete these 3 settings so duty tracking works seamlessly when your phone screen is locked or in your pocket.',
+    perm_location_title: '1. Location Access: "Allow all the time"',
+    perm_location_desc: 'Select "Allow all the time" in location permissions so location verification functions continuously while your screen is locked.',
+    perm_location_btn: 'Configure Location Access',
+    perm_battery_title: '2. Battery Saver: "No Restrictions"',
+    perm_battery_desc: 'Set Battery Saver to "No Restrictions" (or "Don\'t optimize") so Android does not stop location tracking during your shift.',
+    perm_battery_btn: 'Disable Battery Restrictions',
+    perm_autostart_title: '3. Enable Auto-Start',
+    perm_autostart_desc: 'Turn ON Auto-Start for VIGILO-O in phone settings so tracking resumes automatically if your phone reboots.',
+    perm_autostart_btn: 'Open Auto-Start Settings',
+    perm_status_granted: '✓ Allowed',
+    perm_status_action: '⚠ Action Required',
+    
     // Additional Screen UI Labels
     user_label: 'User',
     local_time: 'LOCAL TIME',
@@ -227,7 +242,7 @@ export const translations = {
     continue: 'आगे बढ़ें',
     
     // Login
-    login_title: 'VIGILO-OFFICER',
+    login_title: 'VIGILO-O',
     login_subtitle: 'फील्ड ऑफिसर साइन इन',
     mobile_number: 'मोबाइल नंबर',
     mobile_placeholder: '10-अंकों का मोबाइल नंबर दर्ज करें',
@@ -366,6 +381,21 @@ export const translations = {
     camera_perm_req: 'कैमरा अनुमति आवश्यक है',
     camera_perm_desc: 'प्रोफाइल फोटो लेने के लिए कैमरा अनुमति आवश्यक है।',
 
+    // System Permissions & Battery Onboarding
+    perm_setup_title: 'आवश्यक लोकेशन और बैटरी सेटिंग्स',
+    perm_setup_subtitle: 'इन 3 सेटिंग्स को पूरा करें ताकि फोन स्क्रीन लॉक होने पर भी आपकी ड्यूटी ट्रैकिंग सुचारू रूप से काम करे।',
+    perm_location_title: '1. लोकेशन एक्सेस: "हर समय अनुमति दें" (Allow all the time)',
+    perm_location_desc: 'लोकेशन अनुमति में "Allow all the time" चुनें ताकि स्क्रीन लॉक होने पर भी लोकेशन वेरिफिकेशन चालू रहे।',
+    perm_location_btn: 'लोकेशन एक्सेस सेट करें',
+    perm_battery_title: '2. बैटरी सेवर: "कोई प्रतिबंध नहीं" (No Restrictions)',
+    perm_battery_desc: 'बैटरी सेवर को "No Restrictions" या "Don\'t optimize" पर सेट करें ताकि एंड्रॉइड बैकग्राउंड ट्रैकिंग बंद न करे।',
+    perm_battery_btn: 'बैटरी प्रतिबंध हटाएं',
+    perm_autostart_title: '3. ऑटो-स्टार्ट चालू करें (Auto-Start)',
+    perm_autostart_desc: 'फोन सेटिंग्स में VIGILO-O के लिए ऑटो-स्टार्ट चालू करें ताकि फोन रीस्टार्ट होने पर ट्रैकिंग अपने आप शुरू हो जाए।',
+    perm_autostart_btn: 'ऑटो-स्टार्ट सेटिंग्स खोलें',
+    perm_status_granted: '✓ स्वीकृत',
+    perm_status_action: '⚠ ध्यान दें',
+
     // Additional Screen UI Labels
     user_label: 'उपयोगकर्ता',
     local_time: 'स्थानीय समय',
@@ -446,7 +476,7 @@ export const translations = {
     continue: 'पुढे जा',
     
     // Login
-    login_title: 'VIGILO-OFFICER',
+    login_title: 'VIGILO-O',
     login_subtitle: 'फील्ड ऑफिसर साइन इन',
     mobile_number: 'मोबाईल नंबर',
     mobile_placeholder: '10-अंकी मोबाईल नंबर प्रविष्ट करा',
@@ -584,6 +614,21 @@ export const translations = {
     photo_saved_desc: 'प्रोफाइल फोटो अपडेट आणि सेव्ह केला गेला आहे!',
     camera_perm_req: 'कॅमेरा परवानगी आवश्यक आहे',
     camera_perm_desc: 'प्रोफाइल फोटो काढण्यासाठी कॅमेरा परवानगी आवश्यक आहे.',
+
+    // System Permissions & Battery Onboarding
+    perm_setup_title: 'आवश्यक लोकेशन व बॅटरी सेटिंग्ज',
+    perm_setup_subtitle: 'या ३ सेटिंग्ज पूर्ण करा जेणेकरून फोन स्क्रीन लॉक असतानाही तुमची ड्युटी ट्रॅकिंग अखंडपणे सुरू राहील.',
+    perm_location_title: '1. लोकेशन अ‍ॅक्सेस: "Allow all the time" (नेहमी परवानगी द्या)',
+    perm_location_desc: 'लोकेशन परवानग्यांमध्ये "Allow all the time" निवडा जेणेकरून स्क्रीन लॉक असतानाही लोकेशन व्हेरीफिकेशन सुरू राहील.',
+    perm_location_btn: 'लोकेशन अ‍ॅक्सेस सेट करा',
+    perm_battery_title: '2. बॅटरी सेव्हर: "No Restrictions" (कोणतेही निर्बंध नाही)',
+    perm_battery_desc: 'बॅटरी सेव्हर "No Restrictions" वर सेट करा जेणेकरून अँड्रॉइड बॅकग्राउंड ट्रॅकिंग बंद करणार नाही.',
+    perm_battery_btn: 'बॅटरी निर्बंध हटवा',
+    perm_autostart_title: '3. ऑटो-स्टार्ट सुरू करा (Auto-Start)',
+    perm_autostart_desc: 'फोन सेटिंग्जमध्ये VIGILO-O साठी ऑटो-स्टार्ट सुरू करा जेणेकरून फोन रीस्टार्ट झाल्यावर ट्रॅकिंग आपोआप सुरू होईल.',
+    perm_autostart_btn: 'ऑटो-स्टार्ट सेटिंग्ज उघडा',
+    perm_status_granted: '✓ मंजूर',
+    perm_status_action: '⚠ आवश्यक',
 
     // Additional Screen UI Labels
     user_label: 'वापरकर्ता',

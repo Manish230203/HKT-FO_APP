@@ -81,7 +81,7 @@ export default function LoginScreen() {
                 <Image source={require('../assets/images/app_logo.png')} style={styles.logoImage} resizeMode="contain" />
               </View>
               <Text style={styles.appTitle}>
-                <Text style={{ color: '#60A5FA' }}>VIGILO-OFFICER</Text>
+                <Text style={{ color: '#60A5FA' }}>VIGILO-O</Text>
               </Text>
               <Text style={styles.subtitle}>{t('login_subtitle')}</Text>
             </View>

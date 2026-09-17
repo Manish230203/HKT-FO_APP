@@ -132,11 +132,15 @@ def get_live_officer_locations(db: Session = Depends(get_patrol_db)):
 @router.get("/tracking/history")
 @router.get("/api/v1/tracking/history")
 def get_track_history(
-    employee_id: int = Query(...),
+    employee_id: Optional[int] = Query(None),
+    employee_oid: Optional[int] = Query(None),
     date: str = Query(...),
     db: Session = Depends(get_patrol_db)
 ):
-    return get_track_history_service(db, employee_id, date)
+    target_emp = employee_id if employee_id is not None else employee_oid
+    if target_emp is None:
+        raise HTTPException(status_code=422, detail="Missing required parameter: employee_id or employee_oid")
+    return get_track_history_service(db, target_emp, date)
 
 
 @router.get("/gps/planned-vs-actual")

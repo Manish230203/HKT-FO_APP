@@ -337,7 +337,11 @@ def get_track_history_service(db: Session, employee_id: int, date_str: str) -> D
         # Fallback to full day if no attendance log exists on that date
         raw_duty_windows.append((start_dt, end_dt))
 
-    # 2. Fetch temporal track history config entries for this employee
+    # 2. Fetch baseline EMPLOYEE setting and temporal track history config entries for this employee
+    emp_flag_sql = text("SELECT COALESCE(track_history_enabled, 1) as track_history_enabled FROM EMPLOYEE WHERE oid = :emp_id")
+    emp_flag_row = db.execute(emp_flag_sql, {"emp_id": employee_id}).mappings().first()
+    default_emp_enabled = bool(int(emp_flag_row["track_history_enabled"])) if emp_flag_row and emp_flag_row.get("track_history_enabled") is not None else True
+
     cfg_sql = text("""
         SELECT is_enabled, effective_from, effective_to
         FROM FIELD_OFFICER_TRACK_HISTORY_CONFIG
@@ -348,7 +352,8 @@ def get_track_history_service(db: Session, employee_id: int, date_str: str) -> D
 
     def is_enabled_at_timestamp(ts: datetime) -> bool:
         if not config_entries:
-            return True
+            return default_emp_enabled
+
         ts_clean = ts.replace(microsecond=0) if hasattr(ts, 'replace') else ts
         first_from = config_entries[0]["effective_from"].replace(microsecond=0) if hasattr(config_entries[0]["effective_from"], 'replace') else config_entries[0]["effective_from"]
         

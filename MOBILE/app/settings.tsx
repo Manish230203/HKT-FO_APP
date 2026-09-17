@@ -223,6 +223,18 @@ export default function SettingsScreen() {
               </View>
               <ChevronRight color="#64748B" size={18} />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push('/consent')}
+              style={[styles.itemRow, { borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.06)' }]}
+            >
+              <ShieldCheck color="#60A5FA" size={20} />
+              <View style={styles.itemTextCol}>
+                <Text style={styles.itemMainText}>Location & Battery Setup</Text>
+                <Text style={styles.itemSubText}>Configure background tracking permissions</Text>
+              </View>
+              <ChevronRight color="#64748B" size={18} />
+            </TouchableOpacity>
           </View>
 
           {/* 5. Departure Protocol Card (Sign Out) */}

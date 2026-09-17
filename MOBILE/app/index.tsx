@@ -38,7 +38,7 @@ export default function IndexScreen() {
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color={THEME.primary} />
-      <Text style={styles.text}>Initializing VIGILO-OFFICER...</Text>
+      <Text style={styles.text}>Initializing VIGILO-O...</Text>
     </View>
   );
 }

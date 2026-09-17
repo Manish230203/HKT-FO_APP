@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "VIGILO-OFFICER",
+    "name": "VIGILO-O",
     "slug": "fo-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,10 +19,10 @@
         "UIBackgroundModes": [
           "location"
         ],
-        "NSLocationWhenInUseUsageDescription": "Allow VIGILO-OFFICER to access your location for attendance and site visit verification.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow VIGILO-OFFICER to access your location for background duty tracking.",
-        "NSLocationAlwaysUsageDescription": "Allow VIGILO-OFFICER to access your location in the background while screen is locked.",
-        "NSLocationUsageDescription": "Allow VIGILO-OFFICER to access your location for attendance and site visit verification."
+        "NSLocationWhenInUseUsageDescription": "Allow VIGILO-O to access your location for attendance and site visit verification.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow VIGILO-O to access your location for background duty tracking.",
+        "NSLocationAlwaysUsageDescription": "Allow VIGILO-O to access your location in the background while screen is locked.",
+        "NSLocationUsageDescription": "Allow VIGILO-O to access your location for attendance and site visit verification."
       }
     },
     "android": {
@@ -58,13 +58,13 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow VIGILO-OFFICER to access your location for attendance and site visit verification.",
-          "locationAlwaysAndWhenInUsePermission": "Allow VIGILO-OFFICER to access your location for background duty tracking.",
-          "locationAlwaysPermission": "Allow VIGILO-OFFICER to access your location in the background while screen is locked.",
+          "locationWhenInUsePermission": "Allow VIGILO-O to access your location for attendance and site visit verification.",
+          "locationAlwaysAndWhenInUsePermission": "Allow VIGILO-O to access your location for background duty tracking.",
+          "locationAlwaysPermission": "Allow VIGILO-O to access your location in the background while screen is locked.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true,
           "foregroundService": {
-            "notificationTitle": "VIGILO-OFFICER Duty Active",
+            "notificationTitle": "VIGILO-O Duty Active",
             "notificationBody": "Location tracking is active for officer verification.",
             "notificationColor": "#00599B",
             "foregroundServiceType": "location"
@@ -74,7 +74,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow VIGILO-OFFICER to access your camera for site observation photos."
+          "cameraPermission": "Allow VIGILO-O to access your camera for site observation photos."
         }
       ]
     ],

@@ -171,10 +171,6 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     refreshStatus();
-    const empOid = getEmpOid();
-    if (empOid) {
-      gpsTracker?.startTracking(Number(empOid))?.catch(() => {});
-    }
     gpsTracker?.checkAndResumeTracking()?.catch(() => {});
   }, [user]);
 

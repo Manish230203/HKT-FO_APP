@@ -11,6 +11,13 @@ const OFFLINE_GPS_KEY = 'fo_offline_gps_queue';
 const ACTIVE_TRACKING_KEY = 'fo_active_tracking_session';
 export const LOCATION_TASK_NAME = 'FO_BACKGROUND_LOCATION_TASK';
 
+// Hard Accuracy Cutoff: Discard readings with accuracy > 35.0m (Cell tower/Wi-Fi guesses)
+const ACCURACY_CUTOFF_METERS = 35.0;
+
+// Batch Upload Settings: 4 points every 60 seconds (15s x 4 = 60s)
+const BATCH_SIZE_THRESHOLD = 4;
+const BATCH_TIME_THRESHOLD_MS = 60000;
+
 export interface GPSPoint {
   point_id?: string;
   latitude: number;
@@ -29,12 +36,14 @@ export interface ExtendedLocationCoords extends Location.LocationObjectCoords {
 class MobileGPSTracker {
   private isTracking: boolean = false;
   private timerId: any = null;
+  private batchFlushTimerId: any = null;
   private employeeId: number | null = null;
   private shiftId: number | null = null;
   private lastLocation: Location.LocationObject | null = null;
-  private currentIntervalMs: number = 30000; // Default 30s
+  private currentIntervalMs: number = 15000; // 15 seconds desired interval
   private lastSentPoint: GPSPoint | null = null;
   private lastSentTime: number = 0;
+  private lastBatchFlushTime: number = 0;
   private hasActiveVisit: boolean = false;
   private isSyncing: boolean = false;
 
@@ -66,7 +75,7 @@ class MobileGPSTracker {
       this.hasActiveVisit = false;
     }
 
-    console.log(`Starting Native Background GPS tracking for Officer #${this.employeeId}. Active Visit: ${this.hasActiveVisit}`);
+    console.log(`[gpsTracker] Starting Native Background GPS tracking for Officer #${this.employeeId}. Active Visit: ${this.hasActiveVisit}`);
 
     // Persist active tracking state for device reboot / app restart recovery
     await this.saveActiveSessionState(true, this.employeeId, this.shiftId);
@@ -77,7 +86,7 @@ class MobileGPSTracker {
         try {
           await Location.enableNetworkProviderAsync();
         } catch (netErr) {
-          console.warn('Network provider enable warning:', netErr);
+          console.warn('[gpsTracker] Network provider enable warning:', netErr);
         }
       }
 
@@ -86,29 +95,32 @@ class MobileGPSTracker {
         try {
           const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
           if (bgStatus !== 'granted') {
-            console.warn('Background location permission not granted; tracking might pause when screen locked');
+            console.warn('[gpsTracker] Background location permission not granted; tracking might pause when screen locked');
           }
         } catch (bgPermErr) {
-          console.warn('Background location permission request error:', bgPermErr);
+          console.warn('[gpsTracker] Background location permission request error:', bgPermErr);
         }
       } else {
-        console.warn('Foreground location permission denied');
+        console.warn('[gpsTracker] Foreground location permission denied');
       }
     } catch (e) {
-      console.warn('Error requesting location permissions:', e);
+      console.warn('[gpsTracker] Error requesting location permissions:', e);
     }
 
-    // 2. Register Native Expo Background Location Task with BestForNavigation high accuracy & dynamic filters
+    // 2. Register Native Expo Background Location Task with BestForNavigation high accuracy & 25m displacement rule
     try {
       await this.updateTrackingConfiguration(this.hasActiveVisit);
     } catch (bgTaskErr) {
-      console.warn('Native background location registration error (falling back to JS timer):', bgTaskErr);
+      console.warn('[gpsTracker] Native background location registration error (falling back to JS timer):', bgTaskErr);
     }
 
-    // 3. Fallback / Foreground timer fix cycle
+    // 3. Fallback / Foreground timer cycle
     if (!this.timerId) {
       this.scheduleNextFix();
     }
+
+    // 4. Start batch flush timer (every 60 seconds)
+    this.startBatchFlushTimer();
   }
 
   public async updateTrackingConfiguration(hasActiveVisit: boolean) {
@@ -116,32 +128,20 @@ class MobileGPSTracker {
     if (!this.employeeId || !this.isTracking) return;
 
     try {
-      const config = this.hasActiveVisit ? {
+      // 1. Movement-Based GPS (Displacement Rule)
+      // Desired Interval: 15s (15000ms)
+      // Smallest Displacement: 25 meters (10 meters during active site visit)
+      const distanceThreshold = this.hasActiveVisit ? 10 : 25;
+      
+      const config = {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 30000, // 30 seconds active visit
-        distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
-        deferredUpdatesInterval: 30000,
-        deferredUpdatesDistance: 0,
+        timeInterval: 15000, // 15s desired interval
+        distanceInterval: distanceThreshold, // 25m smallest displacement rule
         showsBackgroundLocationIndicator: true,
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         foregroundService: {
-          notificationTitle: 'VIGILO-OFFICER Duty Active',
-          notificationBody: 'Location tracking is active for officer verification.',
-          notificationColor: '#00599B',
-          killServiceOnDestroy: false,
-        },
-      } : {
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 90000, // 90 seconds travelling
-        distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
-        deferredUpdatesInterval: 90000,
-        deferredUpdatesDistance: 0,
-        showsBackgroundLocationIndicator: true,
-        pausesUpdatesAutomatically: false,
-        activityType: Location.ActivityType.AutomotiveNavigation,
-        foregroundService: {
-          notificationTitle: 'VIGILO-OFFICER Duty Active',
+          notificationTitle: 'VIGILO-O Duty Active',
           notificationBody: 'Location tracking is active for officer verification.',
           notificationColor: '#00599B',
           killServiceOnDestroy: false,
@@ -149,12 +149,13 @@ class MobileGPSTracker {
       };
 
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, config);
-      console.log(`Updated native background location task configuration. Checked-in: ${this.hasActiveVisit}`);
+      console.log(`[gpsTracker] Native background location task configured. Displacement: ${distanceThreshold}m, Interval: 15s, Accuracy: BestForNavigation`);
     } catch (e) {
-      console.warn('Error updating native background location config:', e);
+      console.warn('[gpsTracker] Error updating native background location config:', e);
     }
   }
 
+  // Displacement & Heartbeat Filter Check
   private shouldSendPoint(pt: GPSPoint): boolean {
     if (!this.lastSentPoint) {
       return true;
@@ -169,13 +170,13 @@ class MobileGPSTracker {
 
     const timeDiffMs = Date.now() - this.lastSentTime;
 
-    // Heartbeat check: If stationary for > 3 minutes (180,000ms), send 1 heartbeat ping
+    // Heartbeat check: If stationary for >= 3 minutes (180,000ms), send 1 heartbeat ping
     if (timeDiffMs >= 180000) {
-      console.log('Heartbeat trigger: Stationary for > 3 minutes, sending location.');
+      console.log('[gpsTracker] Heartbeat trigger: Stationary for >= 3 minutes, recording location.');
       return true;
     }
 
-    // Displacement threshold:
+    // Displacement threshold rule: 25 meters when travelling, 10 meters when in site visit
     const threshold = this.hasActiveVisit ? 10 : 25;
     if (dist >= threshold) {
       return true;
@@ -191,22 +192,27 @@ class MobileGPSTracker {
       this.timerId = null;
     }
 
-    // Stop Native Background Location Task
+    if (this.batchFlushTimerId) {
+      clearInterval(this.batchFlushTimerId);
+      this.batchFlushTimerId = null;
+    }
+
+    // Stop Native Background Location Task & Release GPS Hardware
     try {
       const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
       if (hasStarted) {
         await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-        console.log('Native background location task stopped');
+        console.log('[gpsTracker] Native background location task and GPS hardware stopped completely.');
       }
     } catch (e) {
-      console.warn('Error stopping native background location updates:', e);
+      console.warn('[gpsTracker] Error stopping native background location updates:', e);
     }
 
     await this.saveActiveSessionState(false, null, null);
-    console.log('Stopped GPS tracking');
+    console.log('[gpsTracker] Stopped GPS tracking on Punch Out / Duty End');
   }
 
-  // Check and resume tracking on app boot / reboot if an active attendance session exists
+  // Check and resume tracking on app boot / reboot ONLY IF punched in
   public async checkAndResumeTracking() {
     try {
       let raw: string | null = null;
@@ -224,19 +230,19 @@ class MobileGPSTracker {
             const record = attRes.data?.record;
             const isPunchedIn = !!(record && record.check_in && !record.check_out);
             if (!isPunchedIn) {
-              console.log(`Officer #${state.employeeId} is not punched in for duty; skipping tracking resume.`);
+              console.log(`[gpsTracker] Officer #${state.employeeId} is not punched in for duty; skipping tracking resume.`);
               await this.stopTracking();
               return;
             }
           } catch (attErr) {
-            console.warn('Warning checking attendance status before resuming GPS tracking:', attErr);
+            console.warn('[gpsTracker] Warning checking attendance status before resuming GPS tracking:', attErr);
           }
-          console.log(`Resuming GPS tracking for Officer #${state.employeeId} following app restart / reboot`);
+          console.log(`[gpsTracker] Resuming GPS tracking for Officer #${state.employeeId} following app restart / reboot`);
           await this.startTracking(state.employeeId, state.shiftId);
         }
       }
     } catch (e) {
-      console.error('Error checking active tracking session:', e);
+      console.error('[gpsTracker] Error checking active tracking session:', e);
     }
   }
 
@@ -267,7 +273,7 @@ class MobileGPSTracker {
 
     if (!this.employeeId || !locations || locations.length === 0) return;
 
-    const pointsToSync: GPSPoint[] = [];
+    const pointsToBuffer: GPSPoint[] = [];
     const batteryLevel = await this.getBatteryLevel();
 
     for (const location of locations) {
@@ -275,8 +281,12 @@ class MobileGPSTracker {
       const { latitude, longitude, accuracy, speed } = location.coords;
       const mocked = (location.coords as ExtendedLocationCoords).mocked;
 
-      // Filter out inaccurate points (> 150m cutoff)
-      if (accuracy && accuracy > 150) continue;
+      // 2. Hard Accuracy Cutoff (Drop Cell Tower Guesses)
+      // Discard any reading with accuracy > 35.0m
+      if (accuracy !== null && accuracy !== undefined && accuracy > ACCURACY_CUTOFF_METERS) {
+        console.log(`[gpsTracker] Discarding cell tower guess reading: accuracy ${accuracy.toFixed(1)}m > ${ACCURACY_CUTOFF_METERS}m cutoff`);
+        continue;
+      }
 
       const recAt = this.formatLocalISO(location.timestamp || Date.now());
       const pointId = `${this.employeeId}_${location.timestamp || Date.now()}_${latitude.toFixed(5)}_${longitude.toFixed(5)}`;
@@ -296,14 +306,14 @@ class MobileGPSTracker {
       };
 
       if (this.shouldSendPoint(pt)) {
-        pointsToSync.push(pt);
+        pointsToBuffer.push(pt);
         this.lastSentPoint = pt;
         this.lastSentTime = Date.now();
       }
     }
 
-    if (pointsToSync.length > 0) {
-      await this.syncGPSPoints(pointsToSync);
+    if (pointsToBuffer.length > 0) {
+      await this.bufferAndSyncPoints(pointsToBuffer);
     }
   }
 
@@ -318,14 +328,14 @@ class MobileGPSTracker {
     }
     if (!this.employeeId) return;
 
-    if (eventType === 'DUTY_LOCATION_OFF_VIOLATION' && Date.now() - this.lastViolationReportTime < 45000) return; // Limit to once per 45s
+    if (eventType === 'DUTY_LOCATION_OFF_VIOLATION' && Date.now() - this.lastViolationReportTime < 45000) return;
     if (eventType === 'DUTY_LOCATION_OFF_VIOLATION') {
       this.lastViolationReportTime = Date.now();
     }
 
     try {
       const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
-      console.log(`[gpsService] Reporting duty location violation (${eventType}) for officer #${this.employeeId}...`);
+      console.log(`[gpsTracker] Reporting duty location violation (${eventType}) for officer #${this.employeeId}...`);
       await api.post('/attendance/location-violation', {
         employee_id: this.employeeId,
         event_type: eventType,
@@ -334,9 +344,9 @@ class MobileGPSTracker {
         location_off_at: eventType === 'DUTY_LOCATION_OFF_VIOLATION' ? nowIso : undefined,
         location_restored_at: eventType === 'DUTY_LOCATION_RESTORED' ? nowIso : undefined,
       });
-      console.log('[gpsService] Duty location violation reported to backend successfully');
+      console.log('[gpsTracker] Duty location violation reported to backend successfully');
     } catch (err) {
-      console.warn('[gpsService] Error reporting location violation:', err);
+      console.warn('[gpsTracker] Error reporting location violation:', err);
     }
   }
 
@@ -358,7 +368,7 @@ class MobileGPSTracker {
       // 1. Check if location services (GPS) are enabled on device
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
-        console.warn('[gpsService] GPS location services disabled during active shift!');
+        console.warn('[gpsTracker] GPS location services disabled during active shift!');
         await this.reportLocationViolation('Field officer turned off Location (GPS) during active duty shift');
         return;
       }
@@ -369,11 +379,10 @@ class MobileGPSTracker {
           accuracy: Location.Accuracy.BestForNavigation,
         });
       } catch (err) {
-        console.warn('getCurrentPositionAsync BestForNavigation fix warning:', err);
-        // Verify again if location services were turned off during fix attempt
+        console.warn('[gpsTracker] getCurrentPositionAsync BestForNavigation fix warning:', err);
         const checkServices = await Location.hasServicesEnabledAsync();
         if (!checkServices) {
-          console.warn('[gpsService] GPS turned off during position fix attempt');
+          console.warn('[gpsTracker] GPS turned off during position fix attempt');
           await this.reportLocationViolation('Field officer turned off Location (GPS) during active duty shift');
           return;
         }
@@ -385,19 +394,17 @@ class MobileGPSTracker {
       const { latitude, longitude, accuracy, speed } = location.coords;
       const mocked = (location.coords as ExtendedLocationCoords).mocked;
 
-      // Filter out inaccurate points (> 150m cutoff)
-      if (accuracy && accuracy > 150) {
+      // 2. Hard Accuracy Cutoff (Drop Cell Tower Guesses)
+      // Discard any reading with accuracy > 35.0m
+      if (accuracy !== null && accuracy !== undefined && accuracy > ACCURACY_CUTOFF_METERS) {
+        console.log(`[gpsTracker] Discarding inaccurate location reading (${accuracy.toFixed(1)}m > ${ACCURACY_CUTOFF_METERS}m cutoff)`);
         return;
       }
-
-      // Compute adaptive sampling interval based on speed, accuracy, and spatial movement
-      this.adaptInterval(speed, accuracy, latitude, longitude);
 
       const recAt = this.formatLocalISO(location.timestamp || Date.now());
       const batteryLevel = await this.getBatteryLevel();
       const pointId = `${this.employeeId}_${location.timestamp || Date.now()}_${latitude.toFixed(5)}_${longitude.toFixed(5)}`;
 
-      // Sanitize speed: convert negative raw Android speed (e.g. -1.0) to 0.0
       const sanitizedSpeed = (speed !== null && speed !== undefined && speed > 0) ? speed : 0.0;
 
       const pt: GPSPoint = {
@@ -416,30 +423,10 @@ class MobileGPSTracker {
       if (this.shouldSendPoint(pt)) {
         this.lastSentPoint = pt;
         this.lastSentTime = Date.now();
-        await this.syncGPSPoints([pt]);
+        await this.bufferAndSyncPoints([pt]);
       }
     } catch (err) {
-      console.warn('GPS location fix error (non-blocking):', err);
-    }
-  }
-
-  private adaptInterval(speed: number | null, accuracy: number | null, lat: number, lon: number) {
-    const spd = speed ?? 0;
-    
-    let distanceMoved = 0;
-    if (this.lastLocation && this.lastLocation.coords) {
-      distanceMoved = this.calculateDistance(
-        this.lastLocation.coords.latitude,
-        this.lastLocation.coords.longitude,
-        lat,
-        lon
-      );
-    }
-
-    if (spd > 0.5 || distanceMoved > 5.0) {
-      this.currentIntervalMs = this.hasActiveVisit ? 30000 : 90000;
-    } else {
-      this.currentIntervalMs = 180000; // 3 minutes when stationary
+      console.warn('[gpsTracker] GPS location fix error (non-blocking):', err);
     }
   }
 
@@ -455,55 +442,84 @@ class MobileGPSTracker {
     return R * c;
   }
 
-  // Sync points with backend, with offline fallback queue and duplicate prevention
-  public async syncGPSPoints(newPoints: GPSPoint[]) {
-    if (!this.employeeId) return;
+  // 3. Batch Uploading Logic
+  // Append 15-second GPS points to local queue, and upload a batch of 4 points every 60 seconds
+  private async bufferAndSyncPoints(newPoints: GPSPoint[]) {
+    const currentQueue = await this.getOfflineQueue();
 
-    if (this.isSyncing) {
-      // Queue these new points for the next sync cycle
-      await this.saveOfflineQueue([...await this.getOfflineQueue(), ...newPoints]);
-      return;
+    // Deduplicate points by point_id or lat_lng_timestamp
+    const uniqueMap = new Map<string, GPSPoint>();
+    [...currentQueue, ...newPoints].forEach(pt => {
+      const key = pt.point_id || `${pt.latitude}_${pt.longitude}_${pt.recorded_at}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, pt);
+      }
+    });
+
+    const updatedQueue = Array.from(uniqueMap.values());
+    await this.saveOfflineQueue(updatedQueue);
+
+    const timeSinceLastFlush = Date.now() - this.lastBatchFlushTime;
+
+    // Flush batch if buffer size >= 4 points OR 60 seconds elapsed
+    if (updatedQueue.length >= BATCH_SIZE_THRESHOLD || timeSinceLastFlush >= BATCH_TIME_THRESHOLD_MS) {
+      await this.flushBatchQueue();
     }
+  }
 
+  private startBatchFlushTimer() {
+    if (this.batchFlushTimerId) clearInterval(this.batchFlushTimerId);
+    this.batchFlushTimerId = setInterval(async () => {
+      if (!this.isTracking) return;
+      const queue = await this.getOfflineQueue();
+      if (queue.length > 0) {
+        console.log(`[gpsTracker] 60s batch timer triggered. Flushing ${queue.length} points to backend...`);
+        await this.flushBatchQueue();
+      }
+    }, BATCH_TIME_THRESHOLD_MS);
+  }
+
+  public async flushBatchQueue() {
+    if (!this.employeeId || this.isSyncing) return;
+
+    const MAX_OFFLINE_CHUNK_SIZE = 40;
     this.isSyncing = true;
     try {
-      // Load existing offline queue
-      const queuedPoints = await this.getOfflineQueue();
-
-      // Deduplicate by point_id or (latitude, longitude, recorded_at)
-      const combined = [...queuedPoints, ...newPoints];
-      const uniquePointsMap = new Map<string, GPSPoint>();
-
-      combined.forEach((pt) => {
-        const key = pt.point_id || `${pt.latitude}_${pt.longitude}_${pt.recorded_at}`;
-        if (!uniquePointsMap.has(key)) {
-          uniquePointsMap.set(key, pt);
-        }
-      });
-
-      const allPoints = Array.from(uniquePointsMap.values());
-      if (allPoints.length === 0) {
+      let queue = await this.getOfflineQueue();
+      if (queue.length === 0) {
         this.isSyncing = false;
         return;
       }
 
-      const response = await api.post('/gps/ingest', {
-        employee_id: this.employeeId,
-        shift_id: this.shiftId,
-        points: allPoints,
-      });
+      // Chunk offline queue into max 40 points per HTTP POST to prevent payload timeouts
+      while (queue.length > 0 && this.isTracking) {
+        const chunk = queue.slice(0, MAX_OFFLINE_CHUNK_SIZE);
+        console.log(`[gpsTracker] Batch Uploading ${chunk.length} GPS points (total queue: ${queue.length})...`);
 
-      if (response.data && response.data.success) {
-        await this.clearOfflineQueue();
-        if (response.data.punched_in === false) {
-          console.log('Officer is not currently punched in for duty; stopping mobile location tracking.');
-          await this.stopTracking();
+        const response = await api.post('/gps/ingest', {
+          employee_id: this.employeeId,
+          shift_id: this.shiftId,
+          points: chunk,
+        });
+
+        if (response.data && response.data.success) {
+          console.log(`[gpsTracker] Batch upload chunk successful (${chunk.length} points).`);
+          queue = queue.slice(chunk.length);
+          await this.saveOfflineQueue(queue);
+          this.lastBatchFlushTime = Date.now();
+
+          if (response.data.punched_in === false) {
+            console.log('[gpsTracker] Officer is not currently punched in for duty; stopping mobile location tracking.');
+            await this.stopTracking();
+            break;
+          }
+        } else {
+          console.warn('[gpsTracker] Batch upload response error, retaining queue.');
+          break;
         }
-      } else {
-        await this.saveOfflineQueue(allPoints);
       }
     } catch (err) {
-      await this.saveOfflineQueue([...await this.getOfflineQueue(), ...newPoints]);
+      console.warn('[gpsTracker] Batch upload network/server error, retaining points in offline queue:', err);
     } finally {
       this.isSyncing = false;
     }
@@ -518,7 +534,7 @@ class MobileGPSTracker {
         await SecureStore.setItemAsync(ACTIVE_TRACKING_KEY, payload);
       }
     } catch (e) {
-      console.error('Error saving active session state:', e);
+      console.error('[gpsTracker] Error saving active session state:', e);
     }
   }
 
@@ -557,7 +573,7 @@ class MobileGPSTracker {
         }
       }
     } catch (e) {
-      console.error('Error saving offline GPS queue:', e);
+      console.error('[gpsTracker] Error saving offline GPS queue:', e);
     }
   }
 
@@ -574,7 +590,7 @@ class MobileGPSTracker {
         await SecureStore.deleteItemAsync(OFFLINE_GPS_KEY);
       }
     } catch (e) {
-      console.error('Error clearing offline GPS queue:', e);
+      console.error('[gpsTracker] Error clearing offline GPS queue:', e);
     }
   }
 }
@@ -584,7 +600,7 @@ export const gpsTracker = new MobileGPSTracker();
 // Define TaskManager task for Native Background Location Execution
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: { data: any; error: any }) => {
   if (error) {
-    console.warn('FO background location task error:', error);
+    console.warn('[gpsTracker] FO background location task error:', error);
     return;
   }
   if (data) {
