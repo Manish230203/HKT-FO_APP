@@ -10,13 +10,22 @@ import { THEME } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 
-import { getConsentSetting } from '../../services/db';
+import { getConsentSetting, getPermissionsSetupSetting } from '../../services/db';
 
 export default function LanguageSelectionScreen() {
   const { language, setLanguage, t } = useLanguage();
   const { user } = useAuth();
   const [selectedLang, setSelectedLang] = useState<LanguageCode>(language);
   const router = useRouter();
+
+  React.useEffect(() => {
+    (async () => {
+      const setupCompleted = await getPermissionsSetupSetting();
+      if (!setupCompleted) {
+        router.replace('/permissions-setup');
+      }
+    })();
+  }, []);
 
   const handleSelectLang = async (langCode: LanguageCode) => {
     setSelectedLang(langCode);

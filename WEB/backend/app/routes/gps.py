@@ -255,34 +255,6 @@ async def report_location_violation(
             emp_id = 10208  # Default to active testing officer if unknown
 
         ts = format_to_local_ist(payload.location_off_at or payload.timestamp)
-        punch_in_id = int(payload.punch_in_id) if payload.punch_in_id and str(payload.punch_in_id).isdigit() else 0
-        path = request.url.path
-
-        with get_db_cursor(commit=True) as (conn, cursor):
-            if "location-restored" in path or payload.event_type == "DUTY_LOCATION_RESTORED" or payload.location_restored_at:
-                restored_ts = format_to_local_ist(payload.location_restored_at or payload.timestamp)
-                cursor.execute("""
-                    UPDATE FIELD_OFFICER_DUTY_LOCATION_VIOLATION
-                    SET location_restored_at = %s,
-                        duration = GREATEST(1, TIMESTAMPDIFF(MINUTE, location_off_at, %s))
-                    WHERE employee_oid = %s AND location_restored_at IS NULL
-                    ORDER BY oid DESC LIMIT 1
-                """, (restored_ts, restored_ts, emp_id))
-            elif "punch-out-close" in path or payload.event_type == "DUTY_LOCATION_PUNCH_OUT_CLOSE" or payload.punch_out_time:
-                po_ts = format_to_local_ist(payload.punch_out_time or payload.timestamp)
-                po_id = int(payload.punch_out_id) if payload.punch_out_id and str(payload.punch_out_id).isdigit() else punch_in_id
-                cursor.execute("""
-                    UPDATE FIELD_OFFICER_DUTY_LOCATION_VIOLATION
-                    SET punch_out_id = %s,
-                        duration = CASE WHEN location_restored_at IS NULL THEN GREATEST(1, TIMESTAMPDIFF(MINUTE, location_off_at, %s)) ELSE duration END
-                    WHERE employee_oid = %s AND location_restored_at IS NULL
-                    ORDER BY oid DESC LIMIT 1
-                """, (po_id, po_ts, emp_id))
-            else:
-                cursor.execute("""
-                    INSERT INTO FIELD_OFFICER_DUTY_LOCATION_VIOLATION (employee_oid, event_type, created_at, details, location_off_at, punch_in_id)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (emp_id, payload.event_type or "DUTY_LOCATION_OFF_VIOLATION", ts, payload.details or "Field officer turned off Location (GPS) during active duty shift", ts, punch_in_id))
 
         # Real-time WebSocket Alert broadcast directly to Area Manager Live Dashboard
         broadcast_payload = {
@@ -295,7 +267,7 @@ async def report_location_violation(
         }
         await GPSManager.broadcast_location(broadcast_payload)
 
-        return {"success": True, "message": "Location violation saved to DB & broadcast to Area Manager dashboard"}
+        return {"success": True, "message": "Location violation processed"}
     except Exception as e:
         print(f"Error handling location violation: {e}")
         return {"success": True, "message": "Violation received"}
@@ -310,32 +282,8 @@ def get_location_violations(
     empOid: Optional[int] = Query(None),
     db: Session = Depends(get_patrol_db)
 ):
-    try:
-        target_emp = employee_oid or empOid or employee_id
-        with get_db_cursor(dictionary=True) as (conn, cursor):
-            query = """
-                SELECT v.*, v.oid, v.employee_oid as employee_id, e.name as officer_name, e.name as employee_name
-                FROM FIELD_OFFICER_DUTY_LOCATION_VIOLATION v
-                LEFT JOIN EMPLOYEE e ON v.employee_oid = e.oid
-            """
-            params = []
-            conditions = []
-            if date:
-                conditions.append("DATE(v.created_at) = %s")
-                params.append(date)
-            if target_emp:
-                conditions.append("v.employee_oid = %s")
-                params.append(target_emp)
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
-            query += " ORDER BY v.oid DESC LIMIT 100"
-
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-            return {"success": True, "violations": rows or []}
-    except Exception as e:
-        print(f"Error fetching location violations: {e}")
-        return {"success": False, "violations": []}
+    # Table FIELD_OFFICER_DUTY_LOCATION_VIOLATION removed
+    return {"success": True, "violations": []}
 
 
 

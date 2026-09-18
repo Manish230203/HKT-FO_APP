@@ -11,8 +11,8 @@ const OFFLINE_GPS_KEY = 'fo_offline_gps_queue';
 const ACTIVE_TRACKING_KEY = 'fo_active_tracking_session';
 export const LOCATION_TASK_NAME = 'FO_BACKGROUND_LOCATION_TASK';
 
-// Hard Accuracy Cutoff: Discard readings with accuracy > 35.0m (Cell tower/Wi-Fi guesses)
-const ACCURACY_CUTOFF_METERS = 35.0;
+// Hard Accuracy Cutoff: Discard readings with accuracy > 40.0m (Cell tower/Wi-Fi guesses & inaccurate indoor spikes)
+const ACCURACY_CUTOFF_METERS = 40.0;
 
 // Batch Upload Settings: 4 points every 60 seconds (15s x 4 = 60s)
 const BATCH_SIZE_THRESHOLD = 4;
@@ -46,6 +46,57 @@ class MobileGPSTracker {
   private lastBatchFlushTime: number = 0;
   private hasActiveVisit: boolean = false;
   private isSyncing: boolean = false;
+
+  // Immediate One-Shot High-Accuracy Fix for Punch In, Punch Out, Site Check-In, Site Check-Out
+  public async triggerOneShotFix(eventTag: string = 'IMMEDIATE_FIX') {
+    if (!this.employeeId) {
+      const session = await getUserSession();
+      if (session && session.user && session.user.oid) {
+        this.employeeId = Number(session.user.oid);
+      }
+    }
+    if (!this.employeeId) return;
+
+    try {
+      console.log(`[gpsTracker] Capturing immediate one-shot high-accuracy GPS fix (${eventTag}) for officer #${this.employeeId}...`);
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+
+      if (!location || !location.coords) return;
+      const { latitude, longitude, accuracy, speed } = location.coords;
+      const mocked = (location.coords as ExtendedLocationCoords).mocked;
+
+      if (accuracy !== null && accuracy !== undefined && accuracy > ACCURACY_CUTOFF_METERS) {
+        console.log(`[gpsTracker] One-shot fix (${eventTag}) discarded due to low accuracy (${accuracy.toFixed(1)}m > ${ACCURACY_CUTOFF_METERS}m)`);
+        return;
+      }
+
+      const recAt = this.formatLocalISO(location.timestamp || Date.now());
+      const batteryLevel = await this.getBatteryLevel();
+      const pointId = `${this.employeeId}_${location.timestamp || Date.now()}_${latitude.toFixed(5)}_${longitude.toFixed(5)}_${eventTag}`;
+      const sanitizedSpeed = (speed !== null && speed !== undefined && speed > 0) ? speed : 0.0;
+
+      const pt: GPSPoint = {
+        point_id: pointId,
+        latitude,
+        longitude,
+        accuracy: accuracy ?? null,
+        speed: sanitizedSpeed,
+        battery_level: batteryLevel,
+        is_mock: !!mocked,
+        recorded_at: recAt,
+      };
+
+      this.lastSentPoint = pt;
+      this.lastSentTime = Date.now();
+      await this.bufferAndSyncPoints([pt]);
+      await this.flushBatchQueue();
+      console.log(`[gpsTracker] Immediate one-shot GPS fix (${eventTag}) sent to server successfully.`);
+    } catch (err) {
+      console.warn(`[gpsTracker] One-shot GPS fix warning (${eventTag}):`, err);
+    }
+  }
 
   // Initialize and start native adaptive location tracking
   public async startTracking(empId?: number, shiftId?: number) {
@@ -107,19 +158,22 @@ class MobileGPSTracker {
       console.warn('[gpsTracker] Error requesting location permissions:', e);
     }
 
-    // 2. Register Native Expo Background Location Task with BestForNavigation high accuracy & 25m displacement rule
+    // 2. Trigger immediate one-shot high-accuracy fix for Punch In event
+    this.triggerOneShotFix('PUNCH_IN').catch(err => console.warn('[gpsTracker] Punch In one-shot fix error:', err));
+
+    // 3. Register Native Expo Background Location Task with BestForNavigation high accuracy & 25m displacement rule
     try {
       await this.updateTrackingConfiguration(this.hasActiveVisit);
     } catch (bgTaskErr) {
       console.warn('[gpsTracker] Native background location registration error (falling back to JS timer):', bgTaskErr);
     }
 
-    // 3. Fallback / Foreground timer cycle
+    // 4. Fallback / Foreground timer cycle
     if (!this.timerId) {
       this.scheduleNextFix();
     }
 
-    // 4. Start batch flush timer (every 60 seconds)
+    // 5. Start batch flush timer (every 60 seconds)
     this.startBatchFlushTimer();
   }
 
@@ -170,9 +224,9 @@ class MobileGPSTracker {
 
     const timeDiffMs = Date.now() - this.lastSentTime;
 
-    // Heartbeat check: If stationary for >= 3 minutes (180,000ms), send 1 heartbeat ping
-    if (timeDiffMs >= 180000) {
-      console.log('[gpsTracker] Heartbeat trigger: Stationary for >= 3 minutes, recording location.');
+    // Heartbeat check: When stationary / dwelling, send lightweight heartbeat ping every 75 seconds (60-90s threshold)
+    if (timeDiffMs >= 75000) {
+      console.log('[gpsTracker] Stationary Heartbeat trigger (75s): Officer active & online, recording heartbeat ping.');
       return true;
     }
 
@@ -186,6 +240,13 @@ class MobileGPSTracker {
   }
 
   public async stopTracking() {
+    // Trigger immediate one-shot high-accuracy fix for Punch Out event before stopping hardware
+    try {
+      await this.triggerOneShotFix('PUNCH_OUT');
+    } catch (e) {
+      console.warn('[gpsTracker] Punch Out one-shot fix error:', e);
+    }
+
     this.isTracking = false;
     if (this.timerId) {
       clearTimeout(this.timerId);

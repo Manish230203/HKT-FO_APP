@@ -122,6 +122,24 @@ export const getConsentSetting = async (): Promise<boolean> => {
   }
 };
 
+export const savePermissionsSetupSetting = async (completed: boolean) => {
+  try {
+    await setStorageItem('user_permissions_setup_completed', completed ? 'true' : 'false');
+  } catch (e) {
+    console.error("Save permissions setup setting failed", e);
+  }
+};
+
+export const getPermissionsSetupSetting = async (): Promise<boolean> => {
+  try {
+    const res = await getStorageItem('user_permissions_setup_completed');
+    return res === 'true';
+  } catch (e) {
+    console.error("Get permissions setup setting failed", e);
+    return false;
+  }
+};
+
 export const saveProfileImage = async (imageUri: string, empId?: string) => {
   try {
     const key = empId ? `user_profile_image_${empId}` : 'user_profile_image';

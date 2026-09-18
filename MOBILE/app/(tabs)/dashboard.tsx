@@ -39,7 +39,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import { getPlannedVisits, createPlannedVisit, getSites, getClients, Site, Client, PlannedVisit } from '../../services/siteService';
 import { getPunchRecords } from '../../services/db';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits } from '../../services/visitService';
-import { getConsentSetting } from '../../services/db';
+import { getConsentSetting, getPermissionsSetupSetting, getLanguageSetting } from '../../services/db';
 
 export default function DashboardScreen() {
   const { user, profileImage } = useAuth();
@@ -53,9 +53,20 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     (async () => {
+      const setupCompleted = await getPermissionsSetupSetting();
+      if (!setupCompleted) {
+        router.replace('/permissions-setup');
+        return;
+      }
+      const savedLang = await getLanguageSetting();
+      if (!savedLang) {
+        router.replace('/lang/lang-selection');
+        return;
+      }
       const consentAccepted = await getConsentSetting();
       if (!consentAccepted) {
         router.replace('/consent');
+        return;
       }
     })();
   }, []);

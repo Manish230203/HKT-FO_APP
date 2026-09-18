@@ -30,6 +30,7 @@ export default function RootLayout() {
               }}
             >
               <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="permissions-setup" options={{ headerShown: false, gestureEnabled: false }} />
               <Stack.Screen
                 name="lang/lang-selection"
                 options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}

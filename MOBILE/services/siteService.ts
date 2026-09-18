@@ -117,6 +117,7 @@ export const checkInSiteVisit = async (payload: {
   if (response.data && response.data.success) {
     try {
       await gpsTracker.updateTrackingConfiguration(true);
+      await gpsTracker.triggerOneShotFix('SITE_CHECK_IN');
     } catch (e) {
       console.warn('Failed to update gps config on check-in:', e);
     }
@@ -133,6 +134,7 @@ export const checkOutSiteVisit = async (payload: {
   const response = await api.post('/site-visit/check-out', payload);
   if (response.data && response.data.success) {
     try {
+      await gpsTracker.triggerOneShotFix('SITE_CHECK_OUT');
       await gpsTracker.updateTrackingConfiguration(false);
     } catch (e) {
       console.warn('Failed to update gps config on check-out:', e);

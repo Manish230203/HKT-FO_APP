@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { getLanguageSetting, getConsentSetting } from '../services/db';
+import { getLanguageSetting, getConsentSetting, getPermissionsSetupSetting } from '../services/db';
 import { THEME } from '../constants/theme';
 
 export default function IndexScreen() {
@@ -17,10 +17,13 @@ export default function IndexScreen() {
     if (isLoading) return;
 
     try {
+      const setupCompleted = await getPermissionsSetupSetting();
       const savedLang = await getLanguageSetting();
       const consentAccepted = await getConsentSetting();
 
-      if (!savedLang) {
+      if (!setupCompleted) {
+        router.replace('/permissions-setup');
+      } else if (!savedLang) {
         router.replace('/lang/lang-selection');
       } else if (!consentAccepted) {
         router.replace('/consent');
@@ -31,7 +34,7 @@ export default function IndexScreen() {
       }
     } catch (e) {
       console.error('Error during initial navigation check', e);
-      router.replace('/lang/lang-selection');
+      router.replace('/permissions-setup');
     }
   };
 

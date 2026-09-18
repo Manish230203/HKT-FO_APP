@@ -28,6 +28,7 @@ Notifications.setNotificationHandler({
 });
 
 import { violationService } from '../services/violationService';
+import { getPermissionsSetupSetting } from '../services/db';
 
 export default function LocationGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -108,6 +109,15 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
   const checkLocationStatus = async () => {
     try {
       setChecking(true);
+
+      // Bypass location guard during onboarding if permissions setup is not yet completed
+      const setupCompleted = await getPermissionsSetupSetting();
+      if (!setupCompleted) {
+        setIsLocationDisabled(false);
+        setErrorMessage('');
+        setChecking(false);
+        return;
+      }
 
       const empOid = user?.id || (user as any)?.oid || user?.employee_id || (todayRecord as any)?.employee_id || 10208;
       const punchInId = (todayRecord as any)?.id || (todayRecord as any)?.oid || (todayRecord as any)?.punch_in_id || null;

@@ -1,5 +1,20 @@
 import { Platform, Linking } from 'react-native';
 import * as Application from 'expo-application';
+import * as Battery from 'expo-battery';
+
+/**
+ * Check if Android Battery Optimization is bypassed (disabled for this app)
+ */
+export const isBatteryOptimizationBypassed = async (): Promise<boolean> => {
+  if (Platform.OS !== 'android') return true;
+  try {
+    const isOptimizationEnabled = await Battery.isBatteryOptimizationEnabledAsync();
+    return !isOptimizationEnabled;
+  } catch (err) {
+    console.warn('Error checking battery optimization status:', err);
+    return false;
+  }
+};
 
 /**
  * Trigger Android System Battery Optimization Bypass Dialog

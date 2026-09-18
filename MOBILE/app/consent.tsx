@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Location from 'expo-location';
-import { ShieldCheck, Lock, Cookie, CheckCircle2, ArrowRight, MapPin, Zap, Smartphone, AlertTriangle, Settings as SettingsIcon } from 'lucide-react-native';
+import { ShieldCheck, Lock, Cookie, CheckCircle2, ArrowRight } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { saveConsentSetting } from '../services/db';
-import { requestIgnoreBatteryOptimizations, openAutoStartSettings } from '../services/batteryOptimizer';
+import { saveConsentSetting, getPermissionsSetupSetting, getLanguageSetting } from '../services/db';
 import { Button } from '../components/ui/Button';
 
 export default function ConsentScreen() {
@@ -15,47 +13,21 @@ export default function ConsentScreen() {
   const { t } = useLanguage();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const [locationGranted, setLocationGranted] = useState(false);
 
   useEffect(() => {
-    checkLocationPermissions();
-  }, []);
-
-  const checkLocationPermissions = async () => {
-    try {
-      const bg = await Location.getBackgroundPermissionsAsync();
-      setLocationGranted(bg.status === 'granted');
-    } catch (e) {
-      console.warn('Error checking background location permission:', e);
-    }
-  };
-
-  const handleConfigureLocation = async () => {
-    try {
-      const fg = await Location.requestForegroundPermissionsAsync();
-      if (fg.status === 'granted') {
-        const bg = await Location.requestBackgroundPermissionsAsync();
-        if (bg.status === 'granted') {
-          setLocationGranted(true);
-          return;
-        }
+    (async () => {
+      const setupCompleted = await getPermissionsSetupSetting();
+      if (!setupCompleted) {
+        router.replace('/permissions-setup');
+        return;
       }
-      await Linking.openSettings();
-    } catch (err) {
-      console.warn('Location permission request error:', err);
-      try {
-        await Linking.openSettings();
-      } catch {}
-    }
-  };
-
-  const handleDisableBatteryRestrictions = async () => {
-    await requestIgnoreBatteryOptimizations();
-  };
-
-  const handleOpenAutoStart = async () => {
-    await openAutoStartSettings();
-  };
+      const savedLang = await getLanguageSetting();
+      if (!savedLang) {
+        router.replace('/lang/lang-selection');
+        return;
+      }
+    })();
+  }, []);
 
   const handleAcceptAndContinue = async () => {
     try {
@@ -88,68 +60,6 @@ export default function ConsentScreen() {
           </View>
           <Text style={styles.headerTitle}>{t('privacy_policy_title')}</Text>
           <Text style={styles.headerSubtitle}>{t('privacy_policy_subtitle')}</Text>
-        </View>
-
-        {/* 🌟 Required Permissions & Battery Setup Onboarding Card */}
-        <View style={styles.setupCard}>
-          <View style={styles.cardHeaderRow}>
-            <View style={styles.blueIconCircle}>
-              <SettingsIcon color="#60A5FA" size={20} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.setupTitle}>{t('perm_setup_title')}</Text>
-              <Text style={styles.setupSubtitle}>{t('perm_setup_subtitle')}</Text>
-            </View>
-          </View>
-
-          <View style={styles.stepsList}>
-            {/* Step 1: Background Location Permission */}
-            <View style={styles.stepBox}>
-              <View style={styles.stepTopRow}>
-                <View style={styles.stepHeaderLeft}>
-                  <MapPin color="#3B82F6" size={18} />
-                  <Text style={styles.stepTitle}>{t('perm_location_title')}</Text>
-                </View>
-                <View style={[styles.statusBadge, locationGranted ? styles.statusBadgeGranted : styles.statusBadgeAction]}>
-                  <Text style={[styles.statusBadgeText, locationGranted ? styles.statusBadgeTextGranted : styles.statusBadgeTextAction]}>
-                    {locationGranted ? t('perm_status_granted') : t('perm_status_action')}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.stepDesc}>{t('perm_location_desc')}</Text>
-              <TouchableOpacity style={styles.actionBtnPrimary} onPress={handleConfigureLocation}>
-                <Text style={styles.actionBtnTextPrimary}>{t('perm_location_btn')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Step 2: Battery Optimization */}
-            <View style={styles.stepBox}>
-              <View style={styles.stepTopRow}>
-                <View style={styles.stepHeaderLeft}>
-                  <Zap color="#F59E0B" size={18} />
-                  <Text style={styles.stepTitle}>{t('perm_battery_title')}</Text>
-                </View>
-              </View>
-              <Text style={styles.stepDesc}>{t('perm_battery_desc')}</Text>
-              <TouchableOpacity style={styles.actionBtnAmber} onPress={handleDisableBatteryRestrictions}>
-                <Text style={styles.actionBtnTextAmber}>{t('perm_battery_btn')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Step 3: OEM Auto-Start Settings */}
-            <View style={styles.stepBox}>
-              <View style={styles.stepTopRow}>
-                <View style={styles.stepHeaderLeft}>
-                  <Smartphone color="#10B981" size={18} />
-                  <Text style={styles.stepTitle}>{t('perm_autostart_title')}</Text>
-                </View>
-              </View>
-              <Text style={styles.stepDesc}>{t('perm_autostart_desc')}</Text>
-              <TouchableOpacity style={styles.actionBtnGreen} onPress={handleOpenAutoStart}>
-                <Text style={styles.actionBtnTextGreen}>{t('perm_autostart_btn')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
         </View>
 
         {/* 1. Consent Notice Banner */}
@@ -264,124 +174,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
-
-  // Setup Card Styles
-  setupCard: {
-    backgroundColor: '#111A33',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.35)',
-  },
-  setupTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#60A5FA',
-  },
-  setupSubtitle: {
-    fontSize: 12,
-    color: '#94A3B8',
-    marginTop: 2,
-    lineHeight: 18,
-  },
-  stepsList: {
-    gap: 14,
-    marginTop: 14,
-  },
-  stepBox: {
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  stepTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  stepHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  stepTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    flex: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  statusBadgeGranted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  statusBadgeAction: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  statusBadgeTextGranted: {
-    color: '#34D399',
-  },
-  statusBadgeTextAction: {
-    color: '#FBBF24',
-  },
-  stepDesc: {
-    fontSize: 12,
-    color: '#94A3B8',
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  actionBtnPrimary: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  actionBtnTextPrimary: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  actionBtnAmber: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.5)',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  actionBtnTextAmber: {
-    color: '#FBBF24',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  actionBtnGreen: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.5)',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  actionBtnTextGreen: {
-    color: '#34D399',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
   consentNoticeCard: {
     backgroundColor: 'rgba(59, 130, 246, 0.08)',
     borderRadius: 20,

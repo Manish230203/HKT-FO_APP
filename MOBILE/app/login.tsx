@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { ArrowRight, ArrowLeft, Smartphone } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { getConsentSetting } from '../services/db';
+import { getConsentSetting, getPermissionsSetupSetting, getLanguageSetting } from '../services/db';
 import { THEME } from '../constants/theme';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -23,9 +23,20 @@ export default function LoginScreen() {
 
   useEffect(() => {
     (async () => {
+      const setupCompleted = await getPermissionsSetupSetting();
+      if (!setupCompleted) {
+        router.replace('/permissions-setup');
+        return;
+      }
+      const savedLang = await getLanguageSetting();
+      if (!savedLang) {
+        router.replace('/lang/lang-selection');
+        return;
+      }
       const consentAccepted = await getConsentSetting();
       if (!consentAccepted) {
         router.replace('/consent');
+        return;
       }
     })();
   }, []);
