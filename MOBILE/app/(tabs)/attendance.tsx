@@ -749,11 +749,6 @@ export default function AttendanceScreen() {
                       <Text style={styles.timeValText}>{log.punchOutTime || '--:--'}</Text>
                     </View>
                   </View>
-
-                  <Text style={[styles.fieldSubLabel, { marginTop: 10 }]}>SITE</Text>
-                  <Text style={styles.siteValText}>
-                    {log.siteName || 'N/A'}
-                  </Text>
                 </View>
               ))
             )}

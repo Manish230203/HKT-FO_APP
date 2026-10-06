@@ -15,6 +15,7 @@ import {
   Animated,
   Easing,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -215,12 +216,13 @@ export default function DashboardScreen() {
   const [pickerSiteVisible, setPickerSiteVisible] = useState(false);
   const [modalClientSearch, setModalClientSearch] = useState('');
   const [modalSiteSearch, setModalSiteSearch] = useState('');
+  const [loadingModalData, setLoadingModalData] = useState(false);
 
   const filteredModalClients = [
     { id: 'OTHER', name: 'OTHER' },
-    ...clients,
+    ...(Array.isArray(clients) ? clients : []),
   ].filter((c) =>
-    c.name.toLowerCase().includes(modalClientSearch.toLowerCase())
+    c && c.name && typeof c.name === 'string' && c.name.toLowerCase().includes(modalClientSearch.toLowerCase())
   );
 
   const filteredModalSites = modalSites.filter((s) => {
@@ -260,15 +262,19 @@ export default function DashboardScreen() {
 
   const loadClientsForModal = async () => {
     try {
-      const [cList, sList] = await Promise.all([getClients(), getSites()]);
-      setClients(cList || []);
-      setModalSites(sList || []);
+      setLoadingModalData(true);
+      const empOidVal = user?.empOid || user?.id || user?.employee_id || (user as any)?.oid;
+      const [cList, sList] = await Promise.all([getClients(empOidVal), getSites(empOidVal)]);
+      setClients(Array.isArray(cList) ? cList : []);
+      setModalSites(Array.isArray(sList) ? sList : []);
       setNewClientId('');
       setNewSiteId('');
       setCustomClientName('');
       setCustomSiteName('');
     } catch (err) {
       console.error('Failed to load clients & sites', err);
+    } finally {
+      setLoadingModalData(false);
     }
   };
 
@@ -394,7 +400,7 @@ export default function DashboardScreen() {
   }, [todayRecord, attendanceLogs]);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (isCheckedIn && sessionStart) {
       timer = setInterval(() => {
         const diff = Math.floor((new Date().getTime() - sessionStart.getTime()) / 1000);
@@ -844,37 +850,41 @@ export default function DashboardScreen() {
                   onChangeText={setModalClientSearch}
                 />
 
-                <FlatList
-                  data={filteredModalClients}
-                  keyExtractor={(item) => String(item.id)}
-                  initialNumToRender={15}
-                  maxToRenderPerBatch={15}
-                  windowSize={5}
-                  removeClippedSubviews
-                  showsVerticalScrollIndicator={true}
-                  persistentScrollbar={true}
-                  keyboardShouldPersistTaps="handled"
-                  style={{ flex: 1 }}
-                  contentContainerStyle={{ paddingBottom: 16 }}
-                  ListEmptyComponent={
-                    <View style={{ padding: 20, alignItems: 'center' }}>
-                      <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>No clients found.</Text>
-                    </View>
-                  }
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.modalItemRow}
-                      onPress={() => {
-                        setNewClientId(String(item.id));
-                        setNewSiteId('');
-                        setPickerClientVisible(false);
-                      }}
-                    >
-                      <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
-                      <Text style={styles.modalItemRowText}>{item.name}</Text>
-                    </TouchableOpacity>
-                  )}
-                />
+                {loadingModalData ? (
+                  <View style={{ padding: 30, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color="#3B82F6" />
+                    <Text style={{ color: '#94A3B8', fontSize: 13, marginTop: 10 }}>Loading clients...</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={filteredModalClients}
+                    keyExtractor={(item) => String(item.id)}
+                    initialNumToRender={20}
+                    showsVerticalScrollIndicator={true}
+                    persistentScrollbar={true}
+                    keyboardShouldPersistTaps="handled"
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 16 }}
+                    ListEmptyComponent={
+                      <View style={{ padding: 20, alignItems: 'center' }}>
+                        <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>No clients found.</Text>
+                      </View>
+                    }
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.modalItemRow}
+                        onPress={() => {
+                          setNewClientId(String(item.id));
+                          setNewSiteId('');
+                          setPickerClientVisible(false);
+                        }}
+                      >
+                        <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
+                        <Text style={styles.modalItemRowText}>{item.name}</Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                )}
               </>
             ) : pickerSiteVisible ? (
               <>
@@ -1442,11 +1452,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#131C33',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
+    height: '75%',
+    maxHeight: '85%',
+    minHeight: 350,
     padding: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
-    flexShrink: 1,
   },
   modalHeader: {
     flexDirection: 'row',

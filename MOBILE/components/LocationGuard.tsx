@@ -10,8 +10,8 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
 import { MapPin, Settings, AlertTriangle, RefreshCw, BatteryCharging, Zap, ShieldCheck, ShieldAlert, CheckCircle2 } from 'lucide-react-native';
 import { requestIgnoreBatteryOptimizations, openAutoStartSettings } from '../services/batteryOptimizer';
 import { useAttendance } from '../context/AttendanceContext';
@@ -19,13 +19,24 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../services/api';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+const isExpoGo = Constants.appOwnership === 'expo' || (Constants as any).executionEnvironment === 'storeClient';
+
+let Notifications: typeof import('expo-notifications') | null = null;
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+    Notifications?.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (e) {
+    console.warn('Notifications handler init bypassed:', e);
+  }
+}
 
 import { violationService } from '../services/violationService';
 
@@ -46,6 +57,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
   // Request notification permissions on mount
   useEffect(() => {
     (async () => {
+      if (isExpoGo || !Notifications) return;
       try {
         const { status } = await Notifications.getPermissionsAsync();
         if (status !== 'granted') {
@@ -58,6 +70,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
   }, []);
 
   const fireDutyGpsOffAlert = async () => {
+    if (isExpoGo || !Notifications) return;
     // Limit to once every 12 seconds
     if (Date.now() - lastNotifTimeRef.current < 12000) return;
     lastNotifTimeRef.current = Date.now();

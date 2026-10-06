@@ -166,7 +166,7 @@ export default function MarkAttendanceScreen() {
 
   // Auto-Capture 3s Countdown Loop (Only runs if profile photo exists, no 10-min buffer error, and NO alert modal visible)
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (currentStep === 1 && !verificationSuccess && !isVerifying && !bufferError && !profileMissingError && profileImage && !alertInfo.visible) {
       if (countdown > 0) {
         timer = setInterval(() => {
@@ -197,7 +197,7 @@ export default function MarkAttendanceScreen() {
       let photoUri: string | null = null;
       if (cameraRef.current) {
         try {
-          const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
+          const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: true });
           if (photo && photo.uri) {
             photoUri = photo.uri;
           }
@@ -458,7 +458,7 @@ export default function MarkAttendanceScreen() {
 
             {/* LIVE CAMERA VIEWFINDER WITH ORANGE CORNER RETICLES */}
             <View style={styles.viewfinderContainer}>
-              <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="front" />
+              <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
 
               {/* Corner Orange Reticles [ ] */}
               <View style={[styles.reticleCorner, styles.topRightReticle]} />

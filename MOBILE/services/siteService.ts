@@ -65,15 +65,33 @@ export interface SiteGuard {
 }
 
 export const getClients = async (empOid?: number | string): Promise<Client[]> => {
-  const url = empOid ? `/assessments/clients?empOid=${empOid}` : '/assessments/clients';
-  const response = await api.get(url);
-  return response.data || [];
+  try {
+    const url = empOid ? `/assessments/clients?empOid=${empOid}` : '/assessments/clients';
+    const response = await api.get(url);
+    const resData = response.data;
+    if (Array.isArray(resData)) return resData;
+    if (resData && Array.isArray(resData.clients)) return resData.clients;
+    if (resData && Array.isArray(resData.data)) return resData.data;
+    return [];
+  } catch (err) {
+    console.error('Error in getClients:', err);
+    return [];
+  }
 };
 
 export const getSites = async (empOid?: number | string): Promise<Site[]> => {
-  const url = empOid ? `/assessments/sites?empOid=${empOid}` : '/assessments/sites';
-  const response = await api.get(url);
-  return response.data || [];
+  try {
+    const url = empOid ? `/assessments/sites?empOid=${empOid}` : '/assessments/sites';
+    const response = await api.get(url);
+    const resData = response.data;
+    if (Array.isArray(resData)) return resData;
+    if (resData && Array.isArray(resData.sites)) return resData.sites;
+    if (resData && Array.isArray(resData.data)) return resData.data;
+    return [];
+  } catch (err) {
+    console.error('Error in getSites:', err);
+    return [];
+  }
 };
 
 export const getSiteGuards = async (siteId?: number | string, shift?: string): Promise<SiteGuard[]> => {

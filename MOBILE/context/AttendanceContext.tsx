@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Config } from '../constants/Config';
+import api from '../services/api';
 import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns } from '../services/db';
 import { gpsTracker } from '../services/gpsService';
 import { violationService } from '../services/violationService';
@@ -285,49 +286,27 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
+      const cleanUri = Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('content://') 
+        ? `file://${uri}` 
+        : uri;
+
       formData.append('file', {
-        uri: uri,
+        uri: cleanUri,
         name: filename,
         type: type,
       } as any);
 
-      const url = `${Config.BASE_URL}/selfieValidation${Config.BASE_URL.includes('?') ? '&' : '?'}ngrok-skip-browser-warning=true`;
-      const response = await fetch(url, {
-        method: 'POST',
+      const response = await api.post('/selfieValidation', formData, {
         headers: {
-          'ngrok-skip-browser-warning': 'true',
-          'User-Agent': 'FO-Mobile-App',
+          'Content-Type': 'multipart/form-data',
         },
-        body: formData,
       });
 
-      const contentType = response.headers.get('content-type');
-      if (!response.ok) {
-        let errorMsg = `Server Error (${response.status})`;
-        if (contentType && contentType.includes('application/json')) {
-          const errData = await response.json();
-          errorMsg = errData.message || errorMsg;
-        } else {
-          const text = await response.text();
-          errorMsg = text.trim().startsWith('<') ? 'Network tunnel error. Please try face verification again.' : (text.slice(0, 100) || errorMsg);
-        }
-        return { success: false, message: errorMsg };
-      }
-
-      if (contentType && contentType.includes('application/json')) {
-        const result = await response.json();
-        return result;
-      } else {
-        const text = await response.text();
-        console.warn('validateSelfie non-JSON response:', text.slice(0, 100));
-        const cleanMsg = text.trim().startsWith('<') 
-          ? 'Network tunnel warning. Please retry face verification.' 
-          : (text.slice(0, 100) || 'Server returned invalid response format');
-        return { success: false, message: cleanMsg };
-      }
-    } catch (error) {
+      return response.data;
+    } catch (error: any) {
       console.error('Selfie validation error:', error);
-      return { success: false, message: error instanceof Error ? error.message : 'Validation Failed' };
+      const errMsg = error.response?.data?.message || error.message || 'Validation Failed';
+      return { success: false, message: errMsg };
     }
   };
 
@@ -345,65 +324,44 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
+      const cleanUri = Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('content://') 
+        ? `file://${uri}` 
+        : uri;
+
       formData.append('file', {
-        uri: uri,
+        uri: cleanUri,
         name: filename,
         type: type,
       } as any);
 
-      const url = `${Config.BASE_URL}/_AIP_unifiedPunch${Config.BASE_URL.includes('?') ? '&' : '?'}ngrok-skip-browser-warning=true`;
-      const response = await fetch(url, {
-        method: 'POST',
+      const response = await api.post('/_AIP_unifiedPunch', formData, {
         headers: {
-          'ngrok-skip-browser-warning': 'true',
-          'User-Agent': 'FO-Mobile-App',
+          'Content-Type': 'multipart/form-data',
         },
-        body: formData,
       });
 
-      const contentType = response.headers.get('content-type');
-      if (!response.ok) {
-        let errorMsg = `Server Error (${response.status})`;
-        if (contentType && contentType.includes('application/json')) {
-          const errData = await response.json();
-          errorMsg = errData.message || errorMsg;
+      const result = response.data;
+      if (result && result.success) {
+        await refreshStatus();
+
+        // Non-blocking GPS tracking start/stop based on punch action
+        if (result.action === 'PUNCH_OUT' || result.type === 'PUNCH_OUT' || result.status === 'PUNCH_OUT') {
+          gpsTracker?.stopTracking()?.catch(() => {});
+          const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || (todayRecord as any)?.oid || (todayRecord as any)?.id || null;
+          violationService.handlePunchOut(Number(empOid), pId, new Date().toISOString()).catch(() => {});
         } else {
-          const text = await response.text();
-          errorMsg = text.trim().startsWith('<') ? 'Network tunnel error. Please try again.' : (text.slice(0, 100) || errorMsg);
+          const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || null;
+          if (pId) violationService.setPunchInId(pId).catch(() => {});
+          gpsTracker?.startTracking(Number(empOid))?.catch((err) => {
+            console.warn('GPS start tracking warning:', err);
+          });
         }
-        return { success: false, message: errorMsg };
       }
-
-      if (contentType && contentType.includes('application/json')) {
-        const result = await response.json();
-        if (result.success) {
-          await refreshStatus();
-
-          // Non-blocking GPS tracking start/stop based on punch action
-          if (result.action === 'PUNCH_OUT' || result.type === 'PUNCH_OUT' || result.status === 'PUNCH_OUT') {
-            gpsTracker?.stopTracking()?.catch(() => {});
-            const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || (todayRecord as any)?.oid || (todayRecord as any)?.id || null;
-            violationService.handlePunchOut(Number(empOid), pId, new Date().toISOString()).catch(() => {});
-          } else {
-            const pId = (result as any)?.oid || (result as any)?.id || (result as any)?.punch_in_id || null;
-            if (pId) violationService.setPunchInId(pId).catch(() => {});
-            gpsTracker?.startTracking(Number(empOid))?.catch((err) => {
-              console.warn('GPS start tracking warning:', err);
-            });
-          }
-        }
-        return result;
-      } else {
-        const text = await response.text();
-        console.warn('unifiedPunch non-JSON response:', text.slice(0, 100));
-        const cleanMsg = text.trim().startsWith('<') 
-          ? 'Network tunnel warning. Please retry.' 
-          : (text.slice(0, 100) || 'Server returned invalid response format');
-        return { success: false, message: cleanMsg };
-      }
-    } catch (error) {
+      return result;
+    } catch (error: any) {
       console.error('Unified punch error:', error);
-      return { success: false, message: error instanceof Error ? error.message : 'Connection Error' };
+      const errMsg = error.response?.data?.message || error.message || 'Connection Error';
+      return { success: false, message: errMsg };
     }
   };
 

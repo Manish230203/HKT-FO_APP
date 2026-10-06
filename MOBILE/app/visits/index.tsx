@@ -11,6 +11,7 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -38,11 +39,15 @@ import {
 } from '../../services/siteService';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits, sendReportEmail } from '../../services/visitService';
 import { getActiveCheckIns, saveActiveCheckIns, clearActiveCheckIn, ActiveCheckInInfo } from '../../services/db';
+import { generateAndHandlePdf } from '../../services/pdfService';
 import { THEME } from '../../constants/theme';
 import * as Location from 'expo-location';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { Modal } from 'react-native';
-import { X, User, MapPin, Building, FileText, Mail, Clock as ClockIcon, ShieldAlert, LogOut as LogOutIcon, Navigation } from 'lucide-react-native';
+import { X, User, MapPin, Building, FileText, Mail, Download, Clock as ClockIcon, ShieldAlert, LogOut as LogOutIcon, Navigation } from 'lucide-react-native';
 
 type CompletedVisit = {
   id: string;
@@ -85,6 +90,7 @@ export default function VisitsScreen() {
   const [plannedVisits, setPlannedVisits] = useState<PlannedVisit[]>([]);
   const [completedVisits, setCompletedVisits] = useState<CompletedVisit[]>([]);
   const [selectedReport, setSelectedReport] = useState<CompletedVisit | null>(null);
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
 
   const getReportCompany = (rep: CompletedVisit | null) => {
     if (!rep) {
@@ -115,6 +121,174 @@ export default function VisitsScreen() {
     };
   };
 
+  const generateVisitReportHtml = (report: any) => {
+    const compInfo = getReportCompany(report);
+    const companyName = compInfo.name || 'UNIQUE DELTA FORCE SECURITY PVT. LTD.';
+    const reportTitle = report?.visitType === 'Day Visit'
+      ? 'OFFICER DAY VISIT REPORT'
+      : report?.visitType === 'Night Round'
+      ? 'OFFICER NIGHT VISIT REPORT'
+      : 'OFFICER GENERAL VISIT REPORT';
+
+    const raw = report?.rawReport || {};
+    const dateStr = report?.date || '—';
+    const startTimeStr = raw['check-in_time'] || raw.start_time || raw.startTime || '—';
+    const endTimeStr = raw['check-out_time'] || raw.end_time || raw.endTime || '—';
+    const clientName = report?.clientName || '—';
+    const siteName = report?.siteName || '—';
+    const shift = raw.shift || (report?.visitType === 'Night Round' ? 'Night Shift' : 'Day Shift');
+    const officerName = report?.officer || user?.name || '—';
+    const gpsLocation = raw.gps || 'Logged via FO Mobile App';
+
+    let checklistItems: any[] = [];
+    if (Array.isArray(raw.checklist)) {
+      checklistItems = raw.checklist;
+    } else if (Array.isArray(raw.questions)) {
+      checklistItems = raw.questions;
+    } else if (raw.checklist && typeof raw.checklist === 'object') {
+      checklistItems = Object.keys(raw.checklist).map((k) => ({ question: k, answer: raw.checklist[k] }));
+    }
+
+    let checklistHtml = '';
+    if (checklistItems.length > 0) {
+      const rows = checklistItems.map((item: any, idx: number) => {
+        const qText = item.question || item.title || item.name || String(item);
+        const ans = item.answer || item.status || item.value || 'Satisfactory';
+        const isUnsat = String(ans).toLowerCase().includes('unsatisfactory') || String(ans).toLowerCase().includes('fail');
+        const badgeStyle = isUnsat 
+          ? 'background: #FEE2E2; color: #B91C1C;' 
+          : 'background: #DCFCE7; color: #15803D;';
+        return `
+          <tr>
+            <td style="width: 30px; text-align: center; color: #64748B;">${idx + 1}</td>
+            <td style="font-weight: 500;">${qText}</td>
+            <td style="width: 130px; text-align: center;">
+              <span style="padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; ${badgeStyle}">
+                ${ans}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      checklistHtml = `
+        <div style="margin-bottom: 20px;">
+          <div style="background: #0F172A; color: #FFF; font-size: 12px; font-weight: bold; padding: 8px 12px; border-radius: 4px 4px 0 0; text-transform: uppercase;">
+            CHECKLIST & AUDIT PARAMETERS
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #CBD5E1;">
+            <thead>
+              <tr style="background: #F8FAFC;">
+                <th style="padding: 8px; border: 1px solid #E2E8F0; width: 30px;">#</th>
+                <th style="padding: 8px; border: 1px solid #E2E8F0; text-align: left;">Audit Parameter / Question</th>
+                <th style="padding: 8px; border: 1px solid #E2E8F0; text-align: center;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    const remarks = raw.remarks || raw.observations || raw.comments || 'Audit completed satisfactorily.';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${reportTitle}</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 24px; color: #1E293B; background: #FFFFFF; }
+          .banner { border: 2px solid #0F172A; padding: 18px; border-radius: 8px; margin-bottom: 20px; background: #F8FAFC; }
+          .company-name { font-size: 18px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.5px; }
+          .report-title { font-size: 16px; font-weight: 700; color: #2563EB; margin-top: 6px; text-transform: uppercase; }
+          .report-no { font-size: 12px; font-weight: 600; color: #64748B; margin-top: 4px; }
+          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+          .info-table td { padding: 8px 12px; border: 1px solid #CBD5E1; }
+          .label { font-weight: 700; color: #475569; width: 25%; background: #F1F5F9; }
+          .val { font-weight: 600; color: #0F172A; width: 25%; }
+          .section-header { background: #0F172A; color: #FFFFFF; font-size: 12px; font-weight: 700; padding: 8px 12px; border-radius: 4px 4px 0 0; text-transform: uppercase; }
+          .remarks-box { border: 1px solid #CBD5E1; padding: 12px; font-size: 12px; background: #F8FAFC; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
+          .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="banner">
+          <div class="company-name">${companyName}</div>
+          <div class="report-title">${reportTitle}</div>
+          <div class="report-no">REPORT ID: ${report?.reportNo || 'N/A'}</div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <div class="section-header">General Information</div>
+          <table class="info-table">
+            <tr>
+              <td class="label">Client Name</td>
+              <td class="val">${clientName}</td>
+              <td class="label">Site Name</td>
+              <td class="val">${siteName}</td>
+            </tr>
+            <tr>
+              <td class="label">Visit Date</td>
+              <td class="val">${dateStr}</td>
+              <td class="label">Shift</td>
+              <td class="val">${shift}</td>
+            </tr>
+            <tr>
+              <td class="label">Start Time</td>
+              <td class="val">${startTimeStr}</td>
+              <td class="label">End Time</td>
+              <td class="val">${endTimeStr}</td>
+            </tr>
+            <tr>
+              <td class="label">Officer Name</td>
+              <td class="val">${officerName}</td>
+              <td class="label">GPS Location</td>
+              <td class="val">${gpsLocation}</td>
+            </tr>
+          </table>
+        </div>
+
+        ${checklistHtml}
+
+        <div style="margin-bottom: 20px;">
+          <div class="section-header">Officer Observations & Remarks</div>
+          <div class="remarks-box">${remarks}</div>
+        </div>
+
+        <div class="footer">
+          Generated electronically via Vigilo FO Mobile App | © 2026 HUMANKIND TECHNOLOGY
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const handleDownloadPdf = async (report: any) => {
+    if (!report) return;
+    const reportId = report.id || report.reportNo || 'visit_report';
+    try {
+      setDownloadingPdfId(reportId);
+      const htmlContent = generateVisitReportHtml(report);
+      const fileName = `Report_${String(report.reportNo || 'visit')}`;
+
+      await generateAndHandlePdf({
+        html: htmlContent,
+        fileName,
+        dialogTitle: `Share ${report.reportNo || 'Visit Report'} PDF`,
+        action: 'download',
+      });
+    } catch (err: any) {
+      console.error('PDF generation/download error:', err);
+      Alert.alert('PDF Error', err.message || 'Failed to generate PDF report.');
+    } finally {
+      setDownloadingPdfId(null);
+    }
+  };
+
   // Active Checked-In Site Visits State (persisted in AsyncStorage / db.ts)
   const [activeCheckIns, setActiveCheckIns] = useState<Record<string, ActiveCheckInInfo>>({});
   
@@ -125,7 +299,7 @@ export default function VisitsScreen() {
 
   // Dynamic Live Duration Timer for Active Site Visit Session
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (activeBackendSession && activeBackendSession.start_time) {
       const calcDuration = () => {
         const startMs = new Date(activeBackendSession.start_time).getTime();
@@ -1118,13 +1292,21 @@ export default function VisitsScreen() {
                     </View>
 
                     <TouchableOpacity
-                      activeOpacity={isEmailAllowed(visit) ? 0.85 : 0.6}
-                      onPress={() => handleOpenEmailForm(visit)}
-                      style={[styles.cardEmailBtn, !isEmailAllowed(visit) && styles.disabledCardEmailBtn]}
+                      activeOpacity={0.85}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDownloadPdf(visit);
+                      }}
+                      disabled={downloadingPdfId === (visit.id || visit.reportNo)}
+                      style={styles.cardDownloadPdfBtn}
                     >
-                      <Mail color={isEmailAllowed(visit) ? "#10B981" : "#64748B"} size={14} style={{ marginRight: 4 }} />
-                      <Text style={[styles.cardEmailBtnText, !isEmailAllowed(visit) && styles.disabledCardEmailBtnText]}>
-                        {isEmailAllowed(visit) ? 'Send Email' : 'Email Disabled'}
+                      {downloadingPdfId === (visit.id || visit.reportNo) ? (
+                        <ActivityIndicator size="small" color="#3B82F6" style={{ marginRight: 4 }} />
+                      ) : (
+                        <Download color="#3B82F6" size={14} style={{ marginRight: 4 }} />
+                      )}
+                      <Text style={styles.cardDownloadPdfBtnText}>
+                        {downloadingPdfId === (visit.id || visit.reportNo) ? 'Generating...' : 'Download PDF'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1234,13 +1416,18 @@ export default function VisitsScreen() {
                   </View>
 
                   <TouchableOpacity
-                    activeOpacity={isEmailAllowed(selectedReport) ? 0.85 : 0.6}
-                    onPress={() => handleOpenEmailForm(selectedReport)}
-                    style={[styles.headerEmailBtn, !isEmailAllowed(selectedReport) && styles.disabledHeaderEmailBtn]}
+                    activeOpacity={0.85}
+                    onPress={() => handleDownloadPdf(selectedReport)}
+                    disabled={downloadingPdfId === (selectedReport?.id || selectedReport?.reportNo)}
+                    style={styles.headerDownloadPdfBtn}
                   >
-                    <Mail color={isEmailAllowed(selectedReport) ? "#10B981" : "#64748B"} size={16} style={{ marginRight: 5 }} />
-                    <Text style={[styles.headerEmailBtnText, !isEmailAllowed(selectedReport) && styles.disabledHeaderEmailBtnText]}>
-                      {isEmailAllowed(selectedReport) ? 'Send Email' : 'Email Disabled'}
+                    {downloadingPdfId === (selectedReport?.id || selectedReport?.reportNo) ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 5 }} />
+                    ) : (
+                      <Download color="#FFFFFF" size={16} style={{ marginRight: 5 }} />
+                    )}
+                    <Text style={styles.headerDownloadPdfBtnText}>
+                      {downloadingPdfId === (selectedReport?.id || selectedReport?.reportNo) ? 'Generating...' : 'Download PDF'}
                     </Text>
                   </TouchableOpacity>
 
@@ -1775,6 +1962,35 @@ const styles = StyleSheet.create({
   },
   startBtnText: {
     fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  cardDownloadPdfBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  cardDownloadPdfBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B82F6',
+  },
+  headerDownloadPdfBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 10,
+  },
+  headerDownloadPdfBtnText: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },

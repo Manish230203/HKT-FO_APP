@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform } from 'react-native';
 import { UserProfile, loginOfficer, getAuthenticatedUser } from '../services/authService';
 import { getUserSession, saveUserSession, clearUserSession, getProfileImage, saveProfileImage } from '../services/db';
 import { Config } from '../constants/Config';
+import api from '../services/api';
 
 export interface LoginResult {
   success: boolean;
@@ -144,22 +146,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const match = /\.(\w+)$/.exec(filename);
         const type = match ? `image/${match[1]}` : `image/jpeg`;
 
+        const cleanUri = Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('content://') 
+          ? `file://${uri}` 
+          : uri;
+
         formData.append('file', {
-          uri: uri,
+          uri: cleanUri,
           name: filename,
           type: type,
         } as any);
 
-        const response = await fetch(`${Config.BASE_URL}/_AIP_uploadProfilePhoto`, {
-          method: 'POST',
+        const response = await api.post('/_AIP_uploadProfilePhoto', formData, {
           headers: {
-            'ngrok-skip-browser-warning': 'true',
+            'Content-Type': 'multipart/form-data',
           },
-          body: formData,
         });
 
-        const resData = await response.json();
-        return resData;
+        return response.data;
       }
     } catch (err) {
       console.warn('Backend profile photo upload warning:', err);
