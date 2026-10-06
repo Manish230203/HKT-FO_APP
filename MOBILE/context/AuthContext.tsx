@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       const res = await loginOfficer({ identifier, password });
       if (res && res.access_token && res.user) {
-        // Validate Field Officer role permission (restrict Security Guards and non-FO staff)
+        // Validate Officer role permission (restrict Security Guards and non-FO staff)
         const role = (res.user.role || '').toUpperCase().trim();
         const restrictedRoles = [
           'S/G',

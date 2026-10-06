@@ -2,7 +2,7 @@ import api from './api';
 import gpsTracker from './gpsService';
 
 export interface Client {
-  id: number;
+  id: number | string;
   name: string;
   code?: string;
 }
@@ -25,8 +25,8 @@ export interface PlannedVisit {
   date?: string;
   clientName?: string;
   siteName?: string;
-  siteId?: number;
-  clientId?: number;
+  siteId?: number | string;
+  clientId?: number | string;
   latitude?: number;
   longitude?: number;
   visitType?: string;
@@ -37,6 +37,10 @@ export interface PlannedVisit {
   pendingVisits?: number;
   status?: string;
   radius?: number;
+  customClientName?: string;
+  customSiteName?: string;
+  isCustomVisit?: boolean;
+  is_custom?: boolean;
 }
 
 export interface ActiveSiteSession {
@@ -86,12 +90,17 @@ export const getPlannedVisits = async (empOid?: number | string): Promise<Planne
 
 export const createPlannedVisit = async (payload: {
   planningType?: string;
-  siteId: number;
+  siteId?: number | string;
   officerId: number | string;
   visitFrequency?: number;
   visitDate?: string;
   weekStartDate?: string;
   weekEndDate?: string;
+  customClientName?: string;
+  customSiteName?: string;
+  clientName?: string;
+  siteName?: string;
+  isCustomVisit?: boolean;
 }) => {
   const response = await api.post('/planned-visits', payload);
   return response.data;

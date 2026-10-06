@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, FlatList, Image, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -396,7 +396,7 @@ export default function CreateDayVisitReportScreen() {
         visit_date: visitDate,
         visit_type: 'Scheduled',
         shift: shift,
-        officer: user?.name || 'Field Officer',
+        officer: user?.name || 'Officer',
         'check-in_time': startTime,
         start_time: startTime,
         startTime: startTime,
@@ -527,7 +527,7 @@ export default function CreateDayVisitReportScreen() {
               </TouchableOpacity>
             </View>
 
-            <Input label="Submitting Officer" value={user?.name || 'Field Officer'} editable={false} />
+            <Input label="Submitting Officer" value={user?.name || 'Officer'} editable={false} />
           </Card>
         )}
 
@@ -790,8 +790,8 @@ export default function CreateDayVisitReportScreen() {
       </View>
 
       {/* Client Selection Modal */}
-      <Modal visible={clientModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={clientModalVisible} transparent animationType="slide" onRequestClose={() => setClientModalVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Client</Text>
@@ -810,6 +810,11 @@ export default function CreateDayVisitReportScreen() {
             <FlatList
               data={filteredClients}
               keyExtractor={(item) => String(item.id)}
+              showsVerticalScrollIndicator={true}
+              persistentScrollbar={true}
+              keyboardShouldPersistTaps="handled"
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 16 }}
               ListEmptyComponent={
                 <View style={{ padding: 20, alignItems: 'center' }}>
                   <Text style={{ color: '#94A3B8', fontSize: 13 }}>No clients found.</Text>
@@ -832,12 +837,12 @@ export default function CreateDayVisitReportScreen() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Site Selection Modal */}
-      <Modal visible={siteModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={siteModalVisible} transparent animationType="slide" onRequestClose={() => setSiteModalVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Site</Text>
@@ -856,6 +861,11 @@ export default function CreateDayVisitReportScreen() {
             <FlatList
               data={filteredSites}
               keyExtractor={(item) => String(item.id)}
+              showsVerticalScrollIndicator={true}
+              persistentScrollbar={true}
+              keyboardShouldPersistTaps="handled"
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 16 }}
               ListEmptyComponent={
                 <View style={{ padding: 20, alignItems: 'center' }}>
                   <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
@@ -887,7 +897,7 @@ export default function CreateDayVisitReportScreen() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <CustomAlertModal
@@ -914,7 +924,7 @@ export default function CreateDayVisitReportScreen() {
 
       {/* On-Spot Question Bank Modal */}
       <Modal visible={onSpotModalVisible} transparent animationType="slide" onRequestClose={() => setOnSpotModalVisible(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Question from Pool ({availableBankQuestions.length})</Text>
@@ -935,6 +945,9 @@ export default function CreateDayVisitReportScreen() {
               keyExtractor={(item, index) => item.id || `bank_q_${index}`}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
+              persistentScrollbar={true}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 16 }}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={{
@@ -969,7 +982,7 @@ export default function CreateDayVisitReportScreen() {
               }
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1022,8 +1035,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '70%',
+    maxHeight: '80%',
     padding: 16,
+    flexShrink: 1,
   },
   modalHeader: {
     flexDirection: 'row',

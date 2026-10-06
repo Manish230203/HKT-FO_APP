@@ -265,8 +265,10 @@ export default function VisitsScreen() {
       return;
     }
 
+    const isCustomVisit = !!(pv.isCustomVisit || pv.is_custom || pv.clientId === 'OTHER' || pv.siteId === 0 || pv.siteId === '0' || !pv.siteId);
+
     // 2. Perform Geofence Validation (Compare Site Lat/Long vs Officer Lat/Long)
-    if (pv.latitude && pv.longitude) {
+    if (!isCustomVisit && pv.latitude && pv.longitude) {
       let currentCoords = userLocation;
       if (!currentCoords) {
         try {
@@ -303,9 +305,11 @@ export default function VisitsScreen() {
 
       // Geofence cutoff check
       if (dist > allowedRadius) {
+        const distStr = dist >= 1000 ? `${parseFloat((dist / 1000).toFixed(1))}km` : `${Math.round(dist)} meters`;
+        const radiusStr = allowedRadius >= 1000 ? `${parseFloat((allowedRadius / 1000).toFixed(1))}km` : `${allowedRadius} meters`;
         Alert.alert(
           'Geofence Warning: Outside Site Radius',
-          `You are currently ${Math.round(dist)} meters away from ${pv.siteName || 'Site'}.\n\nPlease move within ${allowedRadius} meters of the site to check in.`,
+          `You are currently ${distStr} away from ${pv.siteName || 'Site'}.\n\nPlease move within ${radiusStr} of the site to check in.`,
           [
             { text: 'Refresh Location', onPress: fetchCurrentLocation },
             { text: 'OK', style: 'cancel' }
@@ -546,9 +550,9 @@ export default function VisitsScreen() {
     }
     setSelectedReport(report);
     setRecipientEmail('');
-    setEmailSubject(`Field Officer Report - ${report.reportNo}`);
+    setEmailSubject(`Officer Report - ${report.reportNo}`);
     setEmailMessage(
-      `Dear Sir/Madam,\n\nPlease find the details for Field Officer ${report.visitType} Report (${report.reportNo}) for ${report.siteName} (${report.clientName}).\n\nThank you.`
+      `Dear Sir/Madam,\n\nPlease find the details for Officer ${report.visitType} Report (${report.reportNo}) for ${report.siteName} (${report.clientName}).\n\nThank you.`
     );
     setIsEmailFormOpen(true);
   };
@@ -859,13 +863,15 @@ export default function VisitsScreen() {
               pendingVisits.map((pv) => {
                 const status = getStatusInfo(pv);
                 
-                const hasSiteCoords = pv.latitude !== null && pv.latitude !== undefined && Number(pv.latitude) !== 0 &&
+                const isCustomVisit = !!(pv.isCustomVisit || pv.is_custom || pv.clientId === 'OTHER' || pv.siteId === 0 || pv.siteId === '0' || !pv.siteId);
+                
+                const hasSiteCoords = !isCustomVisit && pv.latitude !== null && pv.latitude !== undefined && Number(pv.latitude) !== 0 &&
                                        pv.longitude !== null && pv.longitude !== undefined && Number(pv.longitude) !== 0;
 
                 let isOutsideGeofence = false;
                 let distanceMeters: number | null = null;
 
-                if (hasSiteCoords && userLocation) {
+                if (!isCustomVisit && hasSiteCoords && userLocation) {
                   distanceMeters = Math.round(calculateHaversineDistanceMeters(
                     userLocation.latitude,
                     userLocation.longitude,
@@ -874,7 +880,7 @@ export default function VisitsScreen() {
                   ));
                   const allowedRadius = pv.radius !== null && pv.radius !== undefined ? Number(pv.radius) : 100;
                   isOutsideGeofence = distanceMeters > allowedRadius;
-                } else if (!hasSiteCoords) {
+                } else if (!hasSiteCoords && !isCustomVisit) {
                   isOutsideGeofence = true;
                 }
 
@@ -958,7 +964,7 @@ export default function VisitsScreen() {
                             <Text style={styles.startBtnText}>Submit Report</Text>
                           </TouchableOpacity>
                         )
-                      ) : !hasSiteCoords ? (
+                      ) : !hasSiteCoords && !isCustomVisit ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
                             style={{
@@ -978,7 +984,7 @@ export default function VisitsScreen() {
                             </Text>
                           </View>
                         </View>
-                      ) : !userLocation ? (
+                      ) : !userLocation && !isCustomVisit ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
                             style={{
@@ -998,7 +1004,7 @@ export default function VisitsScreen() {
                             </Text>
                           </View>
                         </View>
-                      ) : isOutsideGeofence ? (
+                      ) : isOutsideGeofence && !isCustomVisit ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
                             style={{
@@ -1015,7 +1021,11 @@ export default function VisitsScreen() {
                           >
                             <Navigation color="#EF4444" size={12} style={{ marginRight: 4 }} />
                             <Text style={{ fontSize: 11, fontWeight: '700', color: '#EF4444' }}>
-                              {distanceMeters !== null ? `${distanceMeters}m Away` : 'Not at Site'}
+                              {distanceMeters !== null
+                                ? distanceMeters >= 1000
+                                  ? `${parseFloat((distanceMeters / 1000).toFixed(1))}km Away`
+                                  : `${distanceMeters}m Away`
+                                : 'Not at Site'}
                             </Text>
                           </View>
                           <TouchableOpacity
@@ -1259,10 +1269,10 @@ export default function VisitsScreen() {
                     <View style={styles.reportTitleBanner}>
                       <Text style={styles.reportMainHeading}>
                         {selectedReport?.visitType === 'Day Visit'
-                          ? 'FIELD OFFICER DAY VISIT REPORT'
+                          ? 'OFFICER DAY VISIT REPORT'
                           : selectedReport?.visitType === 'Night Round'
-                          ? 'FIELD OFFICER NIGHT VISIT REPORT'
-                          : 'FIELD OFFICER GENERAL VISIT REPORT'}
+                          ? 'OFFICER NIGHT VISIT REPORT'
+                          : 'OFFICER GENERAL VISIT REPORT'}
                       </Text>
                       <Text style={styles.reportIdTag}>REPORT ID : {selectedReport?.reportNo}</Text>
                     </View>

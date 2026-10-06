@@ -23,7 +23,7 @@ def get_authenticated_employee(authorization: Optional[str] = Header(None)) -> D
     return {
         "id": 7558,
         "name": "Amit Kulkarni",
-        "role": "FIELD OFFICER",
+        "role": "OFFICER",
         "employee_id": "EMP103",
         "site_id": 191
     }
@@ -558,7 +558,7 @@ def get_planned_visits(empOid: Optional[str] = Query(None)):
                 "latitude": r.get("latitude"),
                 "longitude": r.get("longitude"),
                 "officerId": r.get("officerId"),
-                "officerName": r.get("officerName") or "Field Officer",
+                "officerName": r.get("officerName") or "Officer",
                 "date": date_str,
                 "plannedPeriod": period_str,
                 "shift": shift_text,

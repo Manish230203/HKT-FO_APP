@@ -8,6 +8,7 @@ import {
   StatusBar,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
@@ -28,7 +29,8 @@ import { useAttendance } from '../context/AttendanceContext';
 import { useLanguage } from '../context/LanguageContext';
 import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 import { CustomAlertModal } from '../components/ui/CustomAlertModal';
-import { getPunchRecords, savePunchRecord, updatePunchRecordsList } from '../services/db';
+import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns } from '../services/db';
+import { getActiveSiteVisitSession } from '../services/siteService';
 
 export default function MarkAttendanceScreen() {
   const { user, profileImage } = useAuth();
@@ -44,7 +46,7 @@ export default function MarkAttendanceScreen() {
   const [countdown, setCountdown] = useState(3);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationSuccess, setVerificationSuccess] = useState(false);
-  const [livenessStatus, setLivenessStatus] = useState<string>('Detecting Liveness...');
+  const [livenessStatus, setLivenessStatus] = useState<string>('Verifying Face...');
   const [similarityScore, setSimilarityScore] = useState<number | null>(null);
 
   // Active Punch, Buffer & Profile Photo Missing States
@@ -190,7 +192,7 @@ export default function MarkAttendanceScreen() {
     }
 
     setIsVerifying(true);
-    setLivenessStatus('Verifying 3D Depth & Liveness...');
+    setLivenessStatus('Verifying Face...');
     try {
       let photoUri: string | null = null;
       if (cameraRef.current) {
@@ -220,7 +222,7 @@ export default function MarkAttendanceScreen() {
         }
       }
 
-      setLivenessStatus('Liveness Passed (Live Human Person Detected)');
+      setLivenessStatus('Face Verified Successfully');
       const matchScore = parseFloat((98 + Math.random() * 1.5).toFixed(1));
       setSimilarityScore(matchScore);
       setVerificationSuccess(true);
@@ -234,7 +236,7 @@ export default function MarkAttendanceScreen() {
       setAlertInfo({
         visible: true,
         title: 'Verification Failed',
-        message: 'Could not detect face liveness clearly. Repositioning face and retrying...',
+        message: 'Could not verify face. Please position your face clearly and retry.',
         type: 'error',
       });
       setCountdown(3);
@@ -250,6 +252,39 @@ export default function MarkAttendanceScreen() {
 
       const lat = location?.latitude || 18.605555;
       const long = location?.longitude || 73.827115;
+
+      // Check if officer is attempting to Punch Out while an active site visit session is in progress
+      if (activePunchRecord) {
+        const empOid = user?.id || (user as any)?.oid || user?.employee_id || 7558;
+        let activeSiteSession = await getActiveSiteVisitSession(empOid);
+        if (!activeSiteSession) {
+          const localCheckIns = await getActiveCheckIns();
+          const activeKeys = Object.keys(localCheckIns);
+          if (activeKeys.length > 0) {
+            const firstActive = localCheckIns[activeKeys[0]];
+            activeSiteSession = {
+              id: 1,
+              employee_id: Number(empOid) || 7558,
+              site_id: Number(firstActive.siteId) || 1,
+              site_name: firstActive.siteName || 'Site Visit',
+              start_time: firstActive.checkInTime || 'Active',
+              status: 'IN_PROGRESS',
+              duration_minutes: 0,
+            };
+          }
+        }
+
+        if (activeSiteSession) {
+          setIsVerifying(false);
+          setAlertInfo({
+            visible: true,
+            title: 'Site Check-Out Required',
+            message: `You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before punching out for duty.`,
+            type: 'error',
+          });
+          return;
+        }
+      }
 
       const res = await markAttendance(lat, long);
 
@@ -274,7 +309,7 @@ export default function MarkAttendanceScreen() {
           setAlertInfo({
             visible: true,
             title: 'Punch Out Successful',
-            message: `${res.message || 'Punch Out logged successfully'} at ${nowTime} for ${user?.name || 'Officer'} (Face Match: ${matchScore}%). Duty session completed!`,
+            message: `${res.message || 'Punch Out logged successfully'} at ${nowTime} for ${user?.name || 'Officer'}. Duty session completed!`,
             type: 'success',
           });
         } else {
@@ -300,8 +335,8 @@ export default function MarkAttendanceScreen() {
 
           setAlertInfo({
             visible: true,
-            title: 'Punch In Successful & Duty Started',
-            message: `${res.message || 'Punch In logged successfully'} at ${nowTime} for ${user?.name || 'Officer'} (Face Match: ${matchScore}%). Active session started!`,
+            title: 'Punch In Successful',
+            message: `${res.message || 'Punch In logged successfully'} at ${nowTime} for ${user?.name || 'Officer'}. Duty session started!`,
             type: 'success',
           });
         }
@@ -312,10 +347,11 @@ export default function MarkAttendanceScreen() {
           router.replace('/(tabs)/dashboard');
         }, 800);
       } else {
+        setIsVerifying(false);
         setAlertInfo({
           visible: true,
-          title: 'Punch Blocked',
-          message: res?.message || 'Attendance marking failed on server. Please try again.',
+          title: 'Punch Restricted',
+          message: res?.message || 'Attendance marking failed on server. Please check out of active site visits and try again.',
           type: 'error',
         });
         setCountdown(3);
@@ -344,7 +380,7 @@ export default function MarkAttendanceScreen() {
             <AlertCircle color="#EF4444" size={48} style={{ marginBottom: 14 }} />
             <Text style={styles.permissionTitle}>Camera Permission Needed</Text>
             <Text style={styles.permissionSub}>
-              Camera access is required for real-time face liveness verification & attendance marking.
+              Camera access is required for face verification & attendance marking.
             </Text>
             <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
               <Text style={styles.grantBtnText}>GRANT CAMERA PERMISSION</Text>
@@ -413,13 +449,11 @@ export default function MarkAttendanceScreen() {
             </View>
           )}
 
-          {/* 3. REAL-TIME LIVENESS VERIFICATION CARD */}
+          {/* 3. REAL-TIME FACE VERIFICATION CARD */}
           <View style={styles.verificationCard}>
             <View style={styles.livenessHeaderRow}>
               <View style={styles.redLiveDot} />
-              <Text style={styles.livenessTitle}>
-                {activePunchRecord ? t('punch_out_liveness') : t('liveness_verification')}
-              </Text>
+              <Text style={styles.livenessTitle}>VERIFY FACE IDENTITY</Text>
             </View>
 
             {/* LIVE CAMERA VIEWFINDER WITH ORANGE CORNER RETICLES */}
@@ -433,7 +467,7 @@ export default function MarkAttendanceScreen() {
               <View style={[styles.reticleCorner, styles.topLeftReticle]} />
             </View>
 
-            {/* AUTO-CAPTURE & LIVENESS STATUS BOX */}
+            {/* AUTO-CAPTURE & ATTENDANCE STATUS BOX */}
             <View style={styles.autoCaptureStatusBox}>
               {profileMissingError || !profileImage ? (
                 <Text style={[styles.autoCaptureText, { color: '#EF4444', fontWeight: '800' }]}>
@@ -442,10 +476,10 @@ export default function MarkAttendanceScreen() {
               ) : bufferError ? (
                 <Text style={[styles.autoCaptureText, { color: '#F59E0B' }]}>{bufferError}</Text>
               ) : isVerifying ? (
-                <View>
-                  <Text style={styles.autoCaptureText}>
-                    <Text style={styles.redHighlight}>Liveness Check: </Text>
-                    {livenessStatus}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator color="#3B82F6" size="small" style={{ marginRight: 8 }} />
+                  <Text style={[styles.autoCaptureText, { color: '#60A5FA', fontWeight: '700' }]}>
+                    {activePunchRecord ? 'Verifying Face for Punch Out...' : 'Verifying Face for Punch In...'}
                   </Text>
                 </View>
               ) : verificationSuccess ? (
@@ -453,14 +487,16 @@ export default function MarkAttendanceScreen() {
                   <View style={styles.verifiedRow}>
                     <ShieldCheck color="#10B981" size={20} style={{ marginRight: 8 }} />
                     <Text style={styles.verifiedText}>
-                      VERIFIED ({similarityScore}% Match). ATTENDANCE MARKED AUTOMATICALLY!
+                      {activePunchRecord
+                        ? 'PUNCH OUT SUCCESSFUL! Duty session completed.'
+                        : 'PUNCH IN SUCCESSFUL! Duty session started.'}
                     </Text>
                   </View>
                 </View>
               ) : (
                 <Text style={styles.autoCaptureText}>
-                  <Text style={styles.redHighlight}>Auto Capturing: </Text>
-                  Position face clearly. {activePunchRecord ? 'Punching Out' : 'Punching In'} in {countdown}s...
+                  <Text style={{ color: '#3B82F6', fontWeight: '800' }}>Position Face: </Text>
+                  {activePunchRecord ? 'Punching Out' : 'Punching In'} in {countdown}s...
                 </Text>
               )}
             </View>

@@ -432,8 +432,8 @@ export default function CreateGeneralVisitScreen() {
       </Card>
 
       {/* Client Selection Modal */}
-      <Modal visible={clientModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={clientModalVisible} transparent animationType="slide" onRequestClose={() => setClientModalVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Client</Text>
@@ -452,6 +452,11 @@ export default function CreateGeneralVisitScreen() {
             <FlatList
               data={filteredClients}
               keyExtractor={(item) => String(item.id)}
+              showsVerticalScrollIndicator={true}
+              persistentScrollbar={true}
+              keyboardShouldPersistTaps="handled"
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 16 }}
               ListEmptyComponent={
                 <View style={{ padding: 20, alignItems: 'center' }}>
                   <Text style={{ color: '#94A3B8', fontSize: 13 }}>No clients found.</Text>
@@ -474,12 +479,12 @@ export default function CreateGeneralVisitScreen() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Site Selection Modal */}
-      <Modal visible={siteModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={siteModalVisible} transparent animationType="slide" onRequestClose={() => setSiteModalVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Site</Text>
@@ -498,6 +503,11 @@ export default function CreateGeneralVisitScreen() {
             <FlatList
               data={filteredSites}
               keyExtractor={(item) => String(item.id)}
+              showsVerticalScrollIndicator={true}
+              persistentScrollbar={true}
+              keyboardShouldPersistTaps="handled"
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 16 }}
               ListEmptyComponent={
                 <View style={{ padding: 20, alignItems: 'center' }}>
                   <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
@@ -520,7 +530,7 @@ export default function CreateGeneralVisitScreen() {
               )}
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
         <CustomAlertModal
@@ -607,6 +617,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     maxHeight: '80%',
     padding: 20,
+    flexShrink: 1,
   },
   modalHeader: {
     flexDirection: 'row',

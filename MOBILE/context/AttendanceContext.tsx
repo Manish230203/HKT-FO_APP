@@ -2,9 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { Alert } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Config } from '../constants/Config';
-import { getPunchRecords, savePunchRecord, updatePunchRecordsList } from '../services/db';
+import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns } from '../services/db';
 import { gpsTracker } from '../services/gpsService';
 import { violationService } from '../services/violationService';
+import { getActiveSiteVisitSession } from '../services/siteService';
 
 export interface AttendanceRecord {
   date: string;
@@ -181,6 +182,39 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
   const markAttendance = async (latitude: number, longitude: number, siteOid?: number, timestamp?: string) => {
     const empOid = getEmpOid();
     if (!empOid) return { success: false, message: 'User not authenticated' };
+
+    // Enforce compulsory site check-out before duty punch-out if officer has an active site visit session
+    const isCurrentlyPunchedIn = todayRecord && todayRecord.check_in && !todayRecord.check_out;
+    if (isCurrentlyPunchedIn) {
+      try {
+        let activeSiteSession = await getActiveSiteVisitSession(empOid);
+        if (!activeSiteSession) {
+          const localCheckIns = await getActiveCheckIns();
+          const activeKeys = Object.keys(localCheckIns);
+          if (activeKeys.length > 0) {
+            const firstActive = localCheckIns[activeKeys[0]];
+            activeSiteSession = {
+              id: 1,
+              employee_id: Number(empOid) || 7558,
+              site_id: Number(firstActive.siteId) || 1,
+              site_name: firstActive.siteName || 'Site Visit',
+              start_time: firstActive.checkInTime || 'Active',
+              status: 'IN_PROGRESS',
+              duration_minutes: 0,
+            };
+          }
+        }
+
+        if (activeSiteSession) {
+          return {
+            success: false,
+            message: `Site Check-Out Required: You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before punching out for duty.`,
+          };
+        }
+      } catch (e) {
+        console.warn('Error checking active site session before punch-out:', e);
+      }
+    }
 
     try {
       const response = await fetch(`${Config.BASE_URL}/_AIP_markAttendance`, {

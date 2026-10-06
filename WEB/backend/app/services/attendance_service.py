@@ -1016,7 +1016,7 @@ def mark_attendance_logic(data):
             return {"success": False, "message": "USER NOT FOUND"}
 
         desig_str = str(user.get("designation_name", "") or user.get("COMPANY_DESIGNATION", "") or "").upper()
-        is_field_officer = "FIELD OFFICER" in desig_str
+        is_field_officer = "FIELD OFFICER" in desig_str or "OFFICER" in desig_str
 
         user_assigned_site = user.get("site") or user.get("SITE")
         active_site_oid = qrSiteOid if qrSiteOid else user_assigned_site

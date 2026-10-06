@@ -1,3 +1,6 @@
 {
-  "urlRandomness": "dCHzXPU"
+  "urlRandomness": "dCHzXPU",
+  "dev": true,
+  "minify": false,
+  "https": false
 }

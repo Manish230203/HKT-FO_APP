@@ -28,6 +28,7 @@ import {
   Calendar,
   MapPin,
   Camera,
+  Upload,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
@@ -49,6 +50,35 @@ export default function SettingsScreen() {
       case 'hi': return 'HINDI / ACTIVE';
       case 'mr': return 'MARATHI / ACTIVE';
       default: return 'ENGLISH / ACTIVE';
+    }
+  };
+
+  const handleUploadImageFromLibrary = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permission Required', 'Gallery permission is required to select profile photo.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedUri = result.assets[0].uri;
+        const uploadRes = await updateProfileImage(selectedUri);
+        if (uploadRes && uploadRes.success) {
+          Alert.alert('Profile Registered', 'Profile photo updated and face embedding registered successfully!');
+        } else {
+          Alert.alert('Photo Saved', uploadRes?.message || 'Profile photo saved locally.');
+        }
+      }
+    } catch (e) {
+      console.error('Image library error', e);
     }
   };
 
@@ -81,6 +111,19 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleSelectProfileImageOption = () => {
+    Alert.alert(
+      'Profile Photo',
+      'Select an option to update your profile image:',
+      [
+        { text: 'Upload from Gallery', onPress: handleUploadImageFromLibrary },
+        { text: 'Take Photo with Camera', onPress: handleOpenCamera },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleSignOut = async () => {
     setShowSignOutConfirm(false);
     await logout();
@@ -101,7 +144,7 @@ export default function SettingsScreen() {
 
           {/* 1. Header Profile Card */}
           <View style={styles.profileHeaderCard}>
-            <View style={styles.avatarContainer}>
+            <TouchableOpacity style={styles.avatarContainer} activeOpacity={0.85} onPress={handleSelectProfileImageOption}>
               <View style={styles.avatarCircle}>
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.avatarImage} />
@@ -109,10 +152,10 @@ export default function SettingsScreen() {
                   <User color="#FFFFFF" size={46} />
                 )}
               </View>
-              <TouchableOpacity style={styles.editBadge} onPress={handleOpenCamera}>
-                <Camera color="#FFFFFF" size={14} />
-              </TouchableOpacity>
-            </View>
+              <View style={styles.editBadge}>
+                <Upload color="#FFFFFF" size={14} />
+              </View>
+            </TouchableOpacity>
 
             <Text style={styles.userName}>{user?.name || 'PAPPU KUMAR'}</Text>
             <Text style={styles.userRole}>{user?.role || 'S/G'}</Text>
@@ -128,6 +171,17 @@ export default function SettingsScreen() {
 
             <TouchableOpacity
               activeOpacity={0.85}
+              onPress={handleSelectProfileImageOption}
+              style={styles.uploadProfileBtn}
+            >
+              <Upload color="#60A5FA" size={16} style={{ marginRight: 8 }} />
+              <Text style={styles.uploadProfileText}>
+                {profileImage ? 'CHANGE PROFILE IMAGE' : 'UPLOAD PROFILE IMAGE'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
               onPress={() => setShowFullProfileModal(true)}
               style={styles.viewFullProfileBtn}
             >
@@ -136,6 +190,7 @@ export default function SettingsScreen() {
           </View>
 
           {/* 2. Security & Privacy Card */}
+          {/*
           <View style={styles.cardContainer}>
             <View style={styles.cardTitleRow}>
               <View style={styles.iconCircleBlue}>
@@ -181,8 +236,10 @@ export default function SettingsScreen() {
               <ChevronRight color="#64748B" size={18} />
             </TouchableOpacity>
           </View>
+          */}
 
           {/* 3. Notifications & Email Updates Card */}
+          {/*
           <View style={styles.cardContainer}>
             <View style={styles.cardTitleRow}>
               <View style={[styles.iconCircleBlue, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
@@ -202,6 +259,7 @@ export default function SettingsScreen() {
               />
             </View>
           </View>
+          */}
 
           {/* 4. System Preferences Card */}
           <View style={styles.cardContainer}>
@@ -472,6 +530,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#94A3B8',
+  },
+  uploadProfileBtn: {
+    backgroundColor: '#1E293B',
+    borderColor: '#3B82F6',
+    borderWidth: 1.5,
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  uploadProfileText: {
+    color: '#60A5FA',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   viewFullProfileBtn: {
     backgroundColor: '#4F46E5',

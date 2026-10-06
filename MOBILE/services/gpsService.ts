@@ -329,7 +329,7 @@ class MobileGPSTracker {
       await api.post('/attendance/location-violation', {
         employee_id: this.employeeId,
         event_type: eventType,
-        details: details || 'Field officer turned off Location (GPS) during active duty shift',
+        details: details || 'Officer turned off Location (GPS) during active duty shift',
         timestamp: nowIso,
         location_off_at: eventType === 'DUTY_LOCATION_OFF_VIOLATION' ? nowIso : undefined,
         location_restored_at: eventType === 'DUTY_LOCATION_RESTORED' ? nowIso : undefined,
@@ -359,7 +359,7 @@ class MobileGPSTracker {
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
         console.warn('[gpsService] GPS location services disabled during active shift!');
-        await this.reportLocationViolation('Field officer turned off Location (GPS) during active duty shift');
+        await this.reportLocationViolation('Officer turned off Location (GPS) during active duty shift');
         return;
       }
 
@@ -374,7 +374,7 @@ class MobileGPSTracker {
         const checkServices = await Location.hasServicesEnabledAsync();
         if (!checkServices) {
           console.warn('[gpsService] GPS turned off during position fix attempt');
-          await this.reportLocationViolation('Field officer turned off Location (GPS) during active duty shift');
+          await this.reportLocationViolation('Officer turned off Location (GPS) during active duty shift');
           return;
         }
         location = await Location.getLastKnownPositionAsync();

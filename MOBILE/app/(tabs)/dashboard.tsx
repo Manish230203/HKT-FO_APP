@@ -14,6 +14,7 @@ import {
   FlatList,
   Animated,
   Easing,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -151,6 +152,8 @@ export default function DashboardScreen() {
   const [clients, setClients] = useState<Client[]>([]);
   const [newClientId, setNewClientId] = useState('');
   const [newSiteId, setNewSiteId] = useState('');
+  const [customClientName, setCustomClientName] = useState('');
+  const [customSiteName, setCustomSiteName] = useState('');
   const [newPlanningType, setNewPlanningType] = useState('SINGLE');
   const [newVisitFrequency, setNewVisitFrequency] = useState('1');
   const [newVisitDate, setNewVisitDate] = useState(new Date().toISOString().split('T')[0]);
@@ -213,7 +216,10 @@ export default function DashboardScreen() {
   const [modalClientSearch, setModalClientSearch] = useState('');
   const [modalSiteSearch, setModalSiteSearch] = useState('');
 
-  const filteredModalClients = clients.filter((c) =>
+  const filteredModalClients = [
+    { id: 'OTHER', name: 'OTHER' },
+    ...clients,
+  ].filter((c) =>
     c.name.toLowerCase().includes(modalClientSearch.toLowerCase())
   );
 
@@ -259,6 +265,8 @@ export default function DashboardScreen() {
       setModalSites(sList || []);
       setNewClientId('');
       setNewSiteId('');
+      setCustomClientName('');
+      setCustomSiteName('');
     } catch (err) {
       console.error('Failed to load clients & sites', err);
     }
@@ -271,6 +279,8 @@ export default function DashboardScreen() {
     setModalSiteSearch('');
     setNewClientId('');
     setNewSiteId('');
+    setCustomClientName('');
+    setCustomSiteName('');
     loadClientsForModal();
     setAddVisitModalVisible(true);
   };
@@ -284,19 +294,43 @@ export default function DashboardScreen() {
   };
 
   const handleCreateNewVisit = async () => {
-    if (!newSiteId) {
-      alert(t('select_site_alert'));
-      return;
+    const isOtherClient = newClientId === 'OTHER';
+
+    if (isOtherClient) {
+      if (!customClientName.trim()) {
+        alert('Please enter Client Name.');
+        return;
+      }
+      if (!customSiteName.trim()) {
+        alert('Please enter Site Name.');
+        return;
+      }
+    } else {
+      if (!newSiteId) {
+        alert(t('select_site_alert'));
+        return;
+      }
     }
+
     setCreatingVisit(true);
     try {
       const empOidVal = user?.empOid || user?.id || user?.employee_id || 7558;
       const payload: any = {
         planningType: newPlanningType,
-        siteId: parseInt(newSiteId, 10),
         officerId: empOidVal,
         visitFrequency: parseInt(newVisitFrequency, 10) || 1,
       };
+
+      if (isOtherClient) {
+        payload.siteId = 0;
+        payload.isCustomVisit = true;
+        payload.clientName = customClientName.trim();
+        payload.siteName = customSiteName.trim();
+        payload.customClientName = customClientName.trim();
+        payload.customSiteName = customSiteName.trim();
+      } else {
+        payload.siteId = parseInt(newSiteId, 10);
+      }
 
       if (newPlanningType === 'SINGLE') {
         payload.visitDate = newVisitDate;
@@ -575,7 +609,7 @@ export default function DashboardScreen() {
         {/* 1. HEADER PROFILE CARD (CENTER ALIGNED) */}
         <View style={styles.standardCard}>
           <View style={styles.headerProfileCardContent}>
-            <TouchableOpacity onPress={() => router.push('/profile')} style={styles.userProfileSection}>
+            <View style={styles.userProfileSection}>
               <View style={styles.avatarWrapper}>
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.avatarImage} />
@@ -584,11 +618,13 @@ export default function DashboardScreen() {
                 )}
               </View>
               <View style={styles.userTextCol}>
-                <Text style={styles.greetingText}>{greeting},</Text>
-                <Text style={styles.userNameText}>{user?.name || 'Field Officer'}</Text>
-                <Text style={styles.empIdText}>EMP ID: {user?.employee_id || 'EMP001'}</Text>
+                <Text style={styles.greetingText} numberOfLines={1}>{greeting},</Text>
+                <Text style={styles.userNameText} numberOfLines={1} ellipsizeMode="tail">
+                  {user?.name ? (user.name.trim().length > 16 ? `${user.name.trim().substring(0, 16)}...` : user.name.trim()) : 'Officer'}
+                </Text>
+                <Text style={styles.empIdText} numberOfLines={1}>EMP ID: {user?.employee_id || 'EMP001'}</Text>
               </View>
-            </TouchableOpacity>
+            </View>
 
             <View style={styles.companyLogoContainer}>
               <Image source={getCompanyLogo()} style={styles.companyLogoImage} resizeMode="contain" />
@@ -680,7 +716,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 5. FIELD OFFICER VISITS SECTION (CENTER ALIGNED) */}
+        {/* 5. OFFICER VISITS SECTION (CENTER ALIGNED) */}
         <View style={styles.standardCard}>
           <Text style={styles.sectionTitle}>{t('field_officer_visits').toUpperCase()}</Text>
 
@@ -714,11 +750,6 @@ export default function DashboardScreen() {
                 <View style={styles.gridIconCircle}>
                   <CheckCircle2 color="#10B981" size={30} />
                 </View>
-                {completedVisits.length > 0 && (
-                  <View style={[styles.countBadge, { backgroundColor: '#10B981' }]}>
-                    <Text style={styles.countBadgeText}>{completedVisits.length}</Text>
-                  </View>
-                )}
               </View>
               <Text style={styles.gridItemLabel}>{t('completed_visits')}</Text>
             </TouchableOpacity>
@@ -794,7 +825,7 @@ export default function DashboardScreen() {
 
       {/* ADD VISIT / ASSIGN VISIT PLAN MODAL */}
       <Modal visible={addVisitModalVisible} transparent animationType="slide" onRequestClose={handleCloseAddVisitModal}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContainer}>
             {pickerClientVisible ? (
               <>
@@ -820,6 +851,11 @@ export default function DashboardScreen() {
                   maxToRenderPerBatch={15}
                   windowSize={5}
                   removeClippedSubviews
+                  showsVerticalScrollIndicator={true}
+                  persistentScrollbar={true}
+                  keyboardShouldPersistTaps="handled"
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{ paddingBottom: 16 }}
                   ListEmptyComponent={
                     <View style={{ padding: 20, alignItems: 'center' }}>
                       <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>No clients found.</Text>
@@ -864,6 +900,11 @@ export default function DashboardScreen() {
                   maxToRenderPerBatch={15}
                   windowSize={5}
                   removeClippedSubviews
+                  showsVerticalScrollIndicator={true}
+                  persistentScrollbar={true}
+                  keyboardShouldPersistTaps="handled"
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{ paddingBottom: 16 }}
                   ListEmptyComponent={
                     <View style={{ padding: 20, alignItems: 'center' }}>
                       <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
@@ -906,21 +947,47 @@ export default function DashboardScreen() {
                     onPress={() => setPickerClientVisible(true)}
                   >
                     <Text style={styles.pickerBtnText}>
-                      {clients.find((c) => String(c.id) === String(newClientId))?.name || `${t('select_client')}...`}
+                      {newClientId === 'OTHER'
+                        ? 'OTHER'
+                        : clients.find((c) => String(c.id) === String(newClientId))?.name || `${t('select_client')}...`}
                     </Text>
                     <ChevronDown color="#94A3B8" size={20} />
                   </TouchableOpacity>
 
-                  <Text style={styles.fieldLabel}>{t('select_site')}</Text>
-                  <TouchableOpacity
-                    style={styles.pickerBtn}
-                    onPress={() => setPickerSiteVisible(true)}
-                  >
-                    <Text style={styles.pickerBtnText}>
-                      {modalSites.find((s) => String(s.id) === String(newSiteId))?.name || `${t('select_site')}...`}
-                    </Text>
-                    <ChevronDown color="#94A3B8" size={20} />
-                  </TouchableOpacity>
+                  {newClientId === 'OTHER' ? (
+                    <>
+                      <Text style={styles.fieldLabel}>Client Name</Text>
+                      <TextInput
+                        style={styles.modalInput}
+                        value={customClientName}
+                        onChangeText={setCustomClientName}
+                        placeholder="Enter Client Name"
+                        placeholderTextColor="#64748B"
+                      />
+
+                      <Text style={styles.fieldLabel}>Site Name</Text>
+                      <TextInput
+                        style={styles.modalInput}
+                        value={customSiteName}
+                        onChangeText={setCustomSiteName}
+                        placeholder="Enter Site Name"
+                        placeholderTextColor="#64748B"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.fieldLabel}>{t('select_site')}</Text>
+                      <TouchableOpacity
+                        style={styles.pickerBtn}
+                        onPress={() => setPickerSiteVisible(true)}
+                      >
+                        <Text style={styles.pickerBtnText}>
+                          {modalSites.find((s) => String(s.id) === String(newSiteId))?.name || `${t('select_site')}...`}
+                        </Text>
+                        <ChevronDown color="#94A3B8" size={20} />
+                      </TouchableOpacity>
+                    </>
+                  )}
 
                   <Text style={styles.fieldLabel}>{t('planning_type')}</Text>
                   <View style={styles.typeRow}>
@@ -1025,7 +1092,7 @@ export default function DashboardScreen() {
                   <Text style={styles.fieldLabel}>{t('assigned_officer')}</Text>
                   <TextInput
                     style={[styles.modalInput, { opacity: 0.7 }]}
-                    value={user?.name || 'Field Officer'}
+                    value={user?.name || 'Officer'}
                     editable={false}
                   />
 
@@ -1042,7 +1109,7 @@ export default function DashboardScreen() {
               </>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1103,6 +1170,8 @@ const styles = StyleSheet.create({
   },
   userTextCol: {
     justifyContent: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   greetingText: {
     fontSize: 13,
@@ -1377,6 +1446,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
+    flexShrink: 1,
   },
   modalHeader: {
     flexDirection: 'row',

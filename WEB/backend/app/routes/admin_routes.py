@@ -562,7 +562,7 @@ def get_live_locations(
         
         locations.append({
             "officer_name": emp["name"] if emp else f"Officer {shift.user_id}",
-            "role": emp["role"] if emp else "Field Officer",
+            "role": emp["role"] if emp else "Officer",
             "latitude": latest_log.latitude if latest_log else shift.start_latitude,
             "longitude": latest_log.longitude if latest_log else shift.start_longitude,
             "shift_start": shift.start_time.isoformat()
@@ -1763,7 +1763,7 @@ def get_sites_list(
 
 @router.get("/assessments/roles")
 def get_roles_list():
-    return ["Supervisor", "Field Officer", "Security Guard", "Lady Security Guard"]
+    return ["Supervisor", "Officer", "Security Guard", "Lady Security Guard"]
 
 @router.post("/locations/sites")
 def add_site(data: dict, db: Session = Depends(get_patrol_db)):
@@ -2054,7 +2054,7 @@ def onboard_user(data: dict, db: Session = Depends(get_patrol_db)):
     role = data.get("role")
     desig_sql = text("SELECT oid FROM DESIGNATION WHERE name = :name LIMIT 1")
     desig = db.execute(desig_sql, {"name": role}).mappings().first()
-    desig_id = desig["oid"] if desig else 2 # Default to Field Officer if not found
+    desig_id = desig["oid"] if desig else 2 # Default to Officer if not found
     
     # Use branch 1 as default
     branch_id = 1
@@ -2236,7 +2236,7 @@ def get_completed_tours(
             "tour_name": t.tour_name,
             "guard_name": creator_name,
             "guard_emp_code": creator_code,
-            "guard_role": emp["role"] if emp else "Field Officer",
+            "guard_role": emp["role"] if emp else "Officer",
             "site_name": site["site_name"] if site else "Unknown Site",
             "client_name": site["client_name"] if site else "N/A",
             "start_time": t.start_time.isoformat() if t.start_time else None,
@@ -2499,7 +2499,7 @@ def get_tour_detail(
         "report_id": f"RPT-{t.start_time.strftime('%Y%m%d') if t.start_time else '000000'}-{t.id:03d}",
         "guard_name": emp["name"] if emp else f"Officer {t.user_id}",
         "guard_emp_code": emp["emp_code"] if emp else "Unknown",
-        "guard_role": emp["role"] if emp else "Field Officer",
+        "guard_role": emp["role"] if emp else "Officer",
         "site_name": site["site_name"] if site else "Unknown Site",
         "client_name": site["client_name"] if site else "N/A",
         "start_time": t.start_time.isoformat() if t.start_time else None,

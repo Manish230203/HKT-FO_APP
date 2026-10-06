@@ -566,10 +566,7 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
               <View style={styles.logsTitleCol}>
                 <Text style={styles.officerNameText}>{user?.name || 'PAPPU KUMAR'}</Text>
-                <Text style={styles.officerRoleText}>{(user?.role || 'FIELD OFFICER').toUpperCase()}</Text>
-                <View style={styles.clientPill}>
-                  <Text style={styles.clientPillText}>CLIENT: TATA POWER</Text>
-                </View>
+                <Text style={styles.officerRoleText}>{(user?.role || 'OFFICER').toUpperCase()}</Text>
               </View>
             </View>
 
@@ -746,28 +743,16 @@ export default function AttendanceScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.fieldSubLabel}>PUNCH IN</Text>
                       <Text style={styles.timeValText}>{log.punchInTime || '11:00'}</Text>
-                      {log.check_in_lat != null && log.check_in_long != null && (
-                        <Text style={{ color: '#94A3B8', fontSize: 11, marginTop: 2 }}>
-                          📍 {Number(log.check_in_lat).toFixed(4)}, {Number(log.check_in_long).toFixed(4)}
-                        </Text>
-                      )}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.fieldSubLabel}>PUNCH OUT</Text>
                       <Text style={styles.timeValText}>{log.punchOutTime || '--:--'}</Text>
-                      {log.check_out_lat != null && log.check_out_long != null && (
-                        <Text style={{ color: '#94A3B8', fontSize: 11, marginTop: 2 }}>
-                          📍 {Number(log.check_out_lat).toFixed(4)}, {Number(log.check_out_long).toFixed(4)}
-                        </Text>
-                      )}
                     </View>
                   </View>
 
                   <Text style={[styles.fieldSubLabel, { marginTop: 10 }]}>SITE</Text>
                   <Text style={styles.siteValText}>
-                    {log.siteName || (log.check_in_lat != null && log.check_in_long != null
-                      ? `📍 ${Number(log.check_in_lat).toFixed(4)}, ${Number(log.check_in_long).toFixed(4)}`
-                      : 'Coordinates Only')}
+                    {log.siteName || 'N/A'}
                   </Text>
                 </View>
               ))

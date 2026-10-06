@@ -109,7 +109,7 @@ class ViolationService {
       timestamp: timestamp,
       punch_in_id: punchInId ? Number(punchInId) || punchInId : null,
       event_type: 'DUTY_LOCATION_OFF_VIOLATION',
-      details: 'Field officer turned off Location (GPS) during active duty shift',
+      details: 'Officer turned off Location (GPS) during active duty shift',
     };
 
     try {
@@ -147,7 +147,7 @@ class ViolationService {
       timestamp: timestamp,
       punch_in_id: punchInId ? Number(punchInId) || punchInId : null,
       event_type: 'DUTY_LOCATION_RESTORED',
-      details: 'Field officer turned Location (GPS) back ON during active duty shift',
+      details: 'Officer turned Location (GPS) back ON during active duty shift',
     };
 
     try {

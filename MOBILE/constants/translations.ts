@@ -4,12 +4,12 @@ export const translations = {
   en: {
     // Language Selection
     select_language: 'Select Preferred Language',
-    choose_language_desc: 'Choose your language to continue with Field Officer App',
+    choose_language_desc: 'Choose your language to continue with Officer App',
     continue: 'Continue',
     
     // Login
     login_title: 'VIGILO-OFFICER',
-    login_subtitle: 'Field Officer Sign In',
+    login_subtitle: 'Officer Sign In',
     mobile_number: 'Mobile Number',
     mobile_placeholder: 'Enter 10-digit mobile number',
     sign_in: 'Sign In',
@@ -17,7 +17,7 @@ export const translations = {
     invalid_credentials: 'User not found for this mobile number. Please check your registered mobile number.',
     invalid_mobile: 'Please enter a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9).',
     no_account_found: 'No account found for this mobile number. Please check your mobile number or contact your administrator.',
-    access_restricted_fo: 'Access Restricted: Security Guards and non-Field Officer staff cannot log in. This app is for Field Officers only.',
+    access_restricted_fo: 'Access Restricted: Security Guards and non-Officer staff cannot log in. This app is for Officers only.',
     network_error: 'Unable to connect to server. Please check your internet connection and try again.',
 
     // Navigation & Tabs
@@ -32,7 +32,7 @@ export const translations = {
     good_afternoon: 'Good Afternoon,',
     good_evening: 'Good Evening,',
     welcome_back: 'Welcome back,',
-    field_officer: 'Field Officer',
+    field_officer: 'Officer',
     quick_actions: 'Quick Actions',
     mark_attendance: 'Mark Attendance',
     view_sites: 'View Assigned Sites',
@@ -68,7 +68,7 @@ export const translations = {
     all_clients: 'All Clients (Show All Sites)',
 
     // Visits List Screen
-    field_officer_visits: 'Field Officer Visits',
+    field_officer_visits: 'Officer Visits',
     all_clear: 'All Clear!',
     no_pending_visits_desc: 'No pending visits scheduled.',
     no_reports_yet: 'No Reports Yet',
@@ -223,12 +223,12 @@ export const translations = {
   hi: {
     // Language Selection
     select_language: 'अपनी पसंदीदा भाषा चुनें',
-    choose_language_desc: 'फील्ड ऑफिसर ऐप जारी रखने के लिए अपनी भाषा चुनें',
+    choose_language_desc: 'ऑफिसर ऐप जारी रखने के लिए अपनी भाषा चुनें',
     continue: 'आगे बढ़ें',
     
     // Login
     login_title: 'VIGILO-OFFICER',
-    login_subtitle: 'फील्ड ऑफिसर साइन इन',
+    login_subtitle: 'ऑफिसर साइन इन',
     mobile_number: 'मोबाइल नंबर',
     mobile_placeholder: '10-अंकों का मोबाइल नंबर दर्ज करें',
     sign_in: 'साइन इन करें',
@@ -236,7 +236,7 @@ export const translations = {
     invalid_credentials: 'इस मोबाइल नंबर के लिए उपयोगकर्ता नहीं मिला। कृपया अपना पंजीकृत मोबाइल नंबर जांचें।',
     invalid_mobile: 'कृपया एक मान्य 10-अंकों का भारतीय मोबाइल नंबर दर्ज करें (6, 7, 8, या 9 से शुरू)।',
     no_account_found: 'इस मोबाइल नंबर के लिए कोई खाता नहीं मिला। कृपया अपना मोबाइल नंबर जांचें या प्रशासक से संपर्क करें।',
-    access_restricted_fo: 'पहुंच प्रतिबंधित: सुरक्षा गार्ड और गैर-फील्ड अधिकारी स्टाफ लॉगिन नहीं कर सकते। यह ऐप केवल फील्ड अधिकारियों के लिए है।',
+    access_restricted_fo: 'पहुंच प्रतिबंधित: सुरक्षा गार्ड और गैर-ऑफिसर स्टाफ लॉगिन नहीं कर सकते। यह ऐप केवल ऑफिसर्स के लिए है।',
     network_error: 'सर्वर से कनेक्ट करने में असमर्थ। कृपया अपना नेटवर्क कनेक्शन जांचें और पुनः प्रयास करें।',
 
     // Navigation & Tabs
@@ -251,7 +251,7 @@ export const translations = {
     good_afternoon: 'शुभ दोपहर,',
     good_evening: 'शुभ संध्या,',
     welcome_back: 'नमस्ते,',
-    field_officer: 'फील्ड ऑफिसर',
+    field_officer: 'ऑफिसर',
     quick_actions: 'त्वरित कार्य',
     mark_attendance: 'उपस्थिति दर्ज करें',
     view_sites: 'आवंटित साइटें देखें',
@@ -287,7 +287,7 @@ export const translations = {
     all_clients: 'सभी क्लाइंट (सभी साइटें देखें)',
 
     // Visits List Screen
-    field_officer_visits: 'फील्ड ऑफिसर विज़िट',
+    field_officer_visits: 'ऑफिसर विज़िट',
     all_clear: 'सब ठीक है!',
     no_pending_visits_desc: 'कोई लंबित विज़िट निर्धारित नहीं है।',
     no_reports_yet: 'अभी कोई रिपोर्ट नहीं',
@@ -442,12 +442,12 @@ export const translations = {
   mr: {
     // Language Selection
     select_language: 'आपली आवडती भाषा निवडा',
-    choose_language_desc: 'फील्ड ऑफिसर ॲप वापरण्यासाठी भाषा निवडा',
+    choose_language_desc: 'ऑफिसर ॲप वापरण्यासाठी भाषा निवडा',
     continue: 'पुढे जा',
     
     // Login
     login_title: 'VIGILO-OFFICER',
-    login_subtitle: 'फील्ड ऑफिसर साइन इन',
+    login_subtitle: 'ऑफिसर साइन इन',
     mobile_number: 'मोबाईल नंबर',
     mobile_placeholder: '10-अंकी मोबाईल नंबर प्रविष्ट करा',
     sign_in: 'साइन इन करा',
@@ -455,7 +455,7 @@ export const translations = {
     invalid_credentials: 'या मोबाईल नंबरसाठी वापरकर्ता सापडला नाही. कृपया नोंदणीकृत मोबाईल नंबर तपासा.',
     invalid_mobile: 'कृपया एक वैध 10-अंकी भारतीय मोबाईल नंबर टाका (6, 7, 8, किंवा 9 ने सुरू होणारा).',
     no_account_found: 'या मोबाईल नंबरसाठी खाते सापडले नाही. कृपया तुमचा मोबाईल नंबर तपासा किंवा प्रशासकाशी संपर्क साधा.',
-    access_restricted_fo: 'वापर नाकारला: सुरक्षा रक्षक आणि नॉन-फील्ड अधिकारी स्टाफ लॉगिन करू शकत नाहीत. हे ॲप फक्त फील्ड ऑफिसर्ससाठी आहे.',
+    access_restricted_fo: 'वापर नाकारला: सुरक्षा रक्षक आणि नॉन-ऑफिसर स्टाफ लॉगिन करू शकत नाहीत. हे ॲप फक्त ऑफिसर्ससाठी आहे.',
     network_error: 'सर्व्हरशी कनेक्ट करण्यात अक्षम. कृपया तुमचे नेटवर्क कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.',
 
     // Navigation & Tabs
@@ -470,7 +470,7 @@ export const translations = {
     good_afternoon: 'शुभ दुपार,',
     good_evening: 'शुभ संध्याकाळ,',
     welcome_back: 'नमस्कार,',
-    field_officer: 'फील्ड ऑफिसर',
+    field_officer: 'ऑफिसर',
     quick_actions: 'जलद कृती',
     mark_attendance: 'हजेरी नोंदवा',
     view_sites: 'नियुक्त साइट्स पहा',
@@ -506,7 +506,7 @@ export const translations = {
     all_clients: 'सर्व क्लायंट (सर्व साइट्स पहा)',
 
     // Visits List Screen
-    field_officer_visits: 'फील्ड ऑफिसर भेटी',
+    field_officer_visits: 'ऑफिसर भेटी',
     all_clear: 'सर्व व्यवस्थित!',
     no_pending_visits_desc: 'कोणत्याही प्रलंबित भेटी नियोजित नाहीत.',
     no_reports_yet: 'अद्याप कोणतेही अहवाल नाहीत',
