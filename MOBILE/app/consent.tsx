@@ -6,12 +6,14 @@ import { ShieldCheck, Lock, Cookie, FileText, CheckCircle2, ArrowRight } from 'l
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { saveConsentSetting } from '../services/db';
+import { useTheme } from '../context/ThemeContext';
 import { THEME } from '../constants/theme';
 import { Button } from '../components/ui/Button';
 
 export default function ConsentScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,80 +39,80 @@ export default function ConsentScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header Badge */}
         <View style={styles.headerContainer}>
           <View style={styles.iconCircle}>
-            <ShieldCheck color="#3B82F6" size={36} />
+            <ShieldCheck color={colors.primary} size={36} />
           </View>
-          <Text style={styles.headerTitle}>{t('privacy_policy_title')}</Text>
-          <Text style={styles.headerSubtitle}>{t('privacy_policy_subtitle')}</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{t('privacy_policy_title')}</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textVariant }]}>{t('privacy_policy_subtitle')}</Text>
         </View>
 
         {/* 1. Consent Notice Banner */}
         <View style={styles.consentNoticeCard}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.noticeIconCircle}>
-              <CheckCircle2 color="#3B82F6" size={20} />
+              <CheckCircle2 color={colors.primary} size={20} />
             </View>
-            <Text style={styles.consentNoticeTitle}>{t('consent_notice_title')}</Text>
+            <Text style={[styles.consentNoticeTitle, { color: colors.primary }]}>{t('consent_notice_title')}</Text>
           </View>
-          <Text style={styles.consentNoticeText}>{t('consent_notice_text')}</Text>
+          <Text style={[styles.consentNoticeText, { color: colors.text }]}>{t('consent_notice_text')}</Text>
         </View>
 
         {/* 2. Privacy Policy Card */}
-        <View style={styles.policyCard}>
+        <View style={[styles.policyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.blueIconCircle}>
-              <Lock color="#3B82F6" size={18} />
+              <Lock color={colors.primary} size={18} />
             </View>
-            <Text style={styles.cardTitle}>{t('privacy_policy_title')}</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('privacy_policy_title')}</Text>
           </View>
-          <Text style={styles.policySubtitle}>{t('privacy_policy_subtitle')}</Text>
+          <Text style={[styles.policySubtitle, { color: colors.textVariant }]}>{t('privacy_policy_subtitle')}</Text>
 
           <View style={styles.pointsList}>
-            <View style={styles.pointItem}>
-              <Text style={styles.pointText}>{t('privacy_p1')}</Text>
+            <View style={[styles.pointItem, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+              <Text style={[styles.pointText, { color: colors.text }]}>{t('privacy_p1')}</Text>
             </View>
-            <View style={styles.pointItem}>
-              <Text style={styles.pointText}>{t('privacy_p2')}</Text>
+            <View style={[styles.pointItem, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+              <Text style={[styles.pointText, { color: colors.text }]}>{t('privacy_p2')}</Text>
             </View>
-            <View style={styles.pointItem}>
-              <Text style={styles.pointText}>{t('privacy_p3')}</Text>
+            <View style={[styles.pointItem, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+              <Text style={[styles.pointText, { color: colors.text }]}>{t('privacy_p3')}</Text>
             </View>
-            <View style={styles.pointItem}>
-              <Text style={styles.pointText}>{t('privacy_p4')}</Text>
+            <View style={[styles.pointItem, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+              <Text style={[styles.pointText, { color: colors.text }]}>{t('privacy_p4')}</Text>
             </View>
-            <View style={styles.pointItem}>
-              <Text style={styles.pointText}>{t('privacy_p5')}</Text>
+            <View style={[styles.pointItem, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+              <Text style={[styles.pointText, { color: colors.text }]}>{t('privacy_p5')}</Text>
             </View>
           </View>
         </View>
 
         {/* 3. Cookie Policy Card */}
-        <View style={styles.policyCard}>
+        <View style={[styles.policyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.amberIconCircle}>
               <Cookie color="#F59E0B" size={18} />
             </View>
-            <Text style={styles.cardTitle}>{t('cookie_policy_title')}</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('cookie_policy_title')}</Text>
           </View>
-          <Text style={styles.policySubtitle}>{t('cookie_policy_subtitle')}</Text>
+          <Text style={[styles.policySubtitle, { color: colors.textVariant }]}>{t('cookie_policy_subtitle')}</Text>
 
           <View style={styles.pointsList}>
-            <View style={styles.pointItem}>
-              <Text style={styles.pointText}>{t('cookie_p1')}</Text>
+            <View style={[styles.pointItem, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+              <Text style={[styles.pointText, { color: colors.text }]}>{t('cookie_p1')}</Text>
             </View>
-            <View style={styles.pointItem}>
-              <Text style={styles.pointText}>{t('cookie_p2')}</Text>
+            <View style={[styles.pointItem, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+              <Text style={[styles.pointText, { color: colors.text }]}>{t('cookie_p2')}</Text>
             </View>
           </View>
         </View>
       </ScrollView>
 
       {/* Fixed Footer Action Button */}
-      <View style={styles.footerContainer}>
+      <View style={[styles.footerContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
         <Button
           title={t('accept_and_continue')}
           onPress={handleAcceptAndContinue}

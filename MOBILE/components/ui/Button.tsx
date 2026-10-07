@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 interface ButtonProps {
   title: string;
@@ -23,23 +23,25 @@ export const Button: React.FC<ButtonProps> = ({
   textStyle,
   icon,
 }) => {
+  const { colors, theme } = useTheme();
+
   const getBackgroundColor = () => {
-    if (disabled) return '#334155';
+    if (disabled) return colors.textVariant;
     switch (variant) {
-      case 'primary': return THEME.primary;
-      case 'secondary': return THEME.secondary;
-      case 'danger': return THEME.danger;
+      case 'primary': return colors.primary;
+      case 'secondary': return colors.secondary;
+      case 'danger': return colors.danger;
       case 'outline': return 'transparent';
       case 'ghost': return 'transparent';
-      default: return THEME.primary;
+      default: return colors.primary;
     }
   };
 
   const getTextColor = () => {
     if (disabled) return '#94A3B8';
     switch (variant) {
-      case 'outline': return THEME.primary;
-      case 'ghost': return THEME.textVariant;
+      case 'outline': return colors.primary;
+      case 'ghost': return colors.textVariant;
       default: return '#FFFFFF';
     }
   };
@@ -52,7 +54,7 @@ export const Button: React.FC<ButtonProps> = ({
       style={[
         styles.button,
         { backgroundColor: getBackgroundColor() },
-        variant === 'outline' && { borderWidth: 1, borderColor: THEME.primary },
+        variant === 'outline' && { borderWidth: 1, borderColor: colors.primary },
         style,
       ]}
     >
@@ -61,7 +63,7 @@ export const Button: React.FC<ButtonProps> = ({
       ) : (
         <>
           {icon}
-          <Text style={[styles.text, { color: getTextColor() }, textStyle, icon ? { marginLeft: 8 } : null]}>
+          <Text style={[styles.text, { color: getTextColor(), fontSize: theme.typography.md }, textStyle, icon ? { marginLeft: 8 } : null]}>
             {title}
           </Text>
         </>
@@ -81,7 +83,6 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
   text: {
-    fontSize: THEME.typography.md,
     fontWeight: '600',
   },
 });

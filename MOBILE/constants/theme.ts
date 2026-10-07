@@ -38,9 +38,19 @@ export const Colors = {
   },
 };
 
-export const THEME = {
-  ...Colors.dark, // Default to dark theme like APL mobile
-  gradients: {
+export const getTheme = (mode: 'light' | 'dark' = 'dark') => ({
+  ...Colors[mode],
+  mode,
+  isDark: mode === 'dark',
+  gradients: mode === 'light' ? {
+    primary: ['#1A237E', '#2979FF'],
+    secondary: ['#10B981', '#059669'],
+    accent: ['#F59E0B', '#D97706'],
+    night: ['#312E81', '#4338CA'],
+    day: ['#0284C7', '#0369A1'],
+    general: ['#059669', '#047857'],
+    glass: ['#FFFFFF', '#F1F5F9'],
+  } : {
     primary: ['#1A237E', '#3949AB'],
     secondary: ['#10B981', '#059669'],
     accent: ['#F59E0B', '#D97706'],
@@ -73,7 +83,10 @@ export const THEME = {
     xl: 22,
     xxl: 28,
   },
-};
+});
+
+export const THEME = getTheme('dark');
+
 
 export const Fonts = Platform.select({
   ios: {

@@ -19,12 +19,14 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { CustomAlertModal } from '../../components/ui/CustomAlertModal';
 import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 
 export default function ProfileScreen() {
   const { user, logout, profileImage } = useAuth();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
@@ -71,30 +73,30 @@ export default function ProfileScreen() {
 
   return (
     <SwipeableBackWrapper>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <ScrollView contentContainerStyle={styles.content}>
           {/* 1. EXECUTIVE PROFILE HEADER CARD */}
-          <View style={styles.executiveHeaderCard}>
+          <View style={[styles.executiveHeaderCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <ArrowLeft color="#3B82F6" size={22} />
+              <ArrowLeft color={colors.primary} size={22} />
             </TouchableOpacity>
 
-            <View style={styles.avatarBox}>
+            <View style={[styles.avatarBox, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]}>
               {profileImage ? (
                 <Image source={{ uri: profileImage }} style={styles.avatarImage} />
               ) : (
-                <User color="#FFFFFF" size={38} />
+                <User color={colors.textVariant} size={38} />
               )}
             </View>
 
-            <Text style={styles.execLabel}>{t('exec_profile')}</Text>
-            <Text style={styles.execName}>{user?.name || 'Manish Kenjale'}</Text>
-            <Text style={styles.execRole}>{(user?.role || t('field_officer')).toUpperCase()}</Text>
+            <Text style={[styles.execLabel, { color: colors.primary }]}>{t('exec_profile')}</Text>
+            <Text style={[styles.execName, { color: colors.text }]}>{user?.name || 'Manish Kenjale'}</Text>
+            <Text style={[styles.execRole, { color: colors.textVariant }]}>{(user?.role || t('field_officer')).toUpperCase()}</Text>
 
             <View style={styles.pillsRow}>
-              <View style={styles.empBadge}>
-                <ShieldCheck color="#3B82F6" size={14} style={{ marginRight: 4 }} />
-                <Text style={styles.empBadgeText}>{user?.employee_id || 'EMP003'}</Text>
+              <View style={[styles.empBadge, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.8)' : '#E2E8F0', borderColor: colors.border }]}>
+                <ShieldCheck color={colors.primary} size={14} style={{ marginRight: 4 }} />
+                <Text style={[styles.empBadgeText, { color: colors.text }]}>{user?.employee_id || 'EMP003'}</Text>
               </View>
 
               <View style={styles.activeBadge}>
@@ -105,41 +107,41 @@ export default function ProfileScreen() {
           </View>
 
           {/* 2. CAREER & DEPLOYMENT SECTION */}
-          <Text style={styles.sectionHeaderTitle}>{t('career_deployment')}</Text>
+          <Text style={[styles.sectionHeaderTitle, { color: colors.text }]}>{t('career_deployment')}</Text>
 
           {/* Joining Date & Tenure Card */}
-          <View style={styles.detailsCard}>
+          <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardRowHeader}>
-              <Text style={styles.fieldLabel}>{t('joining_date')}</Text>
-              <Calendar color="#3B82F6" size={20} />
+              <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('joining_date')}</Text>
+              <Calendar color={colors.primary} size={20} />
             </View>
-            <Text style={styles.mainValText}>{joiningDateFormatted}</Text>
+            <Text style={[styles.mainValText, { color: colors.text }]}>{joiningDateFormatted}</Text>
 
-            <Text style={[styles.fieldLabel, { marginTop: 16 }]}>{t('tenure')}</Text>
-            <Text style={styles.mainValText}>{tenureFormatted}</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 16, color: colors.textVariant }]}>{t('tenure')}</Text>
+            <Text style={[styles.mainValText, { color: colors.text }]}>{tenureFormatted}</Text>
           </View>
 
           {/* Deployment Date & Site Card */}
-          <View style={styles.detailsCard}>
+          <View style={[styles.detailsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardRowHeader}>
-              <Text style={styles.fieldLabel}>{t('deployment_date')}</Text>
-              <MapPin color="#3B82F6" size={20} />
+              <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('deployment_date')}</Text>
+              <MapPin color={colors.primary} size={20} />
             </View>
-            <Text style={styles.mainValText}>{joiningDateFormatted}</Text>
+            <Text style={[styles.mainValText, { color: colors.text }]}>{joiningDateFormatted}</Text>
 
-            <View style={styles.subDetailPill}>
-              <Text style={styles.pillLabel}>{t('client')}</Text>
-              <Text style={styles.pillValue}>{clientNameVal}</Text>
-            </View>
-
-            <View style={styles.subDetailPill}>
-              <Text style={styles.pillLabel}>{t('branch')}</Text>
-              <Text style={styles.pillValue}>{branchNameVal}</Text>
+            <View style={[styles.subDetailPill, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : '#F1F5F9', borderColor: colors.border }]}>
+              <Text style={[styles.pillLabel, { color: colors.textVariant }]}>{t('client')}</Text>
+              <Text style={[styles.pillValue, { color: colors.text }]}>{clientNameVal}</Text>
             </View>
 
-            <View style={styles.subDetailPill}>
-              <Text style={styles.pillLabel}>{t('site')}</Text>
-              <Text style={styles.pillValue}>{siteNameVal}</Text>
+            <View style={[styles.subDetailPill, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : '#F1F5F9', borderColor: colors.border }]}>
+              <Text style={[styles.pillLabel, { color: colors.textVariant }]}>{t('branch')}</Text>
+              <Text style={[styles.pillValue, { color: colors.text }]}>{branchNameVal}</Text>
+            </View>
+
+            <View style={[styles.subDetailPill, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : '#F1F5F9', borderColor: colors.border }]}>
+              <Text style={[styles.pillLabel, { color: colors.textVariant }]}>{t('site')}</Text>
+              <Text style={[styles.pillValue, { color: colors.text }]}>{siteNameVal}</Text>
             </View>
           </View>
 
@@ -153,7 +155,7 @@ export default function ProfileScreen() {
             <Text style={styles.signOutBtnText}>{t('sign_out_session')}</Text>
           </TouchableOpacity>
 
-          <Text style={styles.copyrightText}>© 2026 HUMANKIND TECHNOLOGY</Text>
+          <Text style={[styles.copyrightText, { color: colors.textVariant }]}>© 2026 HUMANKIND TECHNOLOGY</Text>
         </ScrollView>
 
         <CustomAlertModal

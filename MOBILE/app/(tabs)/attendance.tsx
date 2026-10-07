@@ -32,6 +32,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 import { getPunchRecords } from '../../services/db';
 
@@ -39,6 +40,7 @@ export default function AttendanceScreen() {
   const { user, profileImage } = useAuth();
   const { todayRecord, attendanceLogs, monthlyStats: apiMonthlyStats, refreshStatus } = useAttendance();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
 
@@ -176,7 +178,7 @@ export default function AttendanceScreen() {
 
   // Digital Live Timer calculating elapsed time from Punch In timestamp
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     const nowMs = Date.now();
     const activePunch = punchRecords.find((r) => {
       const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
@@ -382,8 +384,8 @@ export default function AttendanceScreen() {
 
   return (
     <SwipeableBackWrapper>
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
         {/* ----------------- SUB-VIEW 1: ATTENDANCE DASHBOARD ----------------- */}
         {activeSubView === 'dashboard' && (
@@ -392,30 +394,30 @@ export default function AttendanceScreen() {
             refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor="#FFFFFF" />}
           >
             {/* 1. Header Profile Card */}
-            <View style={styles.headerProfileCard}>
+            <View style={[styles.headerProfileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <ArrowLeft color="#FFFFFF" size={20} />
+                <ArrowLeft color={colors.primary} size={20} />
               </TouchableOpacity>
 
-              <View style={styles.avatarBox}>
+              <View style={[styles.avatarBox, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]}>
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.avatarImg} />
                 ) : (
-                  <User color="#FFFFFF" size={32} />
+                  <User color={colors.textVariant} size={32} />
                 )}
               </View>
 
               <View style={styles.headerTextCol}>
-                <Text style={styles.greetingText} numberOfLines={1}>Good Afternoon,</Text>
+                <Text style={[styles.greetingText, { color: colors.textVariant }]} numberOfLines={1}>Good Afternoon,</Text>
                 <View style={styles.nameRow}>
-                  <Text style={styles.userNameText} numberOfLines={1}>
+                  <Text style={[styles.userNameText, { color: colors.text }]} numberOfLines={1}>
                     {user?.name || 'PAPPU KUMAR'}
                   </Text>
                   <View style={styles.versionBadge}>
                     <Text style={styles.versionText}>v3.0.4</Text>
                   </View>
                 </View>
-                <Text style={styles.empIdText}>EMP ID: {user?.employee_id || 'S48453'}</Text>
+                <Text style={[styles.empIdText, { color: colors.primary }]}>EMP ID: {user?.employee_id || 'S48453'}</Text>
               </View>
             </View>
 
@@ -474,69 +476,69 @@ export default function AttendanceScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={() => router.push('/mark-attendance')}
-              style={styles.markAttendanceBigCard}
+              style={[styles.markAttendanceBigCard, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
-              <View style={styles.bigFingerprintBox}>
-                <Fingerprint color="#3B82F6" size={42} />
+              <View style={[styles.bigFingerprintBox, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
+                <Fingerprint color={colors.primary} size={42} />
               </View>
-              <Text style={styles.markAttendanceTitle}>MARK ATTENDANCE</Text>
+              <Text style={[styles.markAttendanceTitle, { color: colors.text }]}>MARK ATTENDANCE</Text>
             </TouchableOpacity>
 
             {/* 4. Monthly Attendance Stats Card */}
-            <View style={styles.standardCard}>
-              <Text style={styles.cardHeaderTitle}>
+            <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.cardHeaderTitle, { color: colors.primary }]}>
                 MONTHLY ATTENDANCE - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}
               </Text>
 
               <View style={styles.statsRow}>
                 <View style={styles.statBox}>
-                  <View style={styles.statSquare}>
+                  <View style={[styles.statSquare, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
                     <Text style={[styles.statNumberText, { color: '#60A5FA' }]}>
                       {String(monthlyStats.totalDays).padStart(2, '0')}
                     </Text>
                   </View>
-                  <Text style={styles.statLabelText}>Total Days</Text>
+                  <Text style={[styles.statLabelText, { color: colors.textVariant }]}>Total Days</Text>
                 </View>
 
                 <View style={styles.statBox}>
-                  <View style={styles.statSquare}>
+                  <View style={[styles.statSquare, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
                     <Text style={[styles.statNumberText, { color: '#10B981' }]}>
                       {String(monthlyStats.present).padStart(2, '0')}
                     </Text>
                   </View>
-                  <Text style={styles.statLabelText}>Days Present</Text>
+                  <Text style={[styles.statLabelText, { color: colors.textVariant }]}>Days Present</Text>
                 </View>
 
                 <View style={styles.statBox}>
-                  <View style={styles.statSquare}>
+                  <View style={[styles.statSquare, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
                     <Text style={[styles.statNumberText, { color: '#EF4444' }]}>
                       {String(monthlyStats.absent).padStart(2, '0')}
                     </Text>
                   </View>
-                  <Text style={styles.statLabelText}>Days Absent</Text>
+                  <Text style={[styles.statLabelText, { color: colors.textVariant }]}>Days Absent</Text>
                 </View>
               </View>
             </View>
 
             {/* 5. Recent Activity Card */}
-            <View style={styles.standardCard}>
+            <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.recentActivityHeader}>
-                <Text style={styles.recentTitleText}>RECENT ACTIVITY</Text>
+                <Text style={[styles.recentTitleText, { color: colors.primary }]}>RECENT ACTIVITY</Text>
                 <TouchableOpacity onPress={() => setActiveSubView('logs')}>
-                  <Text style={styles.viewAllLogsText}>VIEW ALL LOGS</Text>
+                  <Text style={[styles.viewAllLogsText, { color: colors.primary }]}>VIEW ALL LOGS</Text>
                 </TouchableOpacity>
               </View>
 
               {latestPunch ? (
-                <View style={styles.activityItemBox}>
+                <View style={[styles.activityItemBox, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: colors.border }]}>
                   <View style={styles.activityIconSquare}>
                     <LogIn color="#10B981" size={18} />
                   </View>
                   <View style={styles.activityTextCol}>
-                    <Text style={styles.activityMainText}>
+                    <Text style={[styles.activityMainText, { color: colors.text }]}>
                       {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? 'Punch Out' : 'Punch In'}
                     </Text>
-                    <Text style={styles.activitySubText}>
+                    <Text style={[styles.activitySubText, { color: colors.textVariant }]}>
                       {latestPunch.date}, {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? latestPunch.punchOutTime : latestPunch.punchInTime}
                     </Text>
                   </View>
@@ -557,42 +559,42 @@ export default function AttendanceScreen() {
         {activeSubView === 'logs' && (
           <ScrollView
             contentContainerStyle={styles.scrollContent}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor="#FFFFFF" />}
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor={colors.primary} />}
           >
             {/* Header Bar */}
             <View style={styles.logsHeaderBar}>
               <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <ArrowLeft color="#FFFFFF" size={22} />
+                <ArrowLeft color={colors.text} size={22} />
               </TouchableOpacity>
               <View style={styles.logsTitleCol}>
-                <Text style={styles.officerNameText}>{user?.name || 'PAPPU KUMAR'}</Text>
-                <Text style={styles.officerRoleText}>{(user?.role || 'OFFICER').toUpperCase()}</Text>
+                <Text style={[styles.officerNameText, { color: colors.text }]}>{user?.name || 'PAPPU KUMAR'}</Text>
+                <Text style={[styles.officerRoleText, { color: colors.textVariant }]}>{(user?.role || 'OFFICER').toUpperCase()}</Text>
               </View>
             </View>
 
             {/* Search Input Bar */}
-            <View style={styles.searchBarBox}>
-              <Search color="#64748B" size={18} style={{ marginRight: 10 }} />
+            <View style={[styles.searchBarBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Search color={colors.textVariant} size={18} style={{ marginRight: 10 }} />
               <TextInput
-                style={styles.searchInputText}
+                style={[styles.searchInputText, { color: colors.text }]}
                 placeholder="Search logs..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.textVariant}
                 value={searchLogs}
                 onChangeText={setSearchLogs}
               />
             </View>
 
             {/* Time Filter Tabs */}
-            <View style={styles.filterPillsContainer}>
+            <View style={[styles.filterPillsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TouchableOpacity
                 onPress={() => {
                   setLogFilter('week');
                   setViewMonthOffset(0);
                   setSelectedDate(null);
                 }}
-                style={[styles.filterPillBtn, logFilter === 'week' && styles.filterPillActive]}
+                style={[styles.filterPillBtn, logFilter === 'week' && [styles.filterPillActive, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]]}
               >
-                <Text style={[styles.filterPillText, logFilter === 'week' && styles.filterPillTextActive]}>
+                <Text style={[styles.filterPillText, { color: colors.textVariant }, logFilter === 'week' && { color: colors.primary, fontWeight: '800' }]}>
                   Current Week
                 </Text>
               </TouchableOpacity>
@@ -603,9 +605,9 @@ export default function AttendanceScreen() {
                   setViewMonthOffset(0);
                   setSelectedDate(null);
                 }}
-                style={[styles.filterPillBtn, logFilter === 'month' && styles.filterPillActive]}
+                style={[styles.filterPillBtn, logFilter === 'month' && [styles.filterPillActive, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]]}
               >
-                <Text style={[styles.filterPillText, logFilter === 'month' && styles.filterPillTextActive]}>
+                <Text style={[styles.filterPillText, { color: colors.textVariant }, logFilter === 'month' && { color: colors.primary, fontWeight: '800' }]}>
                   Current Month
                 </Text>
               </TouchableOpacity>
@@ -616,9 +618,9 @@ export default function AttendanceScreen() {
                   setViewMonthOffset(-1);
                   setSelectedDate(null);
                 }}
-                style={[styles.filterPillBtn, logFilter === 'prev' && styles.filterPillActive]}
+                style={[styles.filterPillBtn, logFilter === 'prev' && [styles.filterPillActive, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]]}
               >
-                <Text style={[styles.filterPillText, logFilter === 'prev' && styles.filterPillTextActive]}>
+                <Text style={[styles.filterPillText, { color: colors.textVariant }, logFilter === 'prev' && { color: colors.primary, fontWeight: '800' }]}>
                   Previous Month
                 </Text>
               </TouchableOpacity>
@@ -626,28 +628,28 @@ export default function AttendanceScreen() {
 
             {/* Dynamic Date Selector Strip - ONLY shown when Previous Month tab is active */}
             {logFilter === 'prev' && (
-              <View style={styles.dateStripCard}>
+              <View style={[styles.dateStripCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.monthNavHeader}>
                   <TouchableOpacity
                     onPress={() => {
                       setViewMonthOffset((prev) => prev - 1);
                       setSelectedDate(null);
                     }}
-                    style={styles.navArrowBtn}
+                    style={[styles.navArrowBtn, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}
                   >
-                    <ChevronLeft color="#94A3B8" size={20} />
+                    <ChevronLeft color={colors.textVariant} size={20} />
                   </TouchableOpacity>
 
-                  <Text style={styles.monthNavTitle}>{daysInViewMonth.monthName.toUpperCase()}</Text>
+                  <Text style={[styles.monthNavTitle, { color: colors.text }]}>{daysInViewMonth.monthName.toUpperCase()}</Text>
 
                   <TouchableOpacity
                     onPress={() => {
                       setViewMonthOffset((prev) => Math.min(0, prev + 1));
                       setSelectedDate(null);
                     }}
-                    style={styles.navArrowBtn}
+                    style={[styles.navArrowBtn, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}
                   >
-                    <ChevronRight color="#94A3B8" size={20} />
+                    <ChevronRight color={colors.textVariant} size={20} />
                   </TouchableOpacity>
                 </View>
 
@@ -667,14 +669,32 @@ export default function AttendanceScreen() {
                         onPress={() => setSelectedDate(isSelected ? null : item.dateStr)}
                         style={[
                           styles.dayPillBtn,
+                          { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
                           isSelected && styles.dayPillActive,
-                          hasRecord && !isSelected && styles.dayPillHasRecord,
+                          hasRecord && !isSelected && {
+                            borderColor: 'rgba(59, 130, 246, 0.4)',
+                            backgroundColor: isDark ? '#1A2438' : '#DBEAFE',
+                          },
                         ]}
                       >
-                        <Text style={[styles.dayNameLabel, isSelected && styles.dayNameActive]}>
+                        <Text
+                          style={[
+                            styles.dayNameLabel,
+                            { color: colors.textVariant },
+                            isSelected && styles.dayNameActive,
+                            hasRecord && !isSelected && { color: isDark ? '#94A3B8' : '#1E40AF' },
+                          ]}
+                        >
                           {item.dayName}
                         </Text>
-                        <Text style={[styles.dayNumDigits, isSelected && styles.dayNumActive]}>
+                        <Text
+                          style={[
+                            styles.dayNumDigits,
+                            { color: colors.text },
+                            isSelected && styles.dayNumActive,
+                            hasRecord && !isSelected && { color: isDark ? '#FFFFFF' : '#1E3A8A' },
+                          ]}
+                        >
                           {item.dayNum}
                         </Text>
                         {hasRecord && (
@@ -682,6 +702,7 @@ export default function AttendanceScreen() {
                             style={[
                               styles.recordIndicatorDot,
                               isSelected && { backgroundColor: '#FFFFFF' },
+                              !isSelected && { backgroundColor: isDark ? '#3B82F6' : '#2563EB' },
                             ]}
                           />
                         )}
@@ -692,8 +713,8 @@ export default function AttendanceScreen() {
 
                 {selectedDate && (
                   <View style={styles.selectedDateBanner}>
-                    <Text style={styles.selectedDateText}>
-                      Filtered by date: <Text style={{ color: '#3B82F6', fontWeight: '800' }}>{selectedDate}</Text>
+                    <Text style={[styles.selectedDateText, { color: colors.textVariant }]}>
+                      Filtered by date: <Text style={{ color: colors.primary, fontWeight: '800' }}>{selectedDate}</Text>
                     </Text>
                     <TouchableOpacity onPress={() => setSelectedDate(null)}>
                       <Text style={styles.clearFilterText}>Clear Filter</Text>
@@ -706,51 +727,67 @@ export default function AttendanceScreen() {
             {/* Dynamic Log Cards List */}
             {filteredLogs.length === 0 ? (
               <View style={styles.emptyLogBox}>
-                <Clock color="#64748B" size={32} />
-                <Text style={styles.emptyLogText}>No attendance logs found.</Text>
+                <Clock color={colors.textVariant} size={32} />
+                <Text style={[styles.emptyLogText, { color: colors.textVariant }]}>No attendance logs found.</Text>
               </View>
             ) : (
-              filteredLogs.map((log) => (
-                <View key={log.id || log.date} style={styles.logCardItem}>
-                  <View style={styles.logHeaderRow}>
-                    <Text style={styles.logDateTitle}>{log.dayTitle || log.date}</Text>
-                    <View
-                      style={[
-                        styles.punchedInBadge,
-                        (log.status === 'COMPLETED' || log.status === 'PRESENT') && {
-                          backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                          borderColor: 'rgba(16, 185, 129, 0.3)',
-                        },
-                      ]}
-                    >
-                      <Clock
-                        color={log.status === 'COMPLETED' || log.status === 'PRESENT' ? '#10B981' : '#F59E0B'}
-                        size={14}
-                        style={{ marginRight: 4 }}
-                      />
-                      <Text
+              filteredLogs.map((log) => {
+                const isPresent = log.status === 'COMPLETED' || log.status === 'PRESENT';
+                const statusColor = isPresent ? '#10B981' : (isDark ? '#F59E0B' : '#D97706');
+                const badgeBg = isPresent
+                  ? (isDark ? 'rgba(16, 185, 129, 0.15)' : '#D1FAE5')
+                  : (isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7');
+                const badgeBorder = isPresent
+                  ? (isDark ? 'rgba(16, 185, 129, 0.3)' : 'rgba(16, 185, 129, 0.4)')
+                  : (isDark ? 'rgba(245, 158, 11, 0.3)' : 'rgba(245, 158, 11, 0.4)');
+
+                return (
+                  <View
+                    key={log.id || log.date}
+                    style={[
+                      styles.logCardItem,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                        borderLeftColor: isPresent ? '#10B981' : '#F59E0B',
+                      },
+                    ]}
+                  >
+                    <View style={styles.logHeaderRow}>
+                      <Text style={[styles.logDateTitle, { color: colors.primary }]}>{log.dayTitle || log.date}</Text>
+                      <View
                         style={[
-                          styles.punchedInText,
-                          (log.status === 'COMPLETED' || log.status === 'PRESENT') && { color: '#10B981' },
+                          styles.punchedInBadge,
+                          {
+                            backgroundColor: badgeBg,
+                            borderColor: badgeBorder,
+                          },
                         ]}
                       >
-                        {log.status === 'COMPLETED' || log.status === 'PRESENT' ? 'PRESENT' : 'PUNCHED-IN'}
-                      </Text>
+                        <Clock
+                          color={statusColor}
+                          size={14}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={[styles.punchedInText, { color: statusColor }]}>
+                          {isPresent ? 'PRESENT' : 'PUNCHED-IN'}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
 
-                  <View style={styles.punchDetailsRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.fieldSubLabel}>PUNCH IN</Text>
-                      <Text style={styles.timeValText}>{log.punchInTime || '11:00'}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.fieldSubLabel}>PUNCH OUT</Text>
-                      <Text style={styles.timeValText}>{log.punchOutTime || '--:--'}</Text>
+                    <View style={styles.punchDetailsRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldSubLabel, { color: colors.textVariant }]}>PUNCH IN</Text>
+                        <Text style={[styles.timeValText, { color: colors.text }]}>{log.punchInTime || '11:00'}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldSubLabel, { color: colors.textVariant }]}>PUNCH OUT</Text>
+                        <Text style={[styles.timeValText, { color: colors.text }]}>{log.punchOutTime || '--:--'}</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-              ))
+                );
+              })
             )}
           </ScrollView>
         )}
@@ -759,16 +796,16 @@ export default function AttendanceScreen() {
         {activeSubView === 'missed' && (
           <ScrollView
             contentContainerStyle={styles.scrollContent}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor="#FFFFFF" />}
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor={colors.primary} />}
           >
             {/* Header Bar */}
             <View style={styles.logsHeaderBar}>
               <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <ArrowLeft color="#FFFFFF" size={22} />
+                <ArrowLeft color={colors.text} size={22} />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <Text style={styles.missedTitleText}>Missed Punches</Text>
-                <Text style={styles.missedSubText}>ATTENDANCE RECTIFICATION CENTER</Text>
+                <Text style={[styles.missedTitleText, { color: colors.primary }]}>Missed Punches</Text>
+                <Text style={[styles.missedSubText, { color: colors.textVariant }]}>ATTENDANCE RECTIFICATION CENTER</Text>
               </View>
             </View>
 
@@ -784,16 +821,16 @@ export default function AttendanceScreen() {
             </View>
 
             {/* Range Filter Tabs */}
-            <View style={styles.rangeFilterContainer}>
+            <View style={[styles.rangeFilterContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TouchableOpacity
                 onPress={() => {
                   setMissedFilter('weekly');
                   setViewMonthOffset(0);
                   setSelectedDate(null);
                 }}
-                style={[styles.rangePillBtn, missedFilter === 'weekly' && styles.rangePillActive]}
+                style={[styles.rangePillBtn, missedFilter === 'weekly' && [styles.rangePillActive, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]]}
               >
-                <Text style={[styles.rangePillText, missedFilter === 'weekly' && styles.rangePillTextActive]}>
+                <Text style={[styles.rangePillText, { color: colors.textVariant }, missedFilter === 'weekly' && { color: colors.primary, fontWeight: '800' }]}>
                   WEEKLY
                 </Text>
               </TouchableOpacity>
@@ -804,9 +841,9 @@ export default function AttendanceScreen() {
                   setViewMonthOffset(0);
                   setSelectedDate(null);
                 }}
-                style={[styles.rangePillBtn, missedFilter === 'monthly' && styles.rangePillActive]}
+                style={[styles.rangePillBtn, missedFilter === 'monthly' && [styles.rangePillActive, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]]}
               >
-                <Text style={[styles.rangePillText, missedFilter === 'monthly' && styles.rangePillTextActive]}>
+                <Text style={[styles.rangePillText, { color: colors.textVariant }, missedFilter === 'monthly' && { color: colors.primary, fontWeight: '800' }]}>
                   MONTHLY
                 </Text>
               </TouchableOpacity>
@@ -817,9 +854,9 @@ export default function AttendanceScreen() {
                   setViewMonthOffset(-1);
                   setSelectedDate(null);
                 }}
-                style={[styles.rangePillBtn, missedFilter === 'custom' && styles.rangePillActive]}
+                style={[styles.rangePillBtn, missedFilter === 'custom' && [styles.rangePillActive, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: colors.primary }]]}
               >
-                <Text style={[styles.rangePillText, missedFilter === 'custom' && styles.rangePillTextActive]}>
+                <Text style={[styles.rangePillText, { color: colors.textVariant }, missedFilter === 'custom' && { color: colors.primary, fontWeight: '800' }]}>
                   CUSTOM RANGE
                 </Text>
               </TouchableOpacity>
@@ -827,28 +864,28 @@ export default function AttendanceScreen() {
 
             {/* Dynamic Date Selector Strip - ONLY shown when CUSTOM RANGE / PREVIOUS MONTH tab is active */}
             {missedFilter === 'custom' && (
-              <View style={styles.dateStripCard}>
+              <View style={[styles.dateStripCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.monthNavHeader}>
                   <TouchableOpacity
                     onPress={() => {
                       setViewMonthOffset((prev) => prev - 1);
                       setSelectedDate(null);
                     }}
-                    style={styles.navArrowBtn}
+                    style={[styles.navArrowBtn, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}
                   >
-                    <ChevronLeft color="#94A3B8" size={20} />
+                    <ChevronLeft color={colors.textVariant} size={20} />
                   </TouchableOpacity>
 
-                  <Text style={styles.monthNavTitle}>{daysInViewMonth.monthName.toUpperCase()}</Text>
+                  <Text style={[styles.monthNavTitle, { color: colors.text }]}>{daysInViewMonth.monthName.toUpperCase()}</Text>
 
                   <TouchableOpacity
                     onPress={() => {
                       setViewMonthOffset((prev) => Math.min(0, prev + 1));
                       setSelectedDate(null);
                     }}
-                    style={styles.navArrowBtn}
+                    style={[styles.navArrowBtn, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}
                   >
-                    <ChevronRight color="#94A3B8" size={20} />
+                    <ChevronRight color={colors.textVariant} size={20} />
                   </TouchableOpacity>
                 </View>
 
@@ -870,14 +907,32 @@ export default function AttendanceScreen() {
                         onPress={() => setSelectedDate(isSelected ? null : item.dateStr)}
                         style={[
                           styles.dayPillBtn,
+                          { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
                           isSelected && styles.dayPillActive,
-                          hasRecord && !isSelected && styles.dayPillHasRecord,
+                          hasRecord && !isSelected && {
+                            borderColor: 'rgba(59, 130, 246, 0.4)',
+                            backgroundColor: isDark ? '#1A2438' : '#DBEAFE',
+                          },
                         ]}
                       >
-                        <Text style={[styles.dayNameLabel, isSelected && styles.dayNameActive]}>
+                        <Text
+                          style={[
+                            styles.dayNameLabel,
+                            { color: colors.textVariant },
+                            isSelected && styles.dayNameActive,
+                            hasRecord && !isSelected && { color: isDark ? '#94A3B8' : '#1E40AF' },
+                          ]}
+                        >
                           {item.dayName}
                         </Text>
-                        <Text style={[styles.dayNumDigits, isSelected && styles.dayNumActive]}>
+                        <Text
+                          style={[
+                            styles.dayNumDigits,
+                            { color: colors.text },
+                            isSelected && styles.dayNumActive,
+                            hasRecord && !isSelected && { color: isDark ? '#FFFFFF' : '#1E3A8A' },
+                          ]}
+                        >
                           {item.dayNum}
                         </Text>
                         {hasRecord && (
@@ -885,6 +940,7 @@ export default function AttendanceScreen() {
                             style={[
                               styles.recordIndicatorDot,
                               isSelected && { backgroundColor: '#FFFFFF' },
+                              !isSelected && { backgroundColor: isDark ? '#3B82F6' : '#2563EB' },
                             ]}
                           />
                         )}
@@ -895,8 +951,8 @@ export default function AttendanceScreen() {
 
                 {selectedDate && (
                   <View style={styles.selectedDateBanner}>
-                    <Text style={styles.selectedDateText}>
-                      Filtered by date: <Text style={{ color: '#3B82F6', fontWeight: '800' }}>{selectedDate}</Text>
+                    <Text style={[styles.selectedDateText, { color: colors.textVariant }]}>
+                      Filtered by date: <Text style={{ color: colors.primary, fontWeight: '800' }}>{selectedDate}</Text>
                     </Text>
                     <TouchableOpacity onPress={() => setSelectedDate(null)}>
                       <Text style={styles.clearFilterText}>Clear Filter</Text>
@@ -910,14 +966,14 @@ export default function AttendanceScreen() {
             {missedLogs.length === 0 ? (
               <View style={styles.emptyLogBox}>
                 <CheckCircle2 color="#10B981" size={32} />
-                <Text style={styles.emptyLogText}>No pending missed punches found.</Text>
+                <Text style={[styles.emptyLogText, { color: colors.textVariant }]}>No pending missed punches found.</Text>
               </View>
             ) : (
               missedLogs.map((log) => (
-                <View key={log.id || log.date} style={styles.standardCard}>
+                <View key={log.id || log.date} style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <View style={styles.missedCardRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.missedDateTitle}>{log.dayTitle || log.date}</Text>
+                      <Text style={[styles.missedDateTitle, { color: colors.textVariant }]}>{log.dayTitle || log.date}</Text>
                       <View style={styles.onTimeStatusRow}>
                         <View style={styles.redDotSmall} />
                         <Text style={styles.onTimeText}>Missed Punch Out</Text>
@@ -925,12 +981,12 @@ export default function AttendanceScreen() {
                     </View>
 
                     <View style={{ alignItems: 'center', paddingHorizontal: 12 }}>
-                      <Text style={styles.fieldSubLabel}>CLOCK IN</Text>
-                      <Text style={[styles.timeValText, { color: '#3B82F6' }]}>{log.punchInTime}</Text>
+                      <Text style={[styles.fieldSubLabel, { color: colors.textVariant }]}>CLOCK IN</Text>
+                      <Text style={[styles.timeValText, { color: colors.primary }]}>{log.punchInTime}</Text>
                     </View>
 
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={styles.fieldSubLabel}>CLOCK OUT</Text>
+                      <Text style={[styles.fieldSubLabel, { color: colors.textVariant }]}>CLOCK OUT</Text>
                       <Text style={[styles.timeValText, { color: '#EF4444' }]}>N/A</Text>
                     </View>
                   </View>
@@ -947,7 +1003,6 @@ export default function AttendanceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
   },
   scrollContent: {
     padding: 16,

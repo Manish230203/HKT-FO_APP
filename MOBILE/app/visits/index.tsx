@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import {
   getPlannedVisits,
   PlannedVisit,
@@ -45,6 +46,7 @@ import * as Location from 'expo-location';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Asset } from 'expo-asset';
 
 import { Modal } from 'react-native';
 import { X, User, MapPin, Building, FileText, Mail, Download, Clock as ClockIcon, ShieldAlert, LogOut as LogOutIcon, Navigation } from 'lucide-react-native';
@@ -82,6 +84,7 @@ export default function VisitsScreen() {
   const { user } = useAuth();
   const { todayRecord } = useAttendance();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
 
@@ -121,9 +124,115 @@ export default function VisitsScreen() {
     };
   };
 
-  const generateVisitReportHtml = (report: any) => {
+  const getLogoBase64 = async (isEagle: boolean) => {
+    try {
+      const module = isEagle
+        ? require('../../assets/images/eagle_logo.png')
+        : require('../../assets/images/udf_logo.png');
+      const asset = Asset.fromModule(module);
+      await asset.downloadAsync();
+      if (asset.localUri) {
+        const base64 = await FileSystem.readAsStringAsync(asset.localUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        return `data:image/png;base64,${base64}`;
+      }
+    } catch (e) {
+      console.warn('Failed to load logo base64:', e);
+    }
+    return '';
+  };
+
+  const resolveMobilePhotoUrl = (url: string) => {
+    if (!url || typeof url !== 'string') return '';
+    const cleanUrl = url.trim();
+    if (!cleanUrl) return '';
+
+    if (cleanUrl.startsWith('data:image/')) {
+      return cleanUrl;
+    }
+
+    if (cleanUrl.length > 100 && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.startsWith('file://') && !cleanUrl.startsWith('/')) {
+      return `data:image/jpeg;base64,${cleanUrl}`;
+    }
+
+    if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://') || cleanUrl.startsWith('file://')) {
+      return cleanUrl;
+    }
+
+    if (cleanUrl.startsWith('/uploads/') || cleanUrl.startsWith('uploads/')) {
+      const relativePath = cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`;
+      const rawApi = process.env.EXPO_PUBLIC_API_URL || 'https://tarot-carrot-celery.ngrok-free.dev';
+      const serverHost = rawApi.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+      return `${serverHost}${relativePath}`;
+    }
+
+    return cleanUrl;
+  };
+
+  const fetchImageAsBase64 = async (photoUrl: string): Promise<string> => {
+    if (!photoUrl || typeof photoUrl !== 'string') return '';
+    const cleanUrl = photoUrl.trim();
+    if (!cleanUrl) return '';
+
+    if (cleanUrl.startsWith('data:image/')) {
+      return cleanUrl;
+    }
+
+    if (cleanUrl.length > 100 && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !cleanUrl.startsWith('file://') && !cleanUrl.startsWith('/')) {
+      return `data:image/jpeg;base64,${cleanUrl}`;
+    }
+
+    const resolvedUrl = resolveMobilePhotoUrl(cleanUrl);
+    if (!resolvedUrl) return '';
+
+    // Handle local device file:// URIs (convert to base64 data URIs so WebViews in Android PDF printer can load them)
+    if (resolvedUrl.startsWith('file://')) {
+      try {
+        const base64Data = await FileSystem.readAsStringAsync(resolvedUrl, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        if (base64Data) {
+          return `data:image/jpeg;base64,${base64Data}`;
+        }
+      } catch (fsErr) {
+        console.warn('Failed to read local file as base64:', fsErr);
+      }
+      return resolvedUrl;
+    }
+
+    // Handle remote http/https/uploads URLs
+    try {
+      const filename = `pdf_img_${Date.now()}_${Math.floor(Math.random() * 10000)}.jpg`;
+      const targetPath = `${FileSystem.cacheDirectory}${filename}`;
+      const downloadResult = await FileSystem.downloadAsync(resolvedUrl, targetPath, {
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+      });
+
+      if (downloadResult.status === 200 && downloadResult.uri) {
+        const base64Data = await FileSystem.readAsStringAsync(downloadResult.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        try {
+          await FileSystem.deleteAsync(downloadResult.uri, { idempotent: true });
+        } catch (cleanErr) {}
+
+        return `data:image/jpeg;base64,${base64Data}`;
+      }
+    } catch (e) {
+      console.warn('fetchImageAsBase64 error for URL:', resolvedUrl, e);
+    }
+
+    return resolvedUrl;
+  };
+
+  const generateVisitReportHtml = async (report: any) => {
     const compInfo = getReportCompany(report);
     const companyName = compInfo.name || 'UNIQUE DELTA FORCE SECURITY PVT. LTD.';
+    const logoBase64 = await getLogoBase64(compInfo.isEagle);
+
     const reportTitle = report?.visitType === 'Day Visit'
       ? 'OFFICER DAY VISIT REPORT'
       : report?.visitType === 'Night Round'
@@ -139,60 +248,234 @@ export default function VisitsScreen() {
     const shift = raw.shift || (report?.visitType === 'Night Round' ? 'Night Shift' : 'Day Shift');
     const officerName = report?.officer || user?.name || '—';
     const gpsLocation = raw.gps || 'Logged via FO Mobile App';
+    const visitType = report?.visitType || 'General Audit';
 
-    let checklistItems: any[] = [];
-    if (Array.isArray(raw.checklist)) {
-      checklistItems = raw.checklist;
-    } else if (Array.isArray(raw.questions)) {
-      checklistItems = raw.questions;
-    } else if (raw.checklist && typeof raw.checklist === 'object') {
-      checklistItems = Object.keys(raw.checklist).map((k) => ({ question: k, answer: raw.checklist[k] }));
-    }
-
-    let checklistHtml = '';
-    if (checklistItems.length > 0) {
-      const rows = checklistItems.map((item: any, idx: number) => {
-        const qText = item.question || item.title || item.name || String(item);
-        const ans = item.answer || item.status || item.value || 'Satisfactory';
-        const isUnsat = String(ans).toLowerCase().includes('unsatisfactory') || String(ans).toLowerCase().includes('fail');
-        const badgeStyle = isUnsat 
-          ? 'background: #FEE2E2; color: #B91C1C;' 
-          : 'background: #DCFCE7; color: #15803D;';
-        return `
-          <tr>
-            <td style="width: 30px; text-align: center; color: #64748B;">${idx + 1}</td>
-            <td style="font-weight: 500;">${qText}</td>
-            <td style="width: 130px; text-align: center;">
-              <span style="padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; ${badgeStyle}">
-                ${ans}
-              </span>
-            </td>
-          </tr>
-        `;
-      }).join('');
-
-      checklistHtml = `
-        <div style="margin-bottom: 20px;">
-          <div style="background: #0F172A; color: #FFF; font-size: 12px; font-weight: bold; padding: 8px 12px; border-radius: 4px 4px 0 0; text-transform: uppercase;">
-            CHECKLIST & AUDIT PARAMETERS
-          </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #CBD5E1;">
-            <thead>
-              <tr style="background: #F8FAFC;">
-                <th style="padding: 8px; border: 1px solid #E2E8F0; width: 30px;">#</th>
-                <th style="padding: 8px; border: 1px solid #E2E8F0; text-align: left;">Audit Parameter / Question</th>
-                <th style="padding: 8px; border: 1px solid #E2E8F0; text-align: center;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
+    // 1. Visit Parameters & Scope (General Audit)
+    let visitParametersHtml = '';
+    if (visitType === 'General Audit') {
+      const personVisited = raw.person_visited || raw.personVisited || 'N/A';
+      const reasonOfVisit = raw.reason_of_visit || raw.reasonOfVisit || 'Routine Security Audit';
+      visitParametersHtml = `
+        <div style="margin-bottom: 18px;">
+          <div class="navy-section-header">VISIT PARAMETERS & SCOPE</div>
+          <table class="grid-table">
+            <tr>
+              <td class="label">Person Visited</td>
+              <td class="val">${personVisited}</td>
+              <td class="label">Reason of Visit</td>
+              <td class="val">${reasonOfVisit}</td>
+            </tr>
           </table>
         </div>
       `;
     }
 
-    const remarks = raw.remarks || raw.observations || raw.comments || 'Audit completed satisfactorily.';
+    // 2. Guards Present on Duty
+    let guardsHtml = '';
+    if (visitType !== 'General Audit') {
+      let guardsList: any[] = [];
+      const rawG = raw.guards;
+      if (Array.isArray(rawG)) guardsList = rawG;
+      else if (typeof rawG === 'string' && rawG.trim()) {
+        try { guardsList = JSON.parse(rawG); } catch (e) {}
+      }
+
+      if (guardsList.length > 0) {
+        const rows = guardsList.map((g: any, idx: number) => {
+          const isPresent = g.present !== false && g.status !== 'Absent';
+          const statusText = g.status || (isPresent ? 'Present' : 'Absent');
+          const badgeClass = isPresent ? 'badge-success' : 'badge-danger';
+          return `
+            <tr>
+              <td style="width: 32px; text-align: center; color: #64748B;">${idx + 1}</td>
+              <td style="font-weight: 700; color: #0F172A;">${g.name || 'Guard'}</td>
+              <td style="color: #475569;">${g.empCode || g.employeeId || g.emp_code || 'G'}</td>
+              <td style="width: 100px; text-align: center;">
+                <span class="badge ${badgeClass}">${statusText}</span>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        guardsHtml = `
+          <div style="margin-bottom: 18px;">
+            <div class="navy-section-header">GUARDS PRESENT ON DUTY (${guardsList.length})</div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px; text-align: center;">#</th>
+                  <th style="text-align: left;">Guard Name</th>
+                  <th style="text-align: left;">Emp Code</th>
+                  <th style="text-align: center;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else {
+        guardsHtml = `
+          <div style="margin-bottom: 18px;">
+            <div class="navy-section-header">GUARDS PRESENT ON DUTY (0)</div>
+            <div class="empty-box">No guards listed for this visit.</div>
+          </div>
+        `;
+      }
+    }
+
+    // 3. Inspection Checklist Items
+    let checklistHtml = '';
+    if (visitType !== 'General Audit') {
+      let checklistList: any[] = [];
+      const rawC = raw.checklist;
+      if (Array.isArray(rawC)) checklistList = rawC;
+      else if (Array.isArray(raw.questions)) checklistList = raw.questions;
+      else if (typeof rawC === 'string' && rawC.trim()) {
+        try { checklistList = JSON.parse(rawC); } catch (e) {}
+      } else if (rawC && typeof rawC === 'object') {
+        checklistList = Object.keys(rawC).map((k) => ({ question: k, answer: rawC[k] }));
+      }
+
+      if (checklistList.length > 0) {
+        const rowsArray = await Promise.all(checklistList.map(async (item: any, idx: number) => {
+          const qText = item.question || item.title || item.name || String(item);
+          const statusStr = item.status || item.answer || item.value || 'Satisfactory';
+          const isNegative = statusStr === 'Unsatisfactory' || statusStr === 'NO' || statusStr === 'NOT OK' || String(statusStr).toLowerCase().includes('fail');
+          const badgeClass = !isNegative ? 'badge-success' : 'badge-danger';
+          const remarksText = item.remarks || item.observation ? `<div style="font-size: 11px; color: #64748B; margin-top: 3px;">Remarks: ${item.remarks || item.observation}</div>` : '';
+
+          const itemPhoto = item.photo || (Array.isArray(item.photos) ? item.photos[0] : null);
+          let photoHtml = '';
+          if (itemPhoto) {
+            const b64 = await fetchImageAsBase64(String(itemPhoto));
+            if (b64) {
+              photoHtml = `<div style="margin-top: 6px;"><img src="${b64}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #CBD5E1;" /></div>`;
+            }
+          }
+
+          return `
+            <tr>
+              <td style="width: 32px; text-align: center; color: #64748B; vertical-align: top; padding-top: 8px;">${idx + 1}</td>
+              <td style="font-weight: 500; color: #0F172A; vertical-align: top; padding-top: 8px;">
+                ${qText}
+                ${remarksText}
+                ${photoHtml}
+              </td>
+              <td style="width: 130px; text-align: center; vertical-align: top; padding-top: 8px;">
+                <span class="badge ${badgeClass}">${statusStr}</span>
+              </td>
+            </tr>
+          `;
+        }));
+
+        checklistHtml = `
+          <div style="margin-bottom: 18px;">
+            <div class="navy-section-header">INSPECTION CHECKLIST ITEMS (${checklistList.length})</div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px; text-align: center;">#</th>
+                  <th style="text-align: left;">Audit Parameter / Question</th>
+                  <th style="text-align: center;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsArray.join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else {
+        checklistHtml = `
+          <div style="margin-bottom: 18px;">
+            <div class="navy-section-header">INSPECTION CHECKLIST ITEMS (0)</div>
+            <div class="empty-box">No checklist items recorded.</div>
+          </div>
+        `;
+      }
+    }
+
+    // 4. Briefing & Night Visit Details
+    let nightDetailsHtml = '';
+    if (visitType === 'Night Round') {
+      const lecture = raw.lecture_details || raw.lectureDetails || 'No short lecture details recorded.';
+      const randomChecking = raw.random_checking || raw.randomChecking || 'No random checking details recorded.';
+      nightDetailsHtml = `
+        <div style="margin-bottom: 18px;">
+          <div class="navy-section-header">BRIEFING, LECTURE & RANDOM CHECKING</div>
+          <table class="grid-table">
+            <tr>
+              <td class="label">Short Lecture Details</td>
+              <td class="val">${lecture}</td>
+            </tr>
+            <tr>
+              <td class="label">Random Checking Details</td>
+              <td class="val">${randomChecking}</td>
+            </tr>
+          </table>
+        </div>
+      `;
+    }
+
+    // 5. Photo Evidence
+    let photosHtml = '';
+    const rawPhotos = raw.photos || raw.photo_evidence || raw.photo || [];
+    const baseList = Array.isArray(rawPhotos)
+      ? rawPhotos
+      : (typeof rawPhotos === 'string' ? (JSON.parse(rawPhotos || '[]') || []) : []);
+
+    const rawChecklist = raw.checklist;
+    const parsedChecklist = Array.isArray(rawChecklist)
+      ? rawChecklist
+      : (typeof rawChecklist === 'string' ? (JSON.parse(rawChecklist || '[]') || []) : []);
+    const checklistPhotos = (parsedChecklist || []).flatMap((c: any) => {
+      if (!c) return [];
+      if (c.photo) return [c.photo];
+      if (Array.isArray(c.photos)) return c.photos;
+      if (typeof c.photos === 'string') {
+        try { return JSON.parse(c.photos); } catch (e) { return [c.photos]; }
+      }
+      return [];
+    }).filter(Boolean);
+
+    const rawObs = raw.observations;
+    const parsedObs = Array.isArray(rawObs)
+      ? rawObs
+      : (typeof rawObs === 'string' ? (JSON.parse(rawObs || '[]') || []) : []);
+    const obsPhotos = (parsedObs || []).flatMap((o: any) => {
+      if (!o) return [];
+      if (o.photo) return [o.photo];
+      if (Array.isArray(o.photos)) return o.photos;
+      if (typeof o.photos === 'string') {
+        try { return JSON.parse(o.photos); } catch (e) { return [o.photos]; }
+      }
+      return [];
+    }).filter(Boolean);
+
+    const allPhotos = Array.from(new Set([...baseList, ...checklistPhotos, ...obsPhotos])).filter(
+      (p) => p && typeof p === 'string' && String(p).trim() !== ''
+    );
+
+    if (allPhotos.length > 0) {
+      const base64List = await Promise.all(allPhotos.map((p) => fetchImageAsBase64(String(p))));
+      const imgElements = base64List.filter(Boolean).map((b64) => `<img src="${b64}" class="photo-img" />`).join('');
+
+      if (imgElements) {
+        photosHtml = `
+          <div style="margin-bottom: 18px;">
+            <div class="navy-section-header">PHOTO EVIDENCE (${allPhotos.length})</div>
+            <div class="photo-grid">
+              ${imgElements}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // 6. Remarks & Suggestions
+    const remarks = raw.overall_remarks || raw.suggestions || raw.remark || raw.remarks || 'No additional remarks recorded.';
 
     return `
       <!DOCTYPE html>
@@ -201,30 +484,56 @@ export default function VisitsScreen() {
         <meta charset="utf-8" />
         <title>${reportTitle}</title>
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 24px; color: #1E293B; background: #FFFFFF; }
-          .banner { border: 2px solid #0F172A; padding: 18px; border-radius: 8px; margin-bottom: 20px; background: #F8FAFC; }
-          .company-name { font-size: 18px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.5px; }
-          .report-title { font-size: 16px; font-weight: 700; color: #2563EB; margin-top: 6px; text-transform: uppercase; }
-          .report-no { font-size: 12px; font-weight: 600; color: #64748B; margin-top: 4px; }
-          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
-          .info-table td { padding: 8px 12px; border: 1px solid #CBD5E1; }
+          * { box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; color: #1E293B; background: #FFFFFF; font-size: 12px; }
+          .corporate-banner { border: 2px solid #1E3A8A; padding: 18px; border-radius: 12px; margin-bottom: 20px; background: #F8FAFC; }
+          .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+          .logo-img { height: 38px; max-width: 140px; object-fit: contain; }
+          .company-title { font-size: 18px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.5px; }
+          .report-badge { background: #2563EB; color: #FFFFFF; font-weight: 800; font-size: 14px; padding: 6px 14px; border-radius: 6px; letter-spacing: 0.5px; display: inline-block; text-transform: uppercase; }
+          .report-id { font-size: 11px; font-weight: 700; color: #2563EB; margin-top: 6px; letter-spacing: 0.5px; }
+          .banner-date { font-size: 11px; font-weight: 600; color: #64748B; margin-top: 4px; }
+          
+          .navy-section-header { background: #0F172A; color: #FFFFFF; font-size: 12px; font-weight: 800; padding: 8px 12px; border-radius: 6px 6px 0 0; text-transform: uppercase; letter-spacing: 0.5px; }
+          
+          .grid-table { width: 100%; border-collapse: collapse; border: 1px solid #CBD5E1; font-size: 12px; border-radius: 0 0 6px 6px; overflow: hidden; }
+          .grid-table td { padding: 8px 12px; border: 1px solid #CBD5E1; }
           .label { font-weight: 700; color: #475569; width: 25%; background: #F1F5F9; }
           .val { font-weight: 600; color: #0F172A; width: 25%; }
-          .section-header { background: #0F172A; color: #FFFFFF; font-size: 12px; font-weight: 700; padding: 8px 12px; border-radius: 4px 4px 0 0; text-transform: uppercase; }
-          .remarks-box { border: 1px solid #CBD5E1; padding: 12px; font-size: 12px; background: #F8FAFC; border-radius: 0 0 4px 4px; margin-bottom: 20px; }
-          .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 12px; }
+          
+          .data-table { width: 100%; border-collapse: collapse; border: 1px solid #CBD5E1; font-size: 12px; border-radius: 0 0 6px 6px; overflow: hidden; }
+          .data-table th { background: #E2E8F0; color: #0F172A; font-weight: 800; padding: 8px 12px; border: 1px solid #CBD5E1; }
+          .data-table td { padding: 8px 12px; border: 1px solid #CBD5E1; }
+          
+          .badge { padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 11px; display: inline-block; text-align: center; }
+          .badge-success { background: #DCFCE7; color: #15803D; border: 1px solid #86EFAC; }
+          .badge-danger { background: #FEE2E2; color: #B91C1C; border: 1px solid #FCA5A5; }
+          
+          .remarks-box { border: 1px solid #CBD5E1; padding: 12px 14px; font-size: 12px; background: #F8FAFC; border-radius: 0 0 6px 6px; color: #0F172A; line-height: 1.5; }
+          .empty-box { border: 1px solid #CBD5E1; padding: 12px; text-align: center; color: #64748B; font-style: italic; background: #F8FAFC; border-radius: 0 0 6px 6px; }
+          
+          .photo-grid { border: 1px solid #CBD5E1; padding: 12px; background: #F8FAFC; border-radius: 0 0 6px 6px; display: flex; flex-wrap: wrap; gap: 10px; }
+          .photo-img { width: 130px; height: 130px; object-fit: cover; border-radius: 8px; border: 1px solid #CBD5E1; }
+          
+          .footer { text-align: center; margin-top: 36px; font-size: 10px; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 12px; font-weight: 600; }
         </style>
       </head>
       <body>
-        <div class="banner">
-          <div class="company-name">${companyName}</div>
-          <div class="report-title">${reportTitle}</div>
-          <div class="report-no">REPORT ID: ${report?.reportNo || 'N/A'}</div>
+        <div class="corporate-banner">
+          <div class="header-row">
+            ${logoBase64 ? `<img src="${logoBase64}" class="logo-img" />` : ''}
+            <div class="company-title">${companyName}</div>
+          </div>
+          <div>
+            <div class="report-badge">${reportTitle}</div>
+          </div>
+          <div class="report-id">REPORT ID : ${report?.reportNo || 'N/A'}</div>
+          <div class="banner-date">DATE : ${dateStr} | ${startTimeStr} - ${endTimeStr}</div>
         </div>
 
-        <div style="margin-bottom: 20px;">
-          <div class="section-header">General Information</div>
-          <table class="info-table">
+        <div style="margin-bottom: 18px;">
+          <div class="navy-section-header">GENERAL INFORMATION</div>
+          <table class="grid-table">
             <tr>
               <td class="label">Client Name</td>
               <td class="val">${clientName}</td>
@@ -238,29 +547,37 @@ export default function VisitsScreen() {
               <td class="val">${shift}</td>
             </tr>
             <tr>
+              <td class="label">Visit Type</td>
+              <td class="val">${visitType}</td>
+              <td class="label">Officer Name</td>
+              <td class="val">${officerName}</td>
+            </tr>
+            <tr>
               <td class="label">Start Time</td>
               <td class="val">${startTimeStr}</td>
               <td class="label">End Time</td>
               <td class="val">${endTimeStr}</td>
             </tr>
             <tr>
-              <td class="label">Officer Name</td>
-              <td class="val">${officerName}</td>
               <td class="label">GPS Location</td>
-              <td class="val">${gpsLocation}</td>
+              <td class="val" colspan="3">${gpsLocation}</td>
             </tr>
           </table>
         </div>
 
+        ${visitParametersHtml}
+        ${guardsHtml}
         ${checklistHtml}
+        ${nightDetailsHtml}
+        ${photosHtml}
 
-        <div style="margin-bottom: 20px;">
-          <div class="section-header">Officer Observations & Remarks</div>
+        <div style="margin-bottom: 18px;">
+          <div class="navy-section-header">REMARKS & OFFICER SUGGESTIONS</div>
           <div class="remarks-box">${remarks}</div>
         </div>
 
         <div class="footer">
-          Generated electronically via Vigilo FO Mobile App | © 2026 HUMANKIND TECHNOLOGY
+          Generated electronically via FO Mobile App | © 2026 HUMANKIND TECHNOLOGY
         </div>
       </body>
       </html>
@@ -272,7 +589,7 @@ export default function VisitsScreen() {
     const reportId = report.id || report.reportNo || 'visit_report';
     try {
       setDownloadingPdfId(reportId);
-      const htmlContent = generateVisitReportHtml(report);
+      const htmlContent = await generateVisitReportHtml(report);
       const fileName = `Report_${String(report.reportNo || 'visit')}`;
 
       await generateAndHandlePdf({
@@ -957,26 +1274,26 @@ export default function VisitsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft color="#FFFFFF" size={22} />
+          <ArrowLeft color={colors.text} size={22} />
         </TouchableOpacity>
         <View style={styles.headerTextCol}>
-          <Text style={styles.headerTitle}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
             {activeTab === 'pending' ? t('pending_visits') : t('completed_visits')}
           </Text>
-          <Text style={styles.headerSub}>
+          <Text style={[styles.headerSub, { color: colors.textVariant }]}>
             {activeTab === 'pending'
               ? `${pendingVisits.length} ${t('pending')}`
               : `${completedVisits.length} ${t('completed')}`}
           </Text>
         </View>
         <TouchableOpacity onPress={fetchVisits} style={styles.refreshBtn}>
-          <RefreshCw color="#3B82F6" size={20} />
+          <RefreshCw color={colors.primary} size={20} />
         </TouchableOpacity>
       </View>
 
@@ -986,16 +1303,16 @@ export default function VisitsScreen() {
         const isTopReportSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name);
 
         return (
-          <View style={[styles.activeSessionBanner, isTopReportSubmitted ? { borderColor: '#A855F7' } : {}]}>
+          <View style={[styles.activeSessionBanner, { backgroundColor: isDark ? '#0F172A' : '#EFF6FF', borderColor: colors.primary }, isTopReportSubmitted ? { borderColor: '#A855F7' } : {}]}>
             <View style={styles.activeSessionTextCol}>
               <View style={styles.activeSessionPulseRow}>
                 <View style={[styles.pulseDot, { backgroundColor: isTopReportSubmitted ? '#A855F7' : '#10B981' }]} />
-                <Text style={[styles.activeSessionTitle, { color: isTopReportSubmitted ? '#C084FC' : '#60A5FA' }]}>
+                <Text style={[styles.activeSessionTitle, { color: isTopReportSubmitted ? '#C084FC' : colors.primary }]}>
                   {isTopReportSubmitted ? 'REPORT SUBMITTED' : 'ACTIVE SITE VISIT SESSION'}
                 </Text>
               </View>
-              <Text style={styles.activeSessionSiteName}>{activeBackendSession.site_name}</Text>
-              <Text style={styles.activeSessionSubText}>
+              <Text style={[styles.activeSessionSiteName, { color: colors.text }]}>{activeBackendSession.site_name}</Text>
+              <Text style={[styles.activeSessionSubText, { color: colors.textVariant }]}>
                 Started at {new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {isTopReportSubmitted ? 'Ready for Check-Out' : 'Report Pending'}
               </Text>
             </View>
@@ -1022,7 +1339,7 @@ export default function VisitsScreen() {
       <ScrollView
         style={styles.scrollArea}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchVisits} tintColor="#3B82F6" />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchVisits} tintColor={colors.primary} />}
       >
         {/* PENDING TAB */}
         {activeTab === 'pending' && (
@@ -1030,8 +1347,8 @@ export default function VisitsScreen() {
             {pendingVisits.length === 0 ? (
               <View style={styles.emptyBox}>
                 <CheckCircle2 color="#10B981" size={48} style={{ marginBottom: 12 }} />
-                <Text style={styles.emptyTitle}>{t('all_clear')}</Text>
-                <Text style={styles.emptySubtitle}>{t('no_pending_visits_desc')}</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('all_clear')}</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textVariant }]}>{t('no_pending_visits_desc')}</Text>
               </View>
             ) : (
               pendingVisits.map((pv) => {
@@ -1064,7 +1381,7 @@ export default function VisitsScreen() {
                 const isCheckedIn = !!activeData || (activeBackendSession && Number(activeBackendSession.site_id) === Number(pv.siteId));
 
                 return (
-                  <View key={pv.id} style={styles.visitCard}>
+                  <View key={pv.id} style={[styles.visitCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     {/* Card Top: Plan Code + Status Badge */}
                     <View style={styles.cardTopRow}>
                       <View style={styles.planCodeBadge}>
@@ -1087,25 +1404,25 @@ export default function VisitsScreen() {
                     </View>
 
                     {/* Main Info */}
-                    <Text style={styles.siteNameText}>{pv.siteName || 'Unassigned Site'}</Text>
+                    <Text style={[styles.siteNameText, { color: colors.text }]}>{pv.siteName || 'Unassigned Site'}</Text>
                     
                     <View style={styles.metaRow}>
-                      <Building color="#64748B" size={14} style={{ marginRight: 6 }} />
-                      <Text style={styles.metaText}>{pv.clientName || 'Client'}</Text>
+                      <Building color={colors.textVariant} size={14} style={{ marginRight: 6 }} />
+                      <Text style={[styles.metaText, { color: colors.textVariant }]}>{pv.clientName || 'Client'}</Text>
                     </View>
 
                     <View style={styles.metaRow}>
-                      <CalendarDays color="#64748B" size={14} style={{ marginRight: 6 }} />
-                      <Text style={styles.metaText}>{pv.plannedPeriod || pv.date || 'Weekly Visit'}</Text>
+                      <CalendarDays color={colors.textVariant} size={14} style={{ marginRight: 6 }} />
+                      <Text style={[styles.metaText, { color: colors.textVariant }]}>{pv.plannedPeriod || pv.date || 'Weekly Visit'}</Text>
                     </View>
 
                     {/* Card Bottom: Progress Bar + Action Button */}
                     <View style={styles.cardBottomRow}>
                       <View style={styles.progressWrap}>
-                        <Text style={styles.progressLabel}>
+                        <Text style={[styles.progressLabel, { color: colors.textVariant }]}>
                           {status.done}/{status.total} {t('visits_done')}
                         </Text>
-                        <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarBg, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0' }]}>
                           <View
                             style={[
                               styles.progressBarFill,
@@ -1235,9 +1552,9 @@ export default function VisitsScreen() {
           <>
             {completedVisits.length === 0 ? (
               <View style={styles.emptyBox}>
-                <AlertCircle color="#64748B" size={48} style={{ marginBottom: 12 }} />
-                <Text style={styles.emptyTitle}>{t('no_reports_yet')}</Text>
-                <Text style={styles.emptySubtitle}>{t('no_completed_visits_desc')}</Text>
+                <AlertCircle color={colors.textVariant} size={48} style={{ marginBottom: 12 }} />
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('no_reports_yet')}</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textVariant }]}>{t('no_completed_visits_desc')}</Text>
               </View>
             ) : (
               completedVisits.map((visit, index) => (
@@ -1245,7 +1562,7 @@ export default function VisitsScreen() {
                   key={`${visit.id}_${index}`}
                   activeOpacity={0.85}
                   onPress={() => setSelectedReport(visit)}
-                  style={styles.visitCard}
+                  style={[styles.visitCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
                   {/* Top row: Visit Type Badge + Completed Status */}
                   <View style={styles.cardTopRow}>
@@ -1272,23 +1589,23 @@ export default function VisitsScreen() {
                   </View>
 
                   {/* Report ID */}
-                  <Text style={styles.reportNoText} numberOfLines={1} ellipsizeMode="tail">
+                  <Text style={[styles.reportNoText, { color: colors.textVariant }]} numberOfLines={1} ellipsizeMode="tail">
                     {visit.reportNo}
                   </Text>
 
                   {/* Site & Client */}
-                  <Text style={styles.siteNameText} numberOfLines={1}>
+                  <Text style={[styles.siteNameText, { color: colors.text }]} numberOfLines={1}>
                     {visit.siteName}
                   </Text>
-                  <Text style={styles.clientNameText} numberOfLines={1}>{visit.clientName}</Text>
+                  <Text style={[styles.clientNameText, { color: colors.textVariant }]} numberOfLines={1}>{visit.clientName}</Text>
 
                   <View style={styles.divider} />
 
                   {/* Date Footer & Email Action */}
                   <View style={styles.cardBottomRow}>
                     <View style={styles.metaItem}>
-                      <CalendarDays color="#64748B" size={13} style={{ marginRight: 4 }} />
-                      <Text style={styles.metaText}>{visit.date}</Text>
+                      <CalendarDays color={colors.textVariant} size={13} style={{ marginRight: 4 }} />
+                      <Text style={[styles.metaText, { color: colors.textVariant }]}>{visit.date}</Text>
                     </View>
 
                     <TouchableOpacity
@@ -1329,20 +1646,20 @@ export default function VisitsScreen() {
           setIsEmailFormOpen(false);
         }}
       >
-        <View style={styles.detailOverlay}>
-          <View style={[styles.detailContainer, isEmailFormOpen ? { padding: 20 } : null]}>
+        <View style={[styles.detailOverlay, { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.75)' : 'rgba(0, 0, 0, 0.4)' }]}>
+          <View style={[styles.detailContainer, { backgroundColor: colors.card, borderColor: colors.border }, isEmailFormOpen ? { padding: 20 } : null]}>
             {isEmailFormOpen ? (
               /* --- EMAIL FORM VIEW --- */
               <View>
-                <View style={styles.detailHeader}>
+                <View style={[styles.detailHeader, { borderBottomColor: colors.border }]}>
                   <TouchableOpacity
                     onPress={() => setIsEmailFormOpen(false)}
                     style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
                   >
                     <ArrowLeft color="#3B82F6" size={20} style={{ marginRight: 8 }} />
                     <View>
-                      <Text style={styles.detailTitle}>Send Report via Email</Text>
-                      <Text style={styles.detailSubtitle}>{selectedReport?.reportNo}</Text>
+                      <Text style={[styles.detailTitle, { color: colors.text }]}>Send Report via Email</Text>
+                      <Text style={[styles.detailSubtitle, { color: colors.primary }]}>{selectedReport?.reportNo}</Text>
                     </View>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1350,38 +1667,38 @@ export default function VisitsScreen() {
                       setSelectedReport(null);
                       setIsEmailFormOpen(false);
                     }}
-                    style={styles.detailCloseBtn}
+                    style={[styles.detailCloseBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}
                   >
-                    <X color="#94A3B8" size={22} />
+                    <X color={colors.textVariant} size={22} />
                   </TouchableOpacity>
                 </View>
 
                 <View style={{ marginVertical: 14 }}>
-                  <Text style={styles.emailFormLabel}>RECIPIENT EMAIL *</Text>
+                  <Text style={[styles.emailFormLabel, { color: colors.textVariant }]}>RECIPIENT EMAIL *</Text>
                   <TextInput
-                    style={styles.emailTextInput}
+                    style={[styles.emailTextInput, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border, color: colors.text }]}
                     placeholder="client.rep@company.com"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={colors.textVariant}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     value={recipientEmail}
                     onChangeText={setRecipientEmail}
                   />
 
-                  <Text style={[styles.emailFormLabel, { marginTop: 12 }]}>SUBJECT</Text>
+                  <Text style={[styles.emailFormLabel, { color: colors.textVariant, marginTop: 12 }]}>SUBJECT</Text>
                   <TextInput
-                    style={styles.emailTextInput}
+                    style={[styles.emailTextInput, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border, color: colors.text }]}
                     placeholder="Email Subject..."
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={colors.textVariant}
                     value={emailSubject}
                     onChangeText={setEmailSubject}
                   />
 
-                  <Text style={[styles.emailFormLabel, { marginTop: 12 }]}>MESSAGE</Text>
+                  <Text style={[styles.emailFormLabel, { color: colors.textVariant, marginTop: 12 }]}>MESSAGE</Text>
                   <TextInput
-                    style={[styles.emailTextInput, { height: 90, textAlignVertical: 'top' }]}
+                    style={[styles.emailTextInput, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border, color: colors.text, height: 90, textAlignVertical: 'top' }]}
                     placeholder="Enter custom email message..."
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={colors.textVariant}
                     multiline
                     numberOfLines={4}
                     value={emailMessage}
@@ -1409,10 +1726,10 @@ export default function VisitsScreen() {
               /* --- REPORT PREVIEW VIEW --- */
               <>
                 {/* Header Close Bar */}
-                <View style={styles.detailHeader}>
+                <View style={[styles.detailHeader, { borderBottomColor: colors.border }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.detailTitle}>{selectedReport?.reportNo}</Text>
-                    <Text style={styles.detailSubtitle}>{selectedReport?.visitType}</Text>
+                    <Text style={[styles.detailTitle, { color: colors.text }]}>{selectedReport?.reportNo}</Text>
+                    <Text style={[styles.detailSubtitle, { color: colors.primary }]}>{selectedReport?.visitType}</Text>
                   </View>
 
                   <TouchableOpacity
@@ -1436,21 +1753,21 @@ export default function VisitsScreen() {
                       setSelectedReport(null);
                       setIsEmailFormOpen(false);
                     }}
-                    style={styles.detailCloseBtn}
+                    style={[styles.detailCloseBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}
                   >
-                    <X color="#94A3B8" size={22} />
+                    <X color={colors.textVariant} size={22} />
                   </TouchableOpacity>
                 </View>
 
                 <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false}>
                   {/* Corporate Banner Header (Exact WEB Match) */}
-                  <View style={styles.previewCorporateBanner}>
+                  <View style={[styles.previewCorporateBanner, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: isDark ? '#1E3A8A' : 'rgba(41, 121, 255, 0.3)' }]}>
                     <View style={styles.bannerHeaderTopRow}>
                       <Image
                         source={getReportCompany(selectedReport).logo}
                         style={{ width: 28, height: 28, resizeMode: 'contain', marginRight: 8 }}
                       />
-                      <Text style={styles.companyNameTitle}>{getReportCompany(selectedReport).name}</Text>
+                      <Text style={[styles.companyNameTitle, { color: colors.text }]}>{getReportCompany(selectedReport).name}</Text>
                     </View>
 
                     <View style={styles.reportTitleBanner}>
@@ -1465,68 +1782,68 @@ export default function VisitsScreen() {
                     </View>
 
                     <View style={styles.bannerDateRow}>
-                      <ClockIcon color="#94A3B8" size={13} style={{ marginRight: 4 }} />
-                      <Text style={styles.bannerDateText}>
+                      <ClockIcon color={colors.textVariant} size={13} style={{ marginRight: 4 }} />
+                      <Text style={[styles.bannerDateText, { color: colors.textVariant }]}>
                         DATE : {selectedReport?.date} | {selectedReport?.rawReport?.['check-in_time'] || selectedReport?.rawReport?.start_time || selectedReport?.rawReport?.startTime || '09:00'} - {selectedReport?.rawReport?.['check-out_time'] || selectedReport?.rawReport?.end_time || selectedReport?.rawReport?.endTime || '17:00'}
                       </Text>
                     </View>
                   </View>
 
                   {/* 1. General Information Card (Navy Section Header) */}
-                  <View style={styles.detailSectionCard}>
+                  <View style={[styles.detailSectionCard, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
                     <View style={styles.navySectionTitleBox}>
                       <Text style={styles.navySectionTitle}>GENERAL INFORMATION</Text>
                     </View>
                     <View style={styles.gridInfoBox}>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>Client Name</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.clientName || 'ADIENT INDIA PVT LTD'}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Client Name</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.clientName || 'ADIENT INDIA PVT LTD'}</Text>
                       </View>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>Site Name</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.siteName || 'ADIENT - PIMPRI'}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Site Name</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.siteName || 'ADIENT - PIMPRI'}</Text>
                       </View>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>Shift</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.rawReport?.shift || (selectedReport?.visitType === 'Night Round' ? 'Night Shift' : 'Day Shift')}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Shift</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.shift || (selectedReport?.visitType === 'Night Round' ? 'Night Shift' : 'Day Shift')}</Text>
                       </View>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>Visit Type</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.visitType}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Visit Type</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.visitType}</Text>
                       </View>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>Officer Name</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.officer || 'Amit Kulkarni'}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Officer Name</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.officer || 'Amit Kulkarni'}</Text>
                       </View>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>Start Time</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.rawReport?.['check-in_time'] || selectedReport?.rawReport?.start_time || selectedReport?.rawReport?.startTime || '—'}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Start Time</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.['check-in_time'] || selectedReport?.rawReport?.start_time || selectedReport?.rawReport?.startTime || '—'}</Text>
                       </View>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>End Time</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.rawReport?.['check-out_time'] || selectedReport?.rawReport?.end_time || selectedReport?.rawReport?.endTime || '—'}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>End Time</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.['check-out_time'] || selectedReport?.rawReport?.end_time || selectedReport?.rawReport?.endTime || '—'}</Text>
                       </View>
-                      <View style={styles.infoRowItem}>
-                        <Text style={styles.gridLabel}>GPS Location</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.rawReport?.gps || 'Location Logged'}</Text>
+                      <View style={[styles.infoRowItem, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                        <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>GPS Location</Text>
+                        <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.gps || 'Location Logged'}</Text>
                       </View>
                     </View>
                   </View>
 
                   {/* 2. Visit Parameters & Scope (General Visit) */}
                   {selectedReport?.visitType === 'General Audit' && (
-                    <View style={styles.detailSectionCard}>
+                    <View style={[styles.detailSectionCard, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
                       <View style={styles.navySectionTitleBox}>
                         <Text style={styles.navySectionTitle}>VISIT PARAMETERS & SCOPE</Text>
                       </View>
                       <View style={styles.gridInfoBox}>
-                        <View style={styles.infoRowItemFull}>
-                          <Text style={styles.gridLabel}>Person Visited</Text>
-                          <Text style={styles.gridValue}>{selectedReport?.rawReport?.person_visited || selectedReport?.rawReport?.personVisited || 'N/A'}</Text>
+                        <View style={[styles.infoRowItemFull, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                          <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Person Visited</Text>
+                          <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.person_visited || selectedReport?.rawReport?.personVisited || 'N/A'}</Text>
                         </View>
-                        <View style={styles.infoRowItemFull}>
-                          <Text style={styles.gridLabel}>Reason of Visit</Text>
-                          <Text style={styles.gridValue}>{selectedReport?.rawReport?.reason_of_visit || selectedReport?.rawReport?.reasonOfVisit || 'Routine Security Audit'}</Text>
+                        <View style={[styles.infoRowItemFull, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                          <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Reason of Visit</Text>
+                          <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.reason_of_visit || selectedReport?.rawReport?.reasonOfVisit || 'Routine Security Audit'}</Text>
                         </View>
                       </View>
                     </View>
@@ -1541,23 +1858,23 @@ export default function VisitsScreen() {
                       try { guardsList = JSON.parse(rawG); } catch (e) {}
                     }
                     return (
-                      <View style={styles.detailSectionCard}>
+                      <View style={[styles.detailSectionCard, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
                         <View style={styles.navySectionTitleBox}>
                           <Text style={styles.navySectionTitle}>GUARDS PRESENT ON DUTY ({guardsList.length})</Text>
                         </View>
                         {guardsList.length > 0 ? (
-                          <View style={styles.tableWrap}>
-                            <View style={styles.tableHeaderRow}>
-                              <Text style={[styles.thCell, { flex: 0.5 }]}>#</Text>
-                              <Text style={[styles.thCell, { flex: 2 }]}>Guard Name</Text>
-                              <Text style={[styles.thCell, { flex: 1 }]}>Emp Code</Text>
-                              <Text style={[styles.thCell, { flex: 1.5, textAlign: 'right' }]}>Status</Text>
+                          <View style={[styles.tableWrap, { backgroundColor: isDark ? 'rgba(15,23,42,0.4)' : '#FFFFFF' }]}>
+                            <View style={[styles.tableHeaderRow, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }]}>
+                              <Text style={[styles.thCell, { flex: 0.5, color: colors.text }]}>#</Text>
+                              <Text style={[styles.thCell, { flex: 2, color: colors.text }]}>Guard Name</Text>
+                              <Text style={[styles.thCell, { flex: 1, color: colors.text }]}>Emp Code</Text>
+                              <Text style={[styles.thCell, { flex: 1.5, textAlign: 'right', color: colors.text }]}>Status</Text>
                             </View>
                             {guardsList.map((g: any, idx: number) => (
-                              <View key={idx} style={styles.tableBodyRow}>
-                                <Text style={[styles.tdCell, { flex: 0.5, color: '#64748B' }]}>{idx + 1}</Text>
-                                <Text style={[styles.tdCell, { flex: 2, fontWeight: '700', color: '#F8FAFC' }]}>{g.name || 'Guard'}</Text>
-                                <Text style={[styles.tdCell, { flex: 1, color: '#94A3B8' }]}>{g.empCode || g.employeeId || g.emp_code || 'G'}</Text>
+                              <View key={idx} style={[styles.tableBodyRow, { borderBottomColor: colors.border }]}>
+                                <Text style={[styles.tdCell, { flex: 0.5, color: colors.textVariant }]}>{idx + 1}</Text>
+                                <Text style={[styles.tdCell, { flex: 2, fontWeight: '700', color: colors.text }]}>{g.name || 'Guard'}</Text>
+                                <Text style={[styles.tdCell, { flex: 1, color: colors.textVariant }]}>{g.empCode || g.employeeId || g.emp_code || 'G'}</Text>
                                 <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
                                   <View style={[styles.statusBadgePill, g.present !== false && g.status !== 'Absent' ? styles.statusBadgeSuccess : styles.statusBadgeDanger]}>
                                     <Text style={styles.statusBadgePillText}>{g.status || (g.present !== false ? 'Present' : 'Absent')}</Text>
@@ -1567,7 +1884,7 @@ export default function VisitsScreen() {
                             ))}
                           </View>
                         ) : (
-                          <Text style={styles.emptyTableText}>No guards listed for this visit.</Text>
+                          <Text style={[styles.emptyTableText, { color: colors.textVariant }]}>No guards listed for this visit.</Text>
                         )}
                       </View>
                     );
@@ -1582,22 +1899,22 @@ export default function VisitsScreen() {
                       try { checklistList = JSON.parse(rawC); } catch (e) {}
                     }
                     return (
-                      <View style={styles.detailSectionCard}>
+                      <View style={[styles.detailSectionCard, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
                         <View style={styles.navySectionTitleBox}>
                           <Text style={styles.navySectionTitle}>INSPECTION CHECKLIST ITEMS ({checklistList.length})</Text>
                         </View>
                         {checklistList.length > 0 ? (
-                          <View style={styles.tableWrap}>
+                          <View style={[styles.tableWrap, { backgroundColor: isDark ? 'rgba(15,23,42,0.4)' : '#FFFFFF' }]}>
                             {checklistList.map((item: any, idx: number) => {
                               const qText = item.question || item.title || String(item);
                               const statusStr = item.status || item.answer || 'Satisfactory';
                               const isNegative = statusStr === 'Unsatisfactory' || statusStr === 'NO' || statusStr === 'NOT OK';
                               return (
-                                <View key={idx} style={styles.checklistRow}>
+                                <View key={idx} style={[styles.checklistRow, { borderBottomColor: colors.border }]}>
                                   <View style={{ flex: 1, marginRight: 8 }}>
-                                    <Text style={styles.questionText}>{idx + 1}. {qText}</Text>
+                                    <Text style={[styles.questionText, { color: colors.text }]}>{idx + 1}. {qText}</Text>
                                     {item.remarks || item.observation ? (
-                                      <Text style={styles.questionRemarkText}>Remarks: {item.remarks || item.observation}</Text>
+                                      <Text style={[styles.questionRemarkText, { color: colors.textVariant }]}>Remarks: {item.remarks || item.observation}</Text>
                                     ) : null}
                                   </View>
                                   <View style={[styles.statusBadgePill, !isNegative ? styles.statusBadgeSuccess : styles.statusBadgeDanger]}>
@@ -1608,7 +1925,7 @@ export default function VisitsScreen() {
                             })}
                           </View>
                         ) : (
-                          <Text style={styles.emptyTableText}>No checklist items recorded.</Text>
+                          <Text style={[styles.emptyTableText, { color: colors.textVariant }]}>No checklist items recorded.</Text>
                         )}
                       </View>
                     );
@@ -1616,18 +1933,18 @@ export default function VisitsScreen() {
 
                   {/* 5. Lecture & Random Checking (Night Visit) */}
                   {selectedReport?.visitType === 'Night Round' && (
-                    <View style={styles.detailSectionCard}>
+                    <View style={[styles.detailSectionCard, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
                       <View style={styles.navySectionTitleBox}>
                         <Text style={styles.navySectionTitle}>BRIEFING, LECTURE & RANDOM CHECKING</Text>
                       </View>
                       <View style={styles.gridInfoBox}>
-                        <View style={styles.infoRowItemFull}>
-                          <Text style={styles.gridLabel}>Short Lecture Details</Text>
-                          <Text style={styles.gridValue}>{selectedReport?.rawReport?.lecture_details || selectedReport?.rawReport?.lectureDetails || 'No short lecture details recorded.'}</Text>
+                        <View style={[styles.infoRowItemFull, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                          <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Short Lecture Details</Text>
+                          <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.lecture_details || selectedReport?.rawReport?.lectureDetails || 'No short lecture details recorded.'}</Text>
                         </View>
-                        <View style={styles.infoRowItemFull}>
-                          <Text style={styles.gridLabel}>Random Checking Details</Text>
-                          <Text style={styles.gridValue}>{selectedReport?.rawReport?.random_checking || selectedReport?.rawReport?.randomChecking || 'No random checking details recorded.'}</Text>
+                        <View style={[styles.infoRowItemFull, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                          <Text style={[styles.gridLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>Random Checking Details</Text>
+                          <Text style={[styles.gridValue, { color: colors.text }]}>{selectedReport?.rawReport?.random_checking || selectedReport?.rawReport?.randomChecking || 'No random checking details recorded.'}</Text>
                         </View>
                       </View>
                     </View>
@@ -1659,17 +1976,17 @@ export default function VisitsScreen() {
                     if (allPhotos.length === 0) return null;
 
                     return (
-                      <View style={styles.detailSectionCard}>
+                      <View style={[styles.detailSectionCard, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
                         <View style={styles.navySectionTitleBox}>
                           <Text style={styles.navySectionTitle}>PHOTO EVIDENCE ({allPhotos.length})</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12, backgroundColor: '#1E293B', borderRadius: 8 }}>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12, backgroundColor: isDark ? '#1E293B' : '#FFFFFF', borderRadius: 8 }}>
                           {allPhotos.map((p: any, idx: number) => {
                             const fullUrl = resolveMobilePhotoUrl(String(p));
                             return (
-                              <View key={idx} style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#334155', backgroundColor: '#0F172A' }}>
+                              <View key={idx} style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: isDark ? '#0F172A' : '#E2E8F0' }}>
                                 <Image
-                                  source={{ uri: fullUrl }}
+                                  source={{ uri: fullUrl, headers: { 'ngrok-skip-browser-warning': 'true' } }}
                                   style={{ width: '100%', height: '100%' }}
                                   resizeMode="cover"
                                 />
@@ -1682,12 +1999,12 @@ export default function VisitsScreen() {
                   })()}
 
                   {/* 7. Remarks & Customer Feedback */}
-                  <View style={styles.detailSectionCard}>
+                  <View style={[styles.detailSectionCard, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
                     <View style={styles.navySectionTitleBox}>
                       <Text style={styles.navySectionTitle}>REMARKS & OFFICER SUGGESTIONS</Text>
                     </View>
-                    <View style={styles.remarkContentBox}>
-                      <Text style={styles.remarkContentText}>
+                    <View style={[styles.remarkContentBox, { backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#FFFFFF', borderColor: colors.border }]}>
+                      <Text style={[styles.remarkContentText, { color: colors.text }]}>
                         {selectedReport?.rawReport?.overall_remarks ||
                          selectedReport?.rawReport?.suggestions ||
                          selectedReport?.rawReport?.remark ||
@@ -1759,7 +2076,6 @@ export default function VisitsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0A1128',
   },
   header: {
     flexDirection: 'row',

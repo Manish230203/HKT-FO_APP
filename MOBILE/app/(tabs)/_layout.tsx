@@ -1,20 +1,24 @@
 import React, { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { gpsTracker } from '../../services/gpsService';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function TabLayout() {
+  const { colors } = useTheme();
+
   useEffect(() => {
     // Check and resume active GPS tracking on app launch / reboot recovery
     gpsTracker.checkAndResumeTracking().catch(err => {
       console.warn('Error resuming GPS tracking on app boot:', err);
     });
   }, []);
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: { display: 'none' }, // Bottom navigation bar removed as requested
-        sceneStyle: { backgroundColor: '#0A1128' },
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       <Tabs.Screen

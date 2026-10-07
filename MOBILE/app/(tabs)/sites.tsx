@@ -6,6 +6,7 @@ import { Building, Shield, ChevronRight, ChevronDown } from 'lucide-react-native
 import { getSites, Site } from '../../services/siteService';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { THEME } from '../../constants/theme';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
@@ -15,6 +16,7 @@ import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 export default function SitesScreen() {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ type?: string }>();
   const isBaseSiteOnly = params.type === 'base';
@@ -93,7 +95,7 @@ export default function SitesScreen() {
 
   return (
     <SwipeableBackWrapper>
-      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
         <View style={styles.searchBar}>
           <Input
             placeholder={t('search_sites')}
@@ -105,12 +107,12 @@ export default function SitesScreen() {
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchSitesData} tintColor="#FFFFFF" />}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchSitesData} tintColor={colors.primary} />}
         >
           {Object.keys(filteredGroupedSites).length === 0 ? (
             <Card style={styles.emptyCard}>
-              <Building color={THEME.textVariant} size={32} />
-              <Text style={styles.emptyText}>No assigned sites found.</Text>
+              <Building color={colors.textVariant} size={32} />
+              <Text style={[styles.emptyText, { color: colors.textVariant }]}>No assigned sites found.</Text>
             </Card>
           ) : (
             Object.keys(filteredGroupedSites).map((clientName) => {
@@ -122,17 +124,17 @@ export default function SitesScreen() {
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={() => toggleExpand(clientName)}
-                    style={styles.clientHeader}
+                    style={[styles.clientHeader, { backgroundColor: colors.card, borderColor: colors.border }]}
                   >
                     <View style={styles.clientHeaderLeft}>
-                      <Building color={THEME.primary} size={20} />
-                      <Text style={styles.clientTitle}>{clientName}</Text>
+                      <Building color={colors.primary} size={20} />
+                      <Text style={[styles.clientTitle, { color: colors.text }]}>{clientName}</Text>
                       <Badge label={`${clientSites.length}`} variant="info" />
                     </View>
                     {isExpanded ? (
-                      <ChevronDown color={THEME.textVariant} size={20} />
+                      <ChevronDown color={colors.textVariant} size={20} />
                     ) : (
-                      <ChevronRight color={THEME.textVariant} size={20} />
+                      <ChevronRight color={colors.textVariant} size={20} />
                     )}
                   </TouchableOpacity>
 
@@ -149,15 +151,15 @@ export default function SitesScreen() {
                       >
                         <View style={styles.siteRow}>
                           <View style={styles.shieldBox}>
-                            <Shield color={THEME.secondary} size={18} />
+                            <Shield color={colors.secondary} size={18} />
                           </View>
                           <View style={styles.siteInfo}>
-                            <Text style={styles.siteTitle}>{site.name}</Text>
+                            <Text style={[styles.siteTitle, { color: colors.text }]}>{site.name}</Text>
                             {site.branch_name ? (
-                              <Text style={styles.branchText}>{site.branch_name}</Text>
+                              <Text style={[styles.branchText, { color: colors.textVariant }]}>{site.branch_name}</Text>
                             ) : null}
                           </View>
-                          <ChevronRight color={THEME.textVariant} size={18} />
+                          <ChevronRight color={colors.textVariant} size={18} />
                         </View>
                       </Card>
                     ))}
@@ -174,7 +176,6 @@ export default function SitesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.background,
   },
   searchBar: {
     paddingHorizontal: 16,

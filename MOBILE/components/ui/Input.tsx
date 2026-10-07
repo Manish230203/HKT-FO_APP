@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, StyleSheet, TextInputProps, ViewStyle } from 'react-native';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -17,31 +17,36 @@ export const Input: React.FC<InputProps> = ({
   style,
   ...props
 }) => {
+  const { colors, isDark, theme } = useTheme();
   const isMultiline = !!props.multiline;
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, { color: colors.textVariant }]}>{label}</Text>}
       <View
         style={[
           styles.inputWrapper,
+          {
+            backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+            borderColor: error ? colors.danger : colors.border,
+          },
           isMultiline ? styles.inputWrapperMultiline : null,
-          error ? styles.inputError : null,
         ]}
       >
         {leftIcon && <View style={[styles.leftIconContainer, isMultiline ? { marginTop: 2 } : null]}>{leftIcon}</View>}
         <TextInput
           style={[
             styles.input,
+            { color: colors.text, fontSize: theme.typography.sm },
             isMultiline ? styles.inputMultiline : null,
             style,
           ]}
           textAlignVertical={isMultiline ? 'top' : 'center'}
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.textVariant}
           {...props}
         />
       </View>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text> : null}
     </View>
   );
 };
@@ -51,9 +56,8 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   label: {
-    fontSize: THEME.typography.xs,
+    fontSize: 12,
     fontWeight: '600',
-    color: THEME.textVariant,
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -62,10 +66,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 48,
-    backgroundColor: '#1E293B',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: THEME.border,
     paddingHorizontal: 14,
   },
   inputWrapperMultiline: {
@@ -81,8 +83,6 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minHeight: 40,
-    color: THEME.text,
-    fontSize: THEME.typography.sm,
   },
   inputMultiline: {
     minHeight: 70,
@@ -90,12 +90,8 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 0,
   },
-  inputError: {
-    borderColor: THEME.danger,
-  },
   errorText: {
-    color: THEME.danger,
-    fontSize: THEME.typography.xs,
+    fontSize: 12,
     marginTop: 4,
   },
 });

@@ -27,6 +27,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useAttendance } from '../context/AttendanceContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 import { CustomAlertModal } from '../components/ui/CustomAlertModal';
 import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns } from '../services/db';
@@ -36,6 +37,7 @@ export default function MarkAttendanceScreen() {
   const { user, profileImage } = useAuth();
   const { markAttendance, validateSelfie, todayRecord, refreshStatus } = useAttendance();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   const cameraRef = useRef<any>(null);
@@ -394,28 +396,28 @@ export default function MarkAttendanceScreen() {
   return (
     <SwipeableBackWrapper>
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={styles.safeContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
         <ScrollView contentContainerStyle={styles.content}>
           {/* 1. HEADER BAR MATCHING USER SCREENSHOT */}
           <View style={styles.headerBar}>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <ArrowLeft color="#FFFFFF" size={22} />
+              <ArrowLeft color={colors.text} size={22} />
             </TouchableOpacity>
 
             <View style={styles.headerTitleCol}>
-              <Text style={styles.mainTitleText}>{t('mark_attendance')}</Text>
-              <Text style={styles.userSubText}>
+              <Text style={[styles.mainTitleText, { color: colors.text }]}>{t('mark_attendance')}</Text>
+              <Text style={[styles.userSubText, { color: colors.textVariant }]}>
                 {t('user_label')}: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
               </Text>
-              <Text style={styles.sessionIdText}>
+              <Text style={[styles.sessionIdText, { color: colors.textVariant }]}>
                 {t('session_id')}: {user?.employee_id || 'EMP002'}
               </Text>
             </View>
 
             <View style={styles.timeCol}>
-              <Text style={styles.localTimeLabel}>{t('local_time')}</Text>
-              <Text style={styles.localTimeDigits}>{localTime || '13:34:11'}</Text>
+              <Text style={[styles.localTimeLabel, { color: colors.textVariant }]}>{t('local_time')}</Text>
+              <Text style={[styles.localTimeDigits, { color: colors.text }]}>{localTime || '13:34:11'}</Text>
             </View>
           </View>
 
@@ -450,10 +452,10 @@ export default function MarkAttendanceScreen() {
           )}
 
           {/* 3. REAL-TIME FACE VERIFICATION CARD */}
-          <View style={styles.verificationCard}>
+          <View style={[styles.verificationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.livenessHeaderRow}>
               <View style={styles.redLiveDot} />
-              <Text style={styles.livenessTitle}>VERIFY FACE IDENTITY</Text>
+              <Text style={[styles.livenessTitle, { color: colors.text }]}>VERIFY FACE IDENTITY</Text>
             </View>
 
             {/* LIVE CAMERA VIEWFINDER WITH ORANGE CORNER RETICLES */}
@@ -468,7 +470,7 @@ export default function MarkAttendanceScreen() {
             </View>
 
             {/* AUTO-CAPTURE & ATTENDANCE STATUS BOX */}
-            <View style={styles.autoCaptureStatusBox}>
+            <View style={[styles.autoCaptureStatusBox, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}>
               {profileMissingError || !profileImage ? (
                 <Text style={[styles.autoCaptureText, { color: '#EF4444', fontWeight: '800' }]}>
                   ⚠️ ATTENDANCE BLOCKED: Profile photo missing. Register profile photo in Settings first.
@@ -494,7 +496,7 @@ export default function MarkAttendanceScreen() {
                   </View>
                 </View>
               ) : (
-                <Text style={styles.autoCaptureText}>
+                <Text style={[styles.autoCaptureText, { color: colors.text }]}>
                   <Text style={{ color: '#3B82F6', fontWeight: '800' }}>Position Face: </Text>
                   {activePunchRecord ? 'Punching Out' : 'Punching In'} in {countdown}s...
                 </Text>

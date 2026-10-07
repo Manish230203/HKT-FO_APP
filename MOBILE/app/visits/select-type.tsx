@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Sun, Moon, BookOpen, ChevronRight } from 'lucide-react-native';
 import { useLanguage } from '../../context/LanguageContext';
-import { THEME } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { Card } from '../../components/ui/Card';
 
 export default function SelectVisitTypeScreen() {
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string; checkInTime?: string; checkOutTime?: string }>();
 
@@ -23,9 +24,9 @@ export default function SelectVisitTypeScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.headerTitle}>{t('select_visit_type')}</Text>
-      <Text style={styles.headerSubtitle}>{t('choose_visit_type_subtitle')}</Text>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+      <Text style={[styles.headerTitle, { color: colors.text }]}>{t('select_visit_type')}</Text>
+      <Text style={[styles.headerSubtitle, { color: colors.textVariant }]}>{t('choose_visit_type_subtitle')}</Text>
 
       {/* Day Visit Card */}
       <Card onPress={() => handleSelect('day')} style={styles.typeCard}>
@@ -34,10 +35,10 @@ export default function SelectVisitTypeScreen() {
             <Sun color="#F59E0B" size={38} />
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>{t('day_visit')}</Text>
-            <Text style={styles.cardDesc}>{t('day_visit_desc')}</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('day_visit')}</Text>
+            <Text style={[styles.cardDesc, { color: colors.textVariant }]}>{t('day_visit_desc')}</Text>
           </View>
-          <ChevronRight color={THEME.textVariant} size={24} />
+          <ChevronRight color={colors.textVariant} size={24} />
         </View>
       </Card>
 
@@ -48,10 +49,10 @@ export default function SelectVisitTypeScreen() {
             <Moon color="#818CF8" size={38} />
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>{t('night_visit')}</Text>
-            <Text style={styles.cardDesc}>{t('night_visit_desc')}</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('night_visit')}</Text>
+            <Text style={[styles.cardDesc, { color: colors.textVariant }]}>{t('night_visit_desc')}</Text>
           </View>
-          <ChevronRight color={THEME.textVariant} size={24} />
+          <ChevronRight color={colors.textVariant} size={24} />
         </View>
       </Card>
 
@@ -62,10 +63,10 @@ export default function SelectVisitTypeScreen() {
             <BookOpen color="#34D399" size={38} />
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.cardTitle}>{t('general_visit')}</Text>
-            <Text style={styles.cardDesc}>{t('general_visit_desc')}</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t('general_visit')}</Text>
+            <Text style={[styles.cardDesc, { color: colors.textVariant }]}>{t('general_visit_desc')}</Text>
           </View>
-          <ChevronRight color={THEME.textVariant} size={24} />
+          <ChevronRight color={colors.textVariant} size={24} />
         </View>
       </Card>
     </ScrollView>
@@ -75,20 +76,17 @@ export default function SelectVisitTypeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.background,
   },
   content: {
     padding: 16,
   },
   headerTitle: {
-    fontSize: THEME.typography.xl,
+    fontSize: 22,
     fontWeight: '800',
-    color: THEME.text,
     marginTop: 8,
   },
   headerSubtitle: {
-    fontSize: THEME.typography.xs,
-    color: THEME.textVariant,
+    fontSize: 12,
     marginTop: 4,
     marginBottom: 20,
   },
@@ -112,13 +110,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
-    fontSize: THEME.typography.md,
+    fontSize: 16,
     fontWeight: '700',
-    color: THEME.text,
   },
   cardDesc: {
-    fontSize: THEME.typography.xs,
-    color: THEME.textVariant,
+    fontSize: 12,
     marginTop: 4,
     lineHeight: 18,
   },

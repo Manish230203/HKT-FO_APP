@@ -38,6 +38,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { getPlannedVisits, createPlannedVisit, getSites, getClients, Site, Client, PlannedVisit } from '../../services/siteService';
 import { getPunchRecords } from '../../services/db';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits } from '../../services/visitService';
@@ -47,6 +48,7 @@ export default function DashboardScreen() {
   const { user, profileImage } = useAuth();
   const { todayRecord, attendanceLogs, profileData, refreshStatus } = useAttendance();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   const [greeting, setGreeting] = useState('Good Afternoon');
@@ -605,30 +607,30 @@ export default function DashboardScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
+    <SafeAreaView style={[styles.safeContainer, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchDashboardData} tintColor="#3B82F6" />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchDashboardData} tintColor={colors.primary} />}
       >
         {/* 1. HEADER PROFILE CARD (CENTER ALIGNED) */}
-        <View style={styles.standardCard}>
+        <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.headerProfileCardContent}>
             <View style={styles.userProfileSection}>
-              <View style={styles.avatarWrapper}>
+              <View style={[styles.avatarWrapper, { backgroundColor: isDark ? '#000000' : '#E2E8F0' }]}>
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.avatarImage} />
                 ) : (
-                  <User color="#FFFFFF" size={26} />
+                  <User color={colors.textVariant} size={26} />
                 )}
               </View>
               <View style={styles.userTextCol}>
-                <Text style={styles.greetingText} numberOfLines={1}>{greeting},</Text>
-                <Text style={styles.userNameText} numberOfLines={1} ellipsizeMode="tail">
+                <Text style={[styles.greetingText, { color: colors.textVariant }]} numberOfLines={1}>{greeting},</Text>
+                <Text style={[styles.userNameText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
                   {user?.name ? (user.name.trim().length > 16 ? `${user.name.trim().substring(0, 16)}...` : user.name.trim()) : 'Officer'}
                 </Text>
-                <Text style={styles.empIdText} numberOfLines={1}>EMP ID: {user?.employee_id || 'EMP001'}</Text>
+                <Text style={[styles.empIdText, { color: colors.primary }]} numberOfLines={1}>EMP ID: {user?.employee_id || 'EMP001'}</Text>
               </View>
             </View>
 
@@ -637,8 +639,6 @@ export default function DashboardScreen() {
             </View>
           </View>
         </View>
-
-
 
         {/* 3. SESSION CARD (BLUE GRADIENT - MATCHING USER SCREENSHOT EXACTLY) */}
         <TouchableOpacity
@@ -702,29 +702,29 @@ export default function DashboardScreen() {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => router.push('/mark-attendance')}
-            style={styles.actionCard}
+            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
-            <View style={styles.actionIconBox}>
-              <Fingerprint color="#3B82F6" size={38} />
+            <View style={[styles.actionIconBox, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
+              <Fingerprint color={colors.primary} size={38} />
             </View>
-            <Text style={styles.actionCardTitle}>{t('mark_attendance').toUpperCase().replace(' ', '\n')}</Text>
+            <Text style={[styles.actionCardTitle, { color: colors.text }]}>{t('mark_attendance').toUpperCase().replace(' ', '\n')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={handleOpenAddVisitModal}
-            style={styles.actionCard}
+            style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
-            <View style={styles.actionIconBox}>
+            <View style={[styles.actionIconBox, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
               <PlusCircle color="#10B981" size={38} />
             </View>
-            <Text style={styles.actionCardTitle}>{t('add_visit').toUpperCase().replace(' ', '\n')}</Text>
+            <Text style={[styles.actionCardTitle, { color: colors.text }]}>{t('add_visit').toUpperCase().replace(' ', '\n')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* 5. OFFICER VISITS SECTION (CENTER ALIGNED) */}
-        <View style={styles.standardCard}>
-          <Text style={styles.sectionTitle}>{t('field_officer_visits').toUpperCase()}</Text>
+        <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>{t('field_officer_visits').toUpperCase()}</Text>
 
           <View style={styles.gridItemsRow}>
             {/* Pending Visits */}
@@ -734,8 +734,8 @@ export default function DashboardScreen() {
               style={styles.gridItem}
             >
               <View style={styles.gridIconCircleWrapper}>
-                <View style={styles.gridIconCircle}>
-                  <Clock color="#3B82F6" size={30} />
+                <View style={[styles.gridIconCircle, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
+                  <Clock color={colors.primary} size={30} />
                 </View>
                 {onlyPendingPlannedVisits.length > 0 && (
                   <View style={styles.countBadge}>
@@ -743,7 +743,7 @@ export default function DashboardScreen() {
                   </View>
                 )}
               </View>
-              <Text style={styles.gridItemLabel}>{t('pending_visits')}</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('pending_visits')}</Text>
             </TouchableOpacity>
 
             {/* Completed Visits */}
@@ -753,107 +753,107 @@ export default function DashboardScreen() {
               style={styles.gridItem}
             >
               <View style={styles.gridIconCircleWrapper}>
-                <View style={styles.gridIconCircle}>
+                <View style={[styles.gridIconCircle, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
                   <CheckCircle2 color="#10B981" size={30} />
                 </View>
               </View>
-              <Text style={styles.gridItemLabel}>{t('completed_visits')}</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('completed_visits')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* 6. ATTENDANCE CARD (CENTER ALIGNED) */}
-        <View style={styles.standardCard}>
-          <Text style={styles.sectionTitle}>{t('attendance').toUpperCase()}</Text>
+        <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>{t('attendance').toUpperCase()}</Text>
 
           <View style={styles.gridItemsRow}>
             <TouchableOpacity
               onPress={() => router.push('/attendance?view=dashboard')}
               style={styles.gridItem}
             >
-              <View style={styles.gridIconCircle}>
-                <LayoutGrid color="#3B82F6" size={24} />
+              <View style={[styles.gridIconCircle, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
+                <LayoutGrid color={colors.primary} size={24} />
               </View>
-              <Text style={styles.gridItemLabel}>{t('dashboard')}</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('dashboard')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => router.push('/attendance?view=logs')}
               style={styles.gridItem}
             >
-              <View style={styles.gridIconCircle}>
+              <View style={[styles.gridIconCircle, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
                 <CheckCircle2 color="#10B981" size={24} />
               </View>
-              <Text style={styles.gridItemLabel}>{t('attendance_log')}</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('attendance_log')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => router.push('/attendance?view=missed')}
               style={styles.gridItem}
             >
-              <View style={styles.gridIconCircle}>
+              <View style={[styles.gridIconCircle, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
                 <Clock color="#F59E0B" size={24} />
               </View>
-              <Text style={styles.gridItemLabel}>{t('missed_punches')}</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('missed_punches')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* 7. PROFILE & SETTINGS CARD (CENTER ALIGNED) */}
-        <View style={styles.standardCard}>
-          <Text style={styles.sectionTitle}>{`${t('profile')} & ${t('settings')}`.toUpperCase()}</Text>
+        <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>{`${t('profile')} & ${t('settings')}`.toUpperCase()}</Text>
 
           <View style={styles.gridItemsRow}>
             <TouchableOpacity
               onPress={() => router.push('/profile')}
               style={styles.gridItem}
             >
-              <View style={styles.gridIconCircle}>
+              <View style={[styles.gridIconCircle, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
                 <User color="#EC4899" size={24} />
               </View>
-              <Text style={styles.gridItemLabel}>{t('profile')}</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('profile')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => router.push('/settings')}
               style={styles.gridItem}
             >
-              <View style={styles.gridIconCircle}>
-                <Settings color="#94A3B8" size={24} />
+              <View style={[styles.gridIconCircle, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}>
+                <Settings color={colors.textVariant} size={24} />
               </View>
-              <Text style={styles.gridItemLabel}>{t('settings')}</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('settings')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        <Text style={styles.copyrightText}>❖ 2026 HUMANKIND TECHNOLOGY</Text>
+        <Text style={[styles.copyrightText, { color: colors.textVariant }]}>❖ 2026 HUMANKIND TECHNOLOGY</Text>
       </ScrollView>
 
       {/* ADD VISIT / ASSIGN VISIT PLAN MODAL */}
       <Modal visible={addVisitModalVisible} transparent animationType="slide" onRequestClose={handleCloseAddVisitModal}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={styles.modalContainer}>
+        <KeyboardAvoidingView style={[styles.modalOverlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.5)' }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={[styles.modalContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {pickerClientVisible ? (
               <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('select_client')}</Text>
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t('select_client')}</Text>
                   <TouchableOpacity onPress={() => setPickerClientVisible(false)}>
-                    <X color="#94A3B8" size={24} />
+                    <X color={colors.textVariant} size={24} />
                   </TouchableOpacity>
                 </View>
 
                 <TextInput
-                  style={[styles.modalInput, { marginTop: 12, marginBottom: 12 }]}
+                  style={[styles.modalInput, { marginTop: 12, marginBottom: 12, backgroundColor: isDark ? '#000000' : '#F1F5F9', color: colors.text, borderColor: colors.border }]}
                   placeholder={t('search_client')}
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={colors.textVariant}
                   value={modalClientSearch}
                   onChangeText={setModalClientSearch}
                 />
 
                 {loadingModalData ? (
                   <View style={{ padding: 30, alignItems: 'center' }}>
-                    <ActivityIndicator size="small" color="#3B82F6" />
-                    <Text style={{ color: '#94A3B8', fontSize: 13, marginTop: 10 }}>Loading clients...</Text>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={{ color: colors.textVariant, fontSize: 13, marginTop: 10 }}>Loading clients...</Text>
                   </View>
                 ) : (
                   <FlatList
@@ -867,20 +867,20 @@ export default function DashboardScreen() {
                     contentContainerStyle={{ paddingBottom: 16 }}
                     ListEmptyComponent={
                       <View style={{ padding: 20, alignItems: 'center' }}>
-                        <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>No clients found.</Text>
+                        <Text style={{ color: colors.textVariant, fontSize: 13, textAlign: 'center' }}>No clients found.</Text>
                       </View>
                     }
                     renderItem={({ item }) => (
                       <TouchableOpacity
-                        style={styles.modalItemRow}
+                        style={[styles.modalItemRow, { borderBottomColor: colors.border }]}
                         onPress={() => {
                           setNewClientId(String(item.id));
                           setNewSiteId('');
                           setPickerClientVisible(false);
                         }}
                       >
-                        <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
-                        <Text style={styles.modalItemRowText}>{item.name}</Text>
+                        <Building color={colors.primary} size={18} style={{ marginRight: 10 }} />
+                        <Text style={[styles.modalItemRowText, { color: colors.text }]}>{item.name}</Text>
                       </TouchableOpacity>
                     )}
                   />
@@ -888,17 +888,17 @@ export default function DashboardScreen() {
               </>
             ) : pickerSiteVisible ? (
               <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('select_site')}</Text>
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t('select_site')}</Text>
                   <TouchableOpacity onPress={() => setPickerSiteVisible(false)}>
-                    <X color="#94A3B8" size={24} />
+                    <X color={colors.textVariant} size={24} />
                   </TouchableOpacity>
                 </View>
 
                 <TextInput
-                  style={[styles.modalInput, { marginTop: 12, marginBottom: 12 }]}
+                  style={[styles.modalInput, { marginTop: 12, marginBottom: 12, backgroundColor: isDark ? '#000000' : '#F1F5F9', color: colors.text, borderColor: colors.border }]}
                   placeholder={t('search_site')}
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor={colors.textVariant}
                   value={modalSiteSearch}
                   onChangeText={setModalSiteSearch}
                 />
@@ -917,14 +917,14 @@ export default function DashboardScreen() {
                   contentContainerStyle={{ paddingBottom: 16 }}
                   ListEmptyComponent={
                     <View style={{ padding: 20, alignItems: 'center' }}>
-                      <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
+                      <Text style={{ color: colors.textVariant, fontSize: 13, textAlign: 'center' }}>
                         {!newClientId ? t('select_client_first') : t('no_sites_found')}
                       </Text>
                     </View>
                   }
                   renderItem={({ item }) => (
                     <TouchableOpacity
-                      style={styles.modalItemRow}
+                      style={[styles.modalItemRow, { borderBottomColor: colors.border }]}
                       onPress={() => {
                         setNewSiteId(String(item.id));
                         setPickerSiteVisible(false);
@@ -932,9 +932,9 @@ export default function DashboardScreen() {
                     >
                       <Building color="#10B981" size={18} style={{ marginRight: 10 }} />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.modalItemRowText}>{item.name}</Text>
+                        <Text style={[styles.modalItemRowText, { color: colors.text }]}>{item.name}</Text>
                         {item.client_name ? (
-                          <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>{item.client_name}</Text>
+                          <Text style={{ fontSize: 10, color: colors.textVariant, marginTop: 2 }}>{item.client_name}</Text>
                         ) : null}
                       </View>
                     </TouchableOpacity>
@@ -943,121 +943,131 @@ export default function DashboardScreen() {
               </>
             ) : (
               <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{t('assign_visit_plan')}</Text>
+                <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>{t('assign_visit_plan')}</Text>
                   <TouchableOpacity onPress={handleCloseAddVisitModal}>
-                    <X color="#94A3B8" size={24} />
+                    <X color={colors.textVariant} size={24} />
                   </TouchableOpacity>
                 </View>
 
                 <ScrollView contentContainerStyle={{ paddingVertical: 10 }}>
-                  <Text style={styles.fieldLabel}>{t('select_client')}</Text>
+                  <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('select_client')}</Text>
                   <TouchableOpacity
-                    style={styles.pickerBtn}
+                    style={[styles.pickerBtn, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}
                     onPress={() => setPickerClientVisible(true)}
                   >
-                    <Text style={styles.pickerBtnText}>
+                    <Text style={[styles.pickerBtnText, { color: colors.text }]}>
                       {newClientId === 'OTHER'
                         ? 'OTHER'
                         : clients.find((c) => String(c.id) === String(newClientId))?.name || `${t('select_client')}...`}
                     </Text>
-                    <ChevronDown color="#94A3B8" size={20} />
+                    <ChevronDown color={colors.textVariant} size={20} />
                   </TouchableOpacity>
 
                   {newClientId === 'OTHER' ? (
                     <>
-                      <Text style={styles.fieldLabel}>Client Name</Text>
+                      <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>Client Name</Text>
                       <TextInput
-                        style={styles.modalInput}
+                        style={[styles.modalInput, { backgroundColor: isDark ? '#000000' : '#F1F5F9', color: colors.text, borderColor: colors.border }]}
                         value={customClientName}
                         onChangeText={setCustomClientName}
                         placeholder="Enter Client Name"
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor={colors.textVariant}
                       />
 
-                      <Text style={styles.fieldLabel}>Site Name</Text>
+                      <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>Site Name</Text>
                       <TextInput
-                        style={styles.modalInput}
+                        style={[styles.modalInput, { backgroundColor: isDark ? '#000000' : '#F1F5F9', color: colors.text, borderColor: colors.border }]}
                         value={customSiteName}
                         onChangeText={setCustomSiteName}
                         placeholder="Enter Site Name"
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor={colors.textVariant}
                       />
                     </>
                   ) : (
                     <>
-                      <Text style={styles.fieldLabel}>{t('select_site')}</Text>
+                      <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('select_site')}</Text>
                       <TouchableOpacity
-                        style={styles.pickerBtn}
+                        style={[styles.pickerBtn, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}
                         onPress={() => setPickerSiteVisible(true)}
                       >
-                        <Text style={styles.pickerBtnText}>
+                        <Text style={[styles.pickerBtnText, { color: colors.text }]}>
                           {modalSites.find((s) => String(s.id) === String(newSiteId))?.name || `${t('select_site')}...`}
                         </Text>
-                        <ChevronDown color="#94A3B8" size={20} />
+                        <ChevronDown color={colors.textVariant} size={20} />
                       </TouchableOpacity>
                     </>
                   )}
 
-                  <Text style={styles.fieldLabel}>{t('planning_type')}</Text>
+                  <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('planning_type')}</Text>
                   <View style={styles.typeRow}>
                     {['SINGLE', 'WEEKLY', 'MONTHLY'].map((pt) => (
                       <TouchableOpacity
                         key={pt}
-                        style={[styles.typePill, newPlanningType === pt && styles.typePillActive]}
+                        style={[
+                          styles.typePill,
+                          { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border },
+                          newPlanningType === pt && styles.typePillActive,
+                        ]}
                         onPress={() => handleTypeChange(pt)}
                       >
-                        <Text style={[styles.typePillText, newPlanningType === pt && styles.typePillTextActive]}>
+                        <Text
+                          style={[
+                            styles.typePillText,
+                            { color: colors.textVariant },
+                            newPlanningType === pt && styles.typePillTextActive,
+                          ]}
+                        >
                           {pt}
                         </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
 
-                  <Text style={styles.fieldLabel}>{t('visit_frequency')}</Text>
+                  <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('visit_frequency')}</Text>
                   <TextInput
-                    style={styles.modalInput}
+                    style={[styles.modalInput, { backgroundColor: isDark ? '#000000' : '#F1F5F9', color: colors.text, borderColor: colors.border }]}
                     keyboardType="numeric"
                     value={newVisitFrequency}
                     onChangeText={setNewVisitFrequency}
                     placeholder="e.g. 1"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor={colors.textVariant}
                   />
 
                   {newPlanningType === 'SINGLE' ? (
                     <>
-                      <Text style={styles.fieldLabel}>{t('visit_date')}</Text>
+                      <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('visit_date')}</Text>
                       <TouchableOpacity
-                        style={styles.pickerBtn}
+                        style={[styles.pickerBtn, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}
                         onPress={() => setActiveDatePicker('visit')}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.pickerBtnText}>{newVisitDate || 'YYYY-MM-DD'}</Text>
-                        <Calendar color="#3B82F6" size={20} />
+                        <Text style={[styles.pickerBtnText, { color: colors.text }]}>{newVisitDate || 'YYYY-MM-DD'}</Text>
+                        <Calendar color={colors.primary} size={20} />
                       </TouchableOpacity>
                     </>
                   ) : (
                     <View style={{ flexDirection: 'row', gap: 10 }}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.fieldLabel}>{t('start_date')}</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('start_date')}</Text>
                         <TouchableOpacity
-                          style={styles.pickerBtn}
+                          style={[styles.pickerBtn, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}
                           onPress={() => setActiveDatePicker('start')}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.pickerBtnText}>{newStartDate || 'YYYY-MM-DD'}</Text>
-                          <Calendar color="#3B82F6" size={20} />
+                          <Text style={[styles.pickerBtnText, { color: colors.text }]}>{newStartDate || 'YYYY-MM-DD'}</Text>
+                          <Calendar color={colors.primary} size={20} />
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.fieldLabel}>{t('end_date')}</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('end_date')}</Text>
                         <TouchableOpacity
-                          style={styles.pickerBtn}
+                          style={[styles.pickerBtn, { backgroundColor: isDark ? '#000000' : '#F1F5F9', borderColor: colors.border }]}
                           onPress={() => setActiveDatePicker('end')}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.pickerBtnText}>{newEndDate || 'YYYY-MM-DD'}</Text>
-                          <Calendar color="#3B82F6" size={20} />
+                          <Text style={[styles.pickerBtnText, { color: colors.text }]}>{newEndDate || 'YYYY-MM-DD'}</Text>
+                          <Calendar color={colors.primary} size={20} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1068,18 +1078,18 @@ export default function DashboardScreen() {
                     Platform.OS === 'ios' ? (
                       <Modal transparent animationType="fade" visible={activeDatePicker !== null} onRequestClose={() => setActiveDatePicker(null)}>
                         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
-                          <View style={{ backgroundColor: '#1E293B', borderRadius: 16, padding: 20, width: '85%', alignItems: 'center' }}>
+                          <View style={{ backgroundColor: colors.card, borderRadius: 16, padding: 20, width: '85%', alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>
                             <DateTimePicker
                               value={parseDateString(
                                 activeDatePicker === 'visit' ? newVisitDate : activeDatePicker === 'start' ? newStartDate : newEndDate
                               )}
                               mode="date"
                               display="inline"
-                              themeVariant="dark"
+                              themeVariant={isDark ? "dark" : "light"}
                               onChange={handleDatePickerChange}
                             />
                             <TouchableOpacity
-                              style={{ marginTop: 14, backgroundColor: '#3B82F6', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 }}
+                              style={{ marginTop: 14, backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 24, paddingVertical: 10 }}
                               onPress={() => setActiveDatePicker(null)}
                             >
                               <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Done</Text>
@@ -1099,9 +1109,9 @@ export default function DashboardScreen() {
                     )
                   )}
 
-                  <Text style={styles.fieldLabel}>{t('assigned_officer')}</Text>
+                  <Text style={[styles.fieldLabel, { color: colors.textVariant }]}>{t('assigned_officer')}</Text>
                   <TextInput
-                    style={[styles.modalInput, { opacity: 0.7 }]}
+                    style={[styles.modalInput, { backgroundColor: isDark ? '#000000' : '#F1F5F9', color: colors.text, borderColor: colors.border, opacity: 0.7 }]}
                     value={user?.name || 'Officer'}
                     editable={false}
                   />
@@ -1128,11 +1138,9 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
-    backgroundColor: '#0A1128',
   },
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
   },
   content: {
     padding: 16,
@@ -1142,12 +1150,10 @@ const styles = StyleSheet.create({
 
   /* DARK BLUISH SHADE CARD DESIGN (#131C33) */
   standardCard: {
-    backgroundColor: '#131C33',
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
   },
 

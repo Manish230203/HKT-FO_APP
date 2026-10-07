@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, Fla
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Sun, Plus, Trash2, CheckCircle2, ChevronDown, Building, X, Clock, MapPin, Camera, Lock } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
@@ -10,6 +11,7 @@ import { getSites, getClients, getSiteGuards, Site, Client, checkOutSiteVisit } 
 import { submitDayVisitReport, getDayVisitTemplates } from '../../../services/visitService';
 import { clearActiveCheckIn, markReportSubmittedForCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
+import { useTheme } from '../../../context/ThemeContext';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
@@ -32,6 +34,7 @@ const DEFAULT_DAY_MANDATORY_QUESTIONS = [
 export default function CreateDayVisitReportScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string; checkInTime?: string; checkOutTime?: string }>();
 
@@ -135,8 +138,20 @@ export default function CreateDayVisitReportScreen() {
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        const photoData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
-        setQuestionPhotos((prev) => ({ ...prev, [qText]: photoData }));
+        let photoData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : '';
+        if (!photoData && asset.uri) {
+          try {
+            const base64Str = await FileSystem.readAsStringAsync(asset.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            photoData = `data:image/jpeg;base64,${base64Str}`;
+          } catch (e) {
+            photoData = asset.uri;
+          }
+        }
+        if (photoData) {
+          setQuestionPhotos((prev) => ({ ...prev, [qText]: photoData }));
+        }
       }
     } catch (e) {
       console.warn('Error launching camera for question photo:', e);
@@ -452,7 +467,7 @@ export default function CreateDayVisitReportScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StepIndicator steps={STEPS} currentStep={currentStep} />
 
       <ScrollView

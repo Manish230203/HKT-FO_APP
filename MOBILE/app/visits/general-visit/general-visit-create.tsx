@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { BookOpen, Send, ChevronDown, Building, X, MapPin, Camera, Lock } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
@@ -10,6 +11,7 @@ import { getSites, getClients, Site, Client } from '../../../services/siteServic
 import { submitGeneralVisit } from '../../../services/visitService';
 import { markReportSubmittedForCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
+import { useTheme } from '../../../context/ThemeContext';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
@@ -18,6 +20,7 @@ import { CustomAlertModal } from '../../../components/ui/CustomAlertModal';
 export default function CreateGeneralVisitScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string; checkInTime?: string; checkOutTime?: string }>();
 
@@ -70,8 +73,21 @@ export default function CreateGeneralVisitScreen() {
         base64: true,
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const photoUri = result.assets[0].uri;
-        setGeneralPhotos((prev) => [...prev, photoUri]);
+        const asset = result.assets[0];
+        let photoData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : '';
+        if (!photoData && asset.uri) {
+          try {
+            const base64Str = await FileSystem.readAsStringAsync(asset.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            photoData = `data:image/jpeg;base64,${base64Str}`;
+          } catch (e) {
+            photoData = asset.uri;
+          }
+        }
+        if (photoData) {
+          setGeneralPhotos((prev) => [...prev, photoData]);
+        }
       }
     } catch (e) {
       console.warn('Error launching camera for general photo:', e);
@@ -291,7 +307,7 @@ export default function CreateGeneralVisitScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: THEME.background }}
+      style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { ArrowRight, ArrowLeft, Smartphone } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { getConsentSetting } from '../services/db';
 import { THEME } from '../constants/theme';
 import { Input } from '../components/ui/Input';
@@ -15,6 +16,7 @@ import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 export default function LoginScreen() {
   const { login } = useAuth();
   const { t } = useLanguage();
+  const { colors } = useTheme();
   const router = useRouter();
 
   const [mobileNumber, setMobileNumber] = useState('');
@@ -59,7 +61,7 @@ export default function LoginScreen() {
 
   return (
     <SwipeableBackWrapper fallbackRoute="/lang/lang-selection">
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Top Header Bar with Back Button */}
         <View style={styles.topNav}>
           <TouchableOpacity
@@ -67,7 +69,7 @@ export default function LoginScreen() {
             onPress={() => router.replace('/lang/lang-selection')}
             activeOpacity={0.7}
           >
-            <ArrowLeft color="#FFFFFF" size={20} />
+            <ArrowLeft color={colors.text} size={20} />
           </TouchableOpacity>
         </View>
 
@@ -81,9 +83,9 @@ export default function LoginScreen() {
                 <Image source={require('../assets/images/app_logo.png')} style={styles.logoImage} resizeMode="contain" />
               </View>
               <Text style={styles.appTitle}>
-                <Text style={{ color: '#60A5FA' }}>VIGILO-OFFICER</Text>
+                <Text style={{ color: colors.primary }}>VIGILO-OFFICER</Text>
               </Text>
-              <Text style={styles.subtitle}>{t('login_subtitle')}</Text>
+              <Text style={[styles.subtitle, { color: colors.textVariant }]}>{t('login_subtitle')}</Text>
             </View>
 
             <Card style={styles.loginCard}>

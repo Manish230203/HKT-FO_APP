@@ -92,7 +92,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
 
   // Countdown timer for psychological YES button lock
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (isLocationDisabled && isOnDuty) {
       setYesCountdown(30);
       timer = setInterval(() => {

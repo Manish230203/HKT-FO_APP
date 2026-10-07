@@ -104,6 +104,26 @@ export const getLanguageSetting = async () => {
   }
 };
 
+export const saveThemeSetting = async (mode: 'light' | 'dark') => {
+  try {
+    await setStorageItem('user_theme', mode);
+  } catch (e) {
+    console.error("Save theme setting failed", e);
+  }
+};
+
+export const getThemeSetting = async (): Promise<'light' | 'dark' | null> => {
+  try {
+    const val = await getStorageItem('user_theme');
+    if (val === 'light' || val === 'dark') return val;
+    return null;
+  } catch (e) {
+    console.error("Get theme setting failed", e);
+    return null;
+  }
+};
+
+
 export const saveConsentSetting = async (accepted: boolean) => {
   try {
     await setStorageItem('user_consent_accepted', accepted ? 'true' : 'false');
