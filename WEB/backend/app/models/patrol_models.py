@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, Enum as SQLEnum, BigInteger
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -178,6 +178,7 @@ class SiteVisitSession(Base):
     id = Column("oid", Integer, primary_key=True, index=True)
     employee_id = Column("Employee", Integer, index=True, nullable=False)
     site_id = Column(Integer, index=True, nullable=True)
+    custom_visit_id = Column(BigInteger, index=True, nullable=True)
     site_name = Column(String(255), nullable=True)
     start_time = Column("check_in_time", DateTime, default=datetime.now, index=True)
     end_time = Column("check_out_time", DateTime, nullable=True)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,16 +29,21 @@ import {
   MapPin,
   Camera,
   Upload,
+  Moon,
+  Sun,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { CustomAlertModal } from '../components/ui/CustomAlertModal';
 import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 
 export default function SettingsScreen() {
   const { user, logout, profileImage, updateProfileImage } = useAuth();
   const { language } = useLanguage();
+  const { theme, isDark, toggleTheme, colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const router = useRouter();
 
   const [emailUpdates, setEmailUpdates] = useState(true);
@@ -132,18 +137,18 @@ export default function SettingsScreen() {
 
   return (
     <SwipeableBackWrapper>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <ScrollView contentContainerStyle={styles.content}>
           {/* Header Navigation Bar */}
           <View style={styles.headerBar}>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <ArrowLeft color="#FFFFFF" size={22} />
+              <ArrowLeft color={colors.text} size={22} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Profile & Preferences</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Profile & Preferences</Text>
           </View>
 
           {/* 1. Header Profile Card */}
-          <View style={styles.profileHeaderCard}>
+          <View style={[styles.profileHeaderCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <TouchableOpacity style={styles.avatarContainer} activeOpacity={0.85} onPress={handleSelectProfileImageOption}>
               <View style={styles.avatarCircle}>
                 {profileImage ? (
@@ -262,12 +267,12 @@ export default function SettingsScreen() {
           */}
 
           {/* 4. System Preferences Card */}
-          <View style={styles.cardContainer}>
+          <View style={[styles.cardContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardTitleRow}>
               <View style={styles.iconCircleBlue}>
                 <SettingsIcon color="#3B82F6" size={18} />
               </View>
-              <Text style={styles.cardHeaderTitle}>System Preferences</Text>
+              <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>System Preferences</Text>
             </View>
 
             <TouchableOpacity
@@ -276,11 +281,33 @@ export default function SettingsScreen() {
             >
               <Languages color="#94A3B8" size={20} />
               <View style={styles.itemTextCol}>
-                <Text style={styles.itemMainText}>Interface Language</Text>
+                <Text style={[styles.itemMainText, { color: colors.text }]}>Interface Language</Text>
                 <Text style={styles.itemSubText}>{getLanguageText()}</Text>
               </View>
               <ChevronRight color="#64748B" size={18} />
             </TouchableOpacity>
+
+            <View style={styles.divider} />
+
+            <View style={styles.itemRow}>
+              {isDark ? (
+                <Moon color="#3B82F6" size={20} />
+              ) : (
+                <Sun color="#F59E0B" size={20} />
+              )}
+              <View style={styles.itemTextCol}>
+                <Text style={[styles.itemMainText, { color: colors.text }]}>Theme Mode</Text>
+                <Text style={[styles.itemSubText, { color: isDark ? '#3B82F6' : '#F59E0B' }]}>
+                  {isDark ? 'DARK MODE (ACTIVE)' : 'LIGHT MODE (ACTIVE)'}
+                </Text>
+              </View>
+              <Switch
+                value={isDark}
+                onValueChange={toggleTheme}
+                trackColor={{ false: '#94A3B8', true: '#3B82F6' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
           </View>
 
           {/* 5. Departure Protocol Card (Sign Out) */}
@@ -302,7 +329,7 @@ export default function SettingsScreen() {
           </View>
 
           {/* 6. App Information Card */}
-          <View style={styles.cardContainer}>
+          <View style={[styles.cardContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardTitleRow}>
               <View style={styles.iconCircleBlue}>
                 <Info color="#3B82F6" size={18} />
@@ -436,10 +463,10 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
+    backgroundColor: colors.background,
   },
   content: {
     padding: 16,
@@ -457,18 +484,18 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
   },
 
   /* Profile Header Card */
   profileHeaderCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     alignItems: 'center',
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   avatarContainer: {
     position: 'relative',
@@ -478,7 +505,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     borderWidth: 3,
     borderColor: '#3B82F6',
     alignItems: 'center',
@@ -501,17 +528,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#131C33',
+    borderColor: colors.card,
   },
   userName: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#3B82F6',
+    color: colors.primary,
     textAlign: 'center',
   },
   userRole: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -521,7 +548,7 @@ const styles = StyleSheet.create({
     marginVertical: 14,
   },
   pillBadge: {
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 16,
@@ -529,10 +556,10 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
   uploadProfileBtn: {
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     borderColor: '#3B82F6',
     borderWidth: 1.5,
     width: '100%',
@@ -566,12 +593,12 @@ const styles = StyleSheet.create({
   },
 
   cardContainer: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   cardTitleRow: {
     flexDirection: 'row',
@@ -590,7 +617,7 @@ const styles = StyleSheet.create({
   cardHeaderTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   itemRow: {
     flexDirection: 'row',
@@ -604,18 +631,18 @@ const styles = StyleSheet.create({
   itemMainText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   itemSubText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
     letterSpacing: 0.5,
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: colors.border,
     marginVertical: 6,
   },
 
@@ -700,19 +727,19 @@ const styles = StyleSheet.create({
   /* EXECUTIVE PROFILE MODAL */
   modalContainer: {
     flex: 1,
-    backgroundColor: '#0A1128',
+    backgroundColor: colors.background,
   },
   modalContent: {
     padding: 20,
   },
   executiveHeaderCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     marginBottom: 24,
     position: 'relative',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   modalBackBtn: {
     alignSelf: 'flex-start',
@@ -727,12 +754,12 @@ const styles = StyleSheet.create({
   execName: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 4,
   },
   execRole: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   execBadgeRow: {
@@ -743,9 +770,9 @@ const styles = StyleSheet.create({
   execBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: colors.border,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -753,7 +780,7 @@ const styles = StyleSheet.create({
   execBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   execAvatarBox: {
     position: 'absolute',
@@ -762,7 +789,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -772,16 +799,16 @@ const styles = StyleSheet.create({
   sectionHeaderTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginBottom: 14,
   },
   detailsCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   detailsRowHeader: {
     flexDirection: 'row',
@@ -791,17 +818,17 @@ const styles = StyleSheet.create({
   detailsFieldLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#94A3B8',
+    color: colors.textSecondary,
     letterSpacing: 0.8,
   },
   detailsMainVal: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 4,
   },
   subDetailBox: {
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     borderRadius: 14,
     padding: 12,
     marginTop: 10,
@@ -812,11 +839,11 @@ const styles = StyleSheet.create({
   subDetailLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
   subDetailVal: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
 });

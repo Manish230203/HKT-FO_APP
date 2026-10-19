@@ -3,10 +3,11 @@ import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { getLanguageSetting, getConsentSetting } from '../services/db';
-import { THEME } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 
 export default function IndexScreen() {
   const { isLoading, user } = useAuth();
+  const { colors } = useTheme();
   const router = useRouter();
 
   useEffect(() => {
@@ -36,9 +37,9 @@ export default function IndexScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={THEME.primary} />
-      <Text style={styles.text}>Initializing VIGILO-OFFICER...</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={[styles.text, { color: colors.textSecondary }]}>Initializing VIGILO-OFFICER...</Text>
     </View>
   );
 }
@@ -46,13 +47,11 @@ export default function IndexScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   text: {
-    color: THEME.textVariant,
     marginTop: 16,
-    fontSize: THEME.typography.sm,
+    fontSize: 14,
   },
 });

@@ -39,10 +39,12 @@ import {
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits, sendReportEmail } from '../../services/visitService';
 import { getActiveCheckIns, saveActiveCheckIns, clearActiveCheckIn, ActiveCheckInInfo } from '../../services/db';
 import { THEME } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 import * as Location from 'expo-location';
 
 import { Modal } from 'react-native';
-import { X, User, MapPin, Building, FileText, Mail, Clock as ClockIcon, ShieldAlert, LogOut as LogOutIcon, Navigation } from 'lucide-react-native';
+import { X, User, MapPin, Building, FileText, Mail, Clock as ClockIcon, ShieldAlert, LogOut as LogOutIcon, Navigation, FileDown } from 'lucide-react-native';
+import { generateAndShareVisitPdf } from '../../services/pdfService';
 
 type CompletedVisit = {
   id: string;
@@ -74,11 +76,19 @@ function calculateHaversineDistanceMeters(lat1: number, lon1: number, lat2: numb
 }
 
 export default function VisitsScreen() {
-  const { user } = useAuth();
-  const { todayRecord } = useAttendance();
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
+  const { user, profileImage } = useAuth();
+  const { todayRecord, profileData } = useAttendance();
   const { t } = useLanguage();
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
+
+  const hasProfilePhoto = Boolean(
+    profileImage ||
+    (profileData && profileData.profile_photo) ||
+    (user && (user as any).profile_photo)
+  );
 
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [loading, setLoading] = useState(false);
@@ -239,61 +249,136 @@ export default function VisitsScreen() {
   };
 
   const handleCheckIn = async (pv: PlannedVisit) => {
-    // 0. Enforce duty attendance punch-in requirement
-    if (!todayRecord || !todayRecord.check_in || todayRecord.check_out) {
+    // 0. Enforce profile photo check
+    if (!hasProfilePhoto) {
       Alert.alert(
-        'Punch-In Required',
-        'You must punch in for duty attendance before starting or checking into a site visit.',
+        'Profile Photo Required',
+        'Please upload your profile photo first in Settings before starting a site visit.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Mark Attendance', onPress: () => router.push('/(tabs)/attendance') }
+          { text: 'Upload Photo', onPress: () => router.push('/settings') }
+        ]
+      );
+      return;
+    }
+
+    // 1. Enforce active duty requirement
+    if (!todayRecord || !todayRecord.check_in || todayRecord.check_out) {
+      Alert.alert(
+        'Active Duty Required',
+        'You are currently INACTIVE. You must activate your duty status before starting or checking into a site visit.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Activate Duty', onPress: () => router.push('/mark-attendance') }
         ]
       );
       return;
     }
 
     const empOid = getEmpOid();
-    
+    const isCustomVisit = !!(pv.isCustomVisit || pv.is_custom || pv.customVisitId || pv.custom_visit_id || pv.clientId === 'OTHER' || pv.siteId === 0 || pv.siteId === '0' || !pv.siteId);
+    const customVisitId = pv.customVisitId || pv.custom_visit_id || (isCustomVisit ? pv.id : null);
+
     // 1. Check if officer has an active IN_PROGRESS session at a different site
-    if (activeBackendSession && activeBackendSession.site_id !== Number(pv.siteId)) {
-      setEnforcerModal({
-        visible: true,
-        pendingVisit: pv,
-        activeSiteName: activeBackendSession.site_name,
-        activeStartTime: activeBackendSession.start_time,
-      });
+    if (activeBackendSession) {
+      const isSameCustom = customVisitId && activeBackendSession.custom_visit_id && Number(activeBackendSession.custom_visit_id) === Number(customVisitId);
+      const isSameSite = !customVisitId && pv.siteId && activeBackendSession.site_id && Number(activeBackendSession.site_id) === Number(pv.siteId);
+      if (!isSameCustom && !isSameSite) {
+        setEnforcerModal({
+          visible: true,
+          pendingVisit: pv,
+          activeSiteName: activeBackendSession.site_name,
+          activeStartTime: activeBackendSession.start_time,
+        });
+        return;
+      }
+    }
+
+    // 2. Fetch fresh user location
+    let currentCoords = userLocation;
+    if (!currentCoords) {
+      try {
+        const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (freshLoc && freshLoc.coords) {
+          currentCoords = freshLoc.coords;
+          setUserLocation(freshLoc.coords);
+        }
+      } catch (locErr) {
+        console.warn('Check-in location fix error:', locErr);
+      }
+    }
+
+    if (!currentCoords) {
+      Alert.alert(
+        'Location Required',
+        'Could not determine your GPS location. Please ensure location permissions and GPS are enabled.',
+        [
+          { text: 'Retry', onPress: fetchCurrentLocation },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
       return;
     }
 
-    const isCustomVisit = !!(pv.isCustomVisit || pv.is_custom || pv.clientId === 'OTHER' || pv.siteId === 0 || pv.siteId === '0' || !pv.siteId);
+    // 3. Geofence or Missing Coordinates Handling
+    const hasSiteCoords = pv.latitude !== null && pv.latitude !== undefined && Number(pv.latitude) !== 0 &&
+                          pv.longitude !== null && pv.longitude !== undefined && Number(pv.longitude) !== 0;
 
-    // 2. Perform Geofence Validation (Compare Site Lat/Long vs Officer Lat/Long)
-    if (!isCustomVisit && pv.latitude && pv.longitude) {
-      let currentCoords = userLocation;
-      if (!currentCoords) {
-        try {
-          const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          if (freshLoc && freshLoc.coords) {
-            currentCoords = freshLoc.coords;
-            setUserLocation(freshLoc.coords);
-          }
-        } catch (locErr) {
-          console.warn('Check-in location fix error:', locErr);
+    const performActualCheckIn = async (visitObj: PlannedVisit, coords: Location.LocationObjectCoords | null) => {
+      try {
+        const checkInPayload: any = {
+          employee_id: empOid,
+          site_name: visitObj.siteName || visitObj.customSiteName,
+          latitude: coords?.latitude,
+          longitude: coords?.longitude,
+        };
+        if (customVisitId) {
+          checkInPayload.custom_visit_id = Number(customVisitId);
+          checkInPayload.site_id = null;
+        } else {
+          checkInPayload.site_id = Number(visitObj.siteId || 1);
+          checkInPayload.custom_visit_id = null;
         }
-      }
 
-      if (!currentCoords) {
-        Alert.alert(
-          'Location Required',
-          'Could not determine your GPS location. Please ensure location permissions and GPS are enabled.',
-          [
-            { text: 'Retry', onPress: fetchCurrentLocation },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
-        return;
-      }
+        const res = await checkInSiteVisit(checkInPayload);
 
+        if (res && res.success) {
+          const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          const todayStr = new Date().toISOString().split('T')[0];
+          const newCheckIns = {
+            ...activeCheckIns,
+            [visitObj.id]: {
+              checkInTime: nowTime,
+              date: todayStr,
+              siteId: visitObj.siteId,
+              customVisitId: customVisitId,
+              siteName: visitObj.siteName || visitObj.customSiteName,
+              clientId: visitObj.clientId,
+            },
+          };
+          setActiveCheckIns(newCheckIns);
+          await saveActiveCheckIns(newCheckIns);
+          await fetchActiveSession();
+
+          Alert.alert(
+            t('checked_in_success_title') || 'Checked-In Successfully',
+            `Check-In recorded at ${nowTime} for:\n${visitObj.siteName || visitObj.customSiteName || 'Site'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`
+          );
+        } else if (res && res.has_active_session) {
+          setEnforcerModal({
+            visible: true,
+            pendingVisit: visitObj,
+            activeSiteName: res.active_session?.site_name,
+            activeStartTime: res.active_session?.start_time,
+          });
+        }
+      } catch (err: any) {
+        console.error('Check-in error:', err);
+        Alert.alert('Check-In Error', err?.response?.data?.message || 'Failed to check in to site visit.');
+      }
+    };
+
+    if (hasSiteCoords) {
       const dist = calculateHaversineDistanceMeters(
         currentCoords.latitude,
         currentCoords.longitude,
@@ -303,13 +388,12 @@ export default function VisitsScreen() {
 
       const allowedRadius = pv.radius !== null && pv.radius !== undefined ? Number(pv.radius) : 100;
 
-      // Geofence cutoff check
       if (dist > allowedRadius) {
         const distStr = dist >= 1000 ? `${parseFloat((dist / 1000).toFixed(1))}km` : `${Math.round(dist)} meters`;
         const radiusStr = allowedRadius >= 1000 ? `${parseFloat((allowedRadius / 1000).toFixed(1))}km` : `${allowedRadius} meters`;
         Alert.alert(
           'Geofence Warning: Outside Site Radius',
-          `You are currently ${distStr} away from ${pv.siteName || 'Site'}.\n\nPlease move within ${radiusStr} of the site to check in.`,
+          `You are currently ${distStr} away from ${pv.siteName || pv.customSiteName || 'Site'}.\n\nPlease move within ${radiusStr} of the site to check in.`,
           [
             { text: 'Refresh Location', onPress: fetchCurrentLocation },
             { text: 'OK', style: 'cancel' }
@@ -317,50 +401,30 @@ export default function VisitsScreen() {
         );
         return;
       }
-    }
 
-    // 3. Trigger Backend Check-in in SITE_VISIT_SESSIONS
-    try {
-      const res = await checkInSiteVisit({
-        employee_id: empOid,
-        site_id: Number(pv.siteId || 1),
-        site_name: pv.siteName,
-        latitude: userLocation?.latitude,
-        longitude: userLocation?.longitude,
-      });
-
-      if (res && res.success) {
-        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        const todayStr = new Date().toISOString().split('T')[0];
-        const newCheckIns = {
-          ...activeCheckIns,
-          [pv.id]: {
-            checkInTime: nowTime,
-            date: todayStr,
-            siteId: pv.siteId,
-            siteName: pv.siteName,
-            clientId: pv.clientId,
-          },
-        };
-        setActiveCheckIns(newCheckIns);
-        await saveActiveCheckIns(newCheckIns);
-        await fetchActiveSession();
-
+      await performActualCheckIn(pv, currentCoords);
+    } else {
+      // Missing Coordinates
+      if (isCustomVisit) {
+        // Policy A: Explicit officer confirmation, capture GPS, flag for AM manual review
         Alert.alert(
-          t('checked_in_success_title') || 'Checked-In Successfully',
-          `Check-In recorded at ${nowTime} for site:\n${pv.siteName || 'Site'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`
+          'Location Coordinates Not Set',
+          `This custom planned visit for "${pv.siteName || pv.customSiteName || 'Custom Location'}" does not have registered GPS coordinates.\n\nYour current device GPS coordinates will be captured and submitted for Area Manager review.\n\nDo you want to proceed with check-in?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Confirm & Check In',
+              onPress: () => performActualCheckIn(pv, currentCoords),
+            },
+          ]
         );
-      } else if (res && res.has_active_session) {
-        setEnforcerModal({
-          visible: true,
-          pendingVisit: pv,
-          activeSiteName: res.active_session?.site_name,
-          activeStartTime: res.active_session?.start_time,
-        });
+      } else {
+        Alert.alert(
+          'Site Coordinates Missing',
+          `Registered coordinates for ${pv.siteName || 'this site'} are not configured. Please contact the administrator.`,
+          [{ text: 'OK', style: 'cancel' }]
+        );
       }
-    } catch (err: any) {
-      console.error('Check-in error:', err);
-      Alert.alert('Check-In Error', err?.response?.data?.message || 'Failed to check in to site visit.');
     }
   };
 
@@ -393,17 +457,24 @@ export default function VisitsScreen() {
   };
 
   const handleSubmitReportNav = (pv: PlannedVisit) => {
+    const isCustom = !!(pv.isCustomVisit || pv.is_custom || pv.customVisitId || pv.custom_visit_id || pv.clientId === 'OTHER' || pv.siteId === 0 || pv.siteId === '0' || !pv.siteId);
+    const customVisitId = pv.customVisitId || pv.custom_visit_id || (isCustom ? pv.id : '');
     const activeData = activeCheckIns[pv.id];
     const cIn = activeData?.checkInTime || (activeBackendSession && activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00');
+    const sName = pv.siteName || pv.site_name || pv.customSiteName || '';
+    const cName = pv.clientName || pv.client_name || pv.customClientName || '';
     router.push(
-      `/visits/select-type?clientId=${pv.clientId || ''}&siteId=${pv.siteId || ''}&plannedId=${pv.id}&checkInTime=${cIn}`
+      `/visits/scan-checklist?clientId=${pv.clientId || pv.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${pv.siteId || pv.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${pv.id}&checkInTime=${cIn}&customVisitId=${customVisitId || ''}&isCustom=${isCustom ? '1' : '0'}&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
     );
   };
 
   const handleCheckOutVisit = async (pv: PlannedVisit) => {
+    const isCustom = !!(pv.isCustomVisit || pv.is_custom || pv.customVisitId || pv.custom_visit_id || !pv.siteId);
+    const customVisitId = pv.customVisitId || pv.custom_visit_id || (isCustom ? pv.id : null);
+
     Alert.alert(
       t('confirm_checkout_title') || 'Confirm Check-Out',
-      `Are you sure you want to check out from ${pv.siteName || 'this site'}?\n\nThis will complete and end your visit session.`,
+      `Are you sure you want to check out from ${pv.siteName || pv.customSiteName || 'this site'}?\n\nThis will complete and end your visit session.`,
       [
         {
           text: t('cancel') || 'Cancel',
@@ -415,12 +486,20 @@ export default function VisitsScreen() {
           onPress: async () => {
             const empOid = getEmpOid();
             try {
-              await checkOutSiteVisit({
+              const checkOutPayload: any = {
                 employee_id: empOid,
-                site_id: Number(pv.siteId),
                 latitude: userLocation?.latitude,
                 longitude: userLocation?.longitude,
-              });
+              };
+              if (customVisitId) {
+                checkOutPayload.custom_visit_id = Number(customVisitId);
+                checkOutPayload.site_id = null;
+              } else {
+                checkOutPayload.site_id = Number(pv.siteId);
+                checkOutPayload.custom_visit_id = null;
+              }
+
+              await checkOutSiteVisit(checkOutPayload);
               await clearActiveCheckIn(pv.id);
               const updatedCheckIns = { ...activeCheckIns };
               delete updatedCheckIns[pv.id];
@@ -439,26 +518,31 @@ export default function VisitsScreen() {
     );
   };
 
-  const isReportSubmittedForSite = (siteId?: number | string, siteName?: string) => {
-    if (!siteId && !siteName) return false;
+  const isReportSubmittedForSite = (siteId?: number | string | null, siteName?: string, customVisitId?: number | string | null) => {
+    if (!siteId && !siteName && !customVisitId) return false;
     // 1. Check local activeCheckIns state
-    const matchingPv = siteId ? plannedVisits.find((pv) => Number(pv.siteId) === Number(siteId)) : undefined;
-    const activeData = matchingPv ? activeCheckIns[String(matchingPv.id)] : Object.values(activeCheckIns).find((a: any) => Number(a?.siteId) === Number(siteId));
+    const matchingPv = customVisitId
+      ? plannedVisits.find((pv) => Number(pv.customVisitId || pv.custom_visit_id || pv.id) === Number(customVisitId))
+      : (siteId ? plannedVisits.find((pv) => Number(pv.siteId) === Number(siteId)) : undefined);
+    const activeData = matchingPv ? activeCheckIns[String(matchingPv.id)] : Object.values(activeCheckIns).find((a: any) => (customVisitId && Number(a?.customVisitId) === Number(customVisitId)) || (siteId && Number(a?.siteId) === Number(siteId)));
     if (activeData?.reportSubmitted) return true;
 
-    // 2. Check if a report exists in completedVisits for this site THAT WAS CREATED DURING/AFTER THE CURRENT ACTIVE SESSION START
+    // 2. Check if a report exists in completedVisits for this site/custom THAT WAS CREATED DURING/AFTER THE CURRENT ACTIVE SESSION START
     if (!activeBackendSession || !activeBackendSession.start_time) return false;
 
-    const sessionStartMs = new Date(activeBackendSession.start_time).getTime() - 2 * 60 * 1000; // 2 min margin for clock differences
+    const sessionStartMs = new Date(activeBackendSession.start_time).getTime() - 2 * 60 * 1000;
     const sNameNorm = (siteName || '').toLowerCase().trim();
 
     const hasCompletedForThisSession = completedVisits.some((cv) => {
+      const cvCustomVisitId = cv.rawReport?.custom_visit_id || cv.rawReport?.customVisitId;
       const cvSiteId = cv.siteId || cv.rawReport?.site_id || cv.rawReport?.siteId;
       const cvSiteName = (cv.siteName || cv.rawReport?.site_name || '').toLowerCase().trim();
 
-      const isSiteMatch = (siteId && cvSiteId && Number(cvSiteId) === Number(siteId)) ||
-                          (sNameNorm && cvSiteName && (cvSiteName === sNameNorm || cvSiteName.includes(sNameNorm) || sNameNorm.includes(cvSiteName)));
-      if (!isSiteMatch) return false;
+      const isCustomMatch = customVisitId && cvCustomVisitId && Number(cvCustomVisitId) === Number(customVisitId);
+      const isSiteMatch = siteId && cvSiteId && Number(cvSiteId) === Number(siteId);
+      const isNameMatch = sNameNorm && cvSiteName && (cvSiteName === sNameNorm || cvSiteName.includes(sNameNorm) || sNameNorm.includes(cvSiteName));
+
+      if (!isCustomMatch && !isSiteMatch && !isNameMatch) return false;
 
       const createdTimeStr = cv.rawReport?.created_on || cv.rawReport?.createdOn || cv.date;
       if (!createdTimeStr) return false;
@@ -473,9 +557,15 @@ export default function VisitsScreen() {
   const handleTopCheckOut = async () => {
     if (!activeBackendSession) return;
 
-    // Search for a matching planned visit for this site
-    const matchingPv = plannedVisits.find((pv) => Number(pv.siteId) === Number(activeBackendSession.site_id));
-    const isSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name);
+    // Search for a matching planned visit for this site or custom visit
+    const matchingPv = plannedVisits.find((pv) => {
+      if (activeBackendSession.custom_visit_id) {
+        return Number(pv.customVisitId || pv.custom_visit_id || pv.id) === Number(activeBackendSession.custom_visit_id);
+      }
+      return Number(pv.siteId) === Number(activeBackendSession.site_id);
+    });
+
+    const isSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name, activeBackendSession.custom_visit_id);
 
     if (isSubmitted) {
       if (matchingPv) {
@@ -495,13 +585,22 @@ export default function VisitsScreen() {
               onPress: async () => {
                 try {
                   const empOid = getEmpOid();
-                  await checkOutSiteVisit({
+                  const checkOutPayload: any = {
                     employee_id: empOid,
-                    site_id: Number(activeBackendSession.site_id),
                     latitude: userLocation?.latitude,
                     longitude: userLocation?.longitude,
-                  });
-                  if (activeBackendSession.site_id) {
+                  };
+                  if (activeBackendSession.custom_visit_id) {
+                    checkOutPayload.custom_visit_id = Number(activeBackendSession.custom_visit_id);
+                    checkOutPayload.site_id = null;
+                  } else {
+                    checkOutPayload.site_id = Number(activeBackendSession.site_id);
+                    checkOutPayload.custom_visit_id = null;
+                  }
+                  await checkOutSiteVisit(checkOutPayload);
+                  if (activeBackendSession.custom_visit_id) {
+                    await clearActiveCheckIn(activeBackendSession.custom_visit_id);
+                  } else if (activeBackendSession.site_id) {
                     await clearActiveCheckIn(activeBackendSession.site_id);
                   }
                   await fetchActiveSession();
@@ -519,84 +618,39 @@ export default function VisitsScreen() {
       }
     } else {
       const cIn = activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00';
+      const isCustom = !!(activeBackendSession.custom_visit_id || matchingPv?.isCustomVisit || matchingPv?.is_custom);
+      const sName = activeBackendSession.site_name || matchingPv?.siteName || matchingPv?.site_name || matchingPv?.customSiteName || '';
+      const cName = matchingPv?.clientName || matchingPv?.client_name || matchingPv?.customClientName || '';
       router.push(
-        `/visits/select-type?clientId=${matchingPv?.clientId || ''}&siteId=${activeBackendSession.site_id || ''}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}`
+        `/visits/scan-checklist?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=${isCustom ? '1' : '0'}&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
       );
     }
   };
 
-  // Email Form State (Single Modal)
-  const [isEmailFormOpen, setIsEmailFormOpen] = useState(false);
-  const [recipientEmail, setRecipientEmail] = useState('');
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailMessage, setEmailMessage] = useState('');
-  const [emailSending, setEmailSending] = useState(false);
+  // PDF Generation State
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
 
-  const isEmailAllowed = (report: CompletedVisit | null) => {
-    if (!report) return false;
-    const r = report.rawReport || {};
-    const access = r.emailAccess !== undefined ? r.emailAccess : (r.email_access !== undefined ? r.email_access : (report.emailAccess !== undefined ? report.emailAccess : 1));
-    return access === 1 || access === '1' || access === true;
-  };
-
-  const handleOpenEmailForm = (report: CompletedVisit | null) => {
+  const handleDownloadPdf = async (report: CompletedVisit | null) => {
     if (!report) return;
-    if (!isEmailAllowed(report)) {
-      Alert.alert(
-        'Email Access Disabled',
-        'Email sending is disabled for this branch in branch settings. Please contact your administrator.'
-      );
-      return;
-    }
-    setSelectedReport(report);
-    setRecipientEmail('');
-    setEmailSubject(`Officer Report - ${report.reportNo}`);
-    setEmailMessage(
-      `Dear Sir/Madam,\n\nPlease find the details for Officer ${report.visitType} Report (${report.reportNo}) for ${report.siteName} (${report.clientName}).\n\nThank you.`
-    );
-    setIsEmailFormOpen(true);
-  };
-
-  const handleSendEmail = async () => {
-    if (!recipientEmail || !recipientEmail.includes('@')) {
-      Alert.alert('Invalid Email', 'Please enter a valid recipient email address.');
-      return;
-    }
-
-    setEmailSending(true);
+    if (generatingPdfId) return; // Prevent duplicate concurrent generations
+    setGeneratingPdfId(report.id);
     try {
-      const targetReport = selectedReport;
-      const branchIdVal = targetReport?.rawReport?.branchId || targetReport?.rawReport?.branch_id || targetReport?.rawReport?.BRANCH;
-      const siteIdVal = targetReport?.rawReport?.site_id || targetReport?.rawReport?.siteId || targetReport?.rawReport?.SITE || targetReport?.siteId;
-
-      const res = await sendReportEmail({
-        email: recipientEmail.trim(),
-        subject: emailSubject,
-        message: emailMessage,
-        branchId: branchIdVal,
-        siteId: siteIdVal,
+      await generateAndShareVisitPdf({
+        id: report.id,
+        reportNo: report.reportNo,
+        visitType: report.visitType,
+        date: report.date,
+        clientName: report.clientName,
+        siteName: report.siteName,
+        officer: user?.name || (user as any)?.full_name || 'Field Officer',
+        status: report.status || 'COMPLETED',
+        rawReport: report.rawReport,
       });
-
-      if (res && res.success) {
-        Alert.alert('Email Sent', res.message || `Report email sent successfully to ${recipientEmail}!`);
-        setIsEmailFormOpen(false);
-      } else {
-        Alert.alert('Failed to Send', res?.message || 'Failed to send report email.');
-      }
     } catch (err: any) {
-      console.error('Send email error:', err);
-      const detail = err?.response?.data?.detail || err?.message || '';
-      const status = err?.response?.status;
-      if (status === 403 || detail.toLowerCase().includes('disabled') || detail.toLowerCase().includes('access') || detail.toLowerCase().includes('email_access')) {
-        Alert.alert(
-          'Access Denied',
-          'You do not have access to send email reports for this branch/site. Email sending is disabled in branch settings.'
-        );
-      } else {
-        Alert.alert('Error', detail || 'Failed to send email report. Please check recipient email and network.');
-      }
+      console.error('Download PDF error:', err);
+      Alert.alert('PDF Report', err?.message || t('pdf_generate_failed'));
     } finally {
-      setEmailSending(false);
+      setGeneratingPdfId(null);
     }
   };
 
@@ -784,12 +838,12 @@ export default function VisitsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft color="#FFFFFF" size={22} />
+          <ArrowLeft color={colors.text} size={22} />
         </TouchableOpacity>
         <View style={styles.headerTextCol}>
           <Text style={styles.headerTitle}>
@@ -809,7 +863,7 @@ export default function VisitsScreen() {
 
       {/* ACTIVE SITE VISIT SESSION BANNER */}
       {activeBackendSession && (() => {
-        const isTopReportSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name);
+        const isTopReportSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name, activeBackendSession.custom_visit_id);
 
         return (
           <View style={[styles.activeSessionBanner, isTopReportSubmitted ? { borderColor: '#A855F7' } : {}]}>
@@ -863,15 +917,16 @@ export default function VisitsScreen() {
               pendingVisits.map((pv) => {
                 const status = getStatusInfo(pv);
                 
-                const isCustomVisit = !!(pv.isCustomVisit || pv.is_custom || pv.clientId === 'OTHER' || pv.siteId === 0 || pv.siteId === '0' || !pv.siteId);
+                const isCustomVisit = !!(pv.isCustomVisit || pv.is_custom || pv.customVisitId || pv.custom_visit_id || pv.clientId === 'OTHER' || pv.siteId === 0 || pv.siteId === '0' || !pv.siteId);
+                const customVisitId = pv.customVisitId || pv.custom_visit_id || (isCustomVisit ? pv.id : null);
                 
-                const hasSiteCoords = !isCustomVisit && pv.latitude !== null && pv.latitude !== undefined && Number(pv.latitude) !== 0 &&
+                const hasSiteCoords = pv.latitude !== null && pv.latitude !== undefined && Number(pv.latitude) !== 0 &&
                                        pv.longitude !== null && pv.longitude !== undefined && Number(pv.longitude) !== 0;
 
                 let isOutsideGeofence = false;
                 let distanceMeters: number | null = null;
 
-                if (!isCustomVisit && hasSiteCoords && userLocation) {
+                if (hasSiteCoords && userLocation) {
                   distanceMeters = Math.round(calculateHaversineDistanceMeters(
                     userLocation.latitude,
                     userLocation.longitude,
@@ -885,9 +940,14 @@ export default function VisitsScreen() {
                 }
 
                 // Check if this planned visit site matches the active backend session or local checkin
-                const isReportSubmitted = isReportSubmittedForSite(pv.siteId, pv.siteName);
-                const activeData = activeCheckIns[String(pv.id)] || (activeBackendSession && Number(activeBackendSession.site_id) === Number(pv.siteId) ? { checkInTime: activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00', date: '', siteId: pv.siteId, reportSubmitted: isReportSubmitted } : null);
-                const isCheckedIn = !!activeData || (activeBackendSession && Number(activeBackendSession.site_id) === Number(pv.siteId));
+                const isReportSubmitted = isReportSubmittedForSite(pv.siteId, pv.siteName || pv.customSiteName, customVisitId);
+                const isSessionMatching = activeBackendSession && (
+                  (customVisitId && activeBackendSession.custom_visit_id && Number(activeBackendSession.custom_visit_id) === Number(customVisitId)) ||
+                  (!customVisitId && pv.siteId && activeBackendSession.site_id && Number(activeBackendSession.site_id) === Number(pv.siteId))
+                );
+
+                const activeData = activeCheckIns[String(pv.id)] || (isSessionMatching ? { checkInTime: activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00', date: '', siteId: pv.siteId, customVisitId: customVisitId, reportSubmitted: isReportSubmitted } : null);
+                const isCheckedIn = !!activeData || isSessionMatching;
 
                 return (
                   <View key={pv.id} style={styles.visitCard}>
@@ -913,11 +973,11 @@ export default function VisitsScreen() {
                     </View>
 
                     {/* Main Info */}
-                    <Text style={styles.siteNameText}>{pv.siteName || 'Unassigned Site'}</Text>
+                    <Text style={styles.siteNameText}>{pv.siteName || pv.site_name || pv.customSiteName || 'Unassigned Site'}</Text>
                     
                     <View style={styles.metaRow}>
                       <Building color="#64748B" size={14} style={{ marginRight: 6 }} />
-                      <Text style={styles.metaText}>{pv.clientName || 'Client'}</Text>
+                      <Text style={styles.metaText}>{pv.clientName || pv.client_name || pv.customClientName || 'Client'}</Text>
                     </View>
 
                     <View style={styles.metaRow}>
@@ -1118,13 +1178,18 @@ export default function VisitsScreen() {
                     </View>
 
                     <TouchableOpacity
-                      activeOpacity={isEmailAllowed(visit) ? 0.85 : 0.6}
-                      onPress={() => handleOpenEmailForm(visit)}
-                      style={[styles.cardEmailBtn, !isEmailAllowed(visit) && styles.disabledCardEmailBtn]}
+                      activeOpacity={0.85}
+                      disabled={generatingPdfId === visit.id}
+                      onPress={() => handleDownloadPdf(visit)}
+                      style={styles.cardPdfBtn}
                     >
-                      <Mail color={isEmailAllowed(visit) ? "#10B981" : "#64748B"} size={14} style={{ marginRight: 4 }} />
-                      <Text style={[styles.cardEmailBtnText, !isEmailAllowed(visit) && styles.disabledCardEmailBtnText]}>
-                        {isEmailAllowed(visit) ? 'Send Email' : 'Email Disabled'}
+                      {generatingPdfId === visit.id ? (
+                        <ActivityIndicator color="#3B82F6" size="small" style={{ marginRight: 4 }} />
+                      ) : (
+                        <FileDown color="#3B82F6" size={14} style={{ marginRight: 4 }} />
+                      )}
+                      <Text style={styles.cardPdfBtnText}>
+                        {t('download_pdf_report')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1137,123 +1202,49 @@ export default function VisitsScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* COMPLETED REPORT & EMAIL MODAL */}
+      {/* COMPLETED REPORT PREVIEW & DOWNLOAD MODAL */}
       <Modal
         visible={!!selectedReport}
         transparent
         animationType="slide"
         onRequestClose={() => {
           setSelectedReport(null);
-          setIsEmailFormOpen(false);
         }}
       >
         <View style={styles.detailOverlay}>
-          <View style={[styles.detailContainer, isEmailFormOpen ? { padding: 20 } : null]}>
-            {isEmailFormOpen ? (
-              /* --- EMAIL FORM VIEW --- */
-              <View>
-                <View style={styles.detailHeader}>
-                  <TouchableOpacity
-                    onPress={() => setIsEmailFormOpen(false)}
-                    style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-                  >
-                    <ArrowLeft color="#3B82F6" size={20} style={{ marginRight: 8 }} />
-                    <View>
-                      <Text style={styles.detailTitle}>Send Report via Email</Text>
-                      <Text style={styles.detailSubtitle}>{selectedReport?.reportNo}</Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSelectedReport(null);
-                      setIsEmailFormOpen(false);
-                    }}
-                    style={styles.detailCloseBtn}
-                  >
-                    <X color="#94A3B8" size={22} />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={{ marginVertical: 14 }}>
-                  <Text style={styles.emailFormLabel}>RECIPIENT EMAIL *</Text>
-                  <TextInput
-                    style={styles.emailTextInput}
-                    placeholder="client.rep@company.com"
-                    placeholderTextColor="#64748B"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={recipientEmail}
-                    onChangeText={setRecipientEmail}
-                  />
-
-                  <Text style={[styles.emailFormLabel, { marginTop: 12 }]}>SUBJECT</Text>
-                  <TextInput
-                    style={styles.emailTextInput}
-                    placeholder="Email Subject..."
-                    placeholderTextColor="#64748B"
-                    value={emailSubject}
-                    onChangeText={setEmailSubject}
-                  />
-
-                  <Text style={[styles.emailFormLabel, { marginTop: 12 }]}>MESSAGE</Text>
-                  <TextInput
-                    style={[styles.emailTextInput, { height: 90, textAlignVertical: 'top' }]}
-                    placeholder="Enter custom email message..."
-                    placeholderTextColor="#64748B"
-                    multiline
-                    numberOfLines={4}
-                    value={emailMessage}
-                    onChangeText={setEmailMessage}
-                  />
-                </View>
-
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  disabled={emailSending}
-                  onPress={handleSendEmail}
-                  style={styles.sendEmailSubmitBtn}
-                >
-                  {emailSending ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <>
-                      <Mail color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
-                      <Text style={styles.sendEmailSubmitBtnText}>SEND EMAIL REPORT</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+          <View style={styles.detailContainer}>
+            {/* Header Close Bar */}
+            <View style={styles.detailHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.detailTitle}>{selectedReport?.reportNo}</Text>
+                <Text style={styles.detailSubtitle}>{selectedReport?.visitType}</Text>
               </View>
-            ) : (
-              /* --- REPORT PREVIEW VIEW --- */
-              <>
-                {/* Header Close Bar */}
-                <View style={styles.detailHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailTitle}>{selectedReport?.reportNo}</Text>
-                    <Text style={styles.detailSubtitle}>{selectedReport?.visitType}</Text>
-                  </View>
 
-                  <TouchableOpacity
-                    activeOpacity={isEmailAllowed(selectedReport) ? 0.85 : 0.6}
-                    onPress={() => handleOpenEmailForm(selectedReport)}
-                    style={[styles.headerEmailBtn, !isEmailAllowed(selectedReport) && styles.disabledHeaderEmailBtn]}
-                  >
-                    <Mail color={isEmailAllowed(selectedReport) ? "#10B981" : "#64748B"} size={16} style={{ marginRight: 5 }} />
-                    <Text style={[styles.headerEmailBtnText, !isEmailAllowed(selectedReport) && styles.disabledHeaderEmailBtnText]}>
-                      {isEmailAllowed(selectedReport) ? 'Send Email' : 'Email Disabled'}
-                    </Text>
-                  </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={generatingPdfId === selectedReport?.id}
+                onPress={() => handleDownloadPdf(selectedReport)}
+                style={styles.headerPdfBtn}
+              >
+                {generatingPdfId === selectedReport?.id ? (
+                  <ActivityIndicator color="#3B82F6" size="small" style={{ marginRight: 5 }} />
+                ) : (
+                  <FileDown color="#3B82F6" size={16} style={{ marginRight: 5 }} />
+                )}
+                <Text style={styles.headerPdfBtnText}>
+                  {t('download_pdf')}
+                </Text>
+              </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSelectedReport(null);
-                      setIsEmailFormOpen(false);
-                    }}
-                    style={styles.detailCloseBtn}
-                  >
-                    <X color="#94A3B8" size={22} />
-                  </TouchableOpacity>
-                </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedReport(null);
+                }}
+                style={styles.detailCloseBtn}
+              >
+                <X color={colors.textSecondary} size={22} />
+              </TouchableOpacity>
+            </View>
 
                 <ScrollView style={{ maxHeight: 520 }} showsVerticalScrollIndicator={false}>
                   {/* Corporate Banner Header (Exact WEB Match) */}
@@ -1509,18 +1500,23 @@ export default function VisitsScreen() {
                     </View>
                   </View>
 
-                  {/* 8. Action Button: Send Email Report */}
+                  {/* 8. Action Button: Download PDF Report */}
                   <TouchableOpacity
                     activeOpacity={0.85}
-                    onPress={() => handleOpenEmailForm(selectedReport)}
-                    style={styles.sendEmailModalActionBtn}
+                    disabled={generatingPdfId === selectedReport?.id}
+                    onPress={() => handleDownloadPdf(selectedReport)}
+                    style={styles.downloadPdfModalActionBtn}
                   >
-                    <Mail color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
-                    <Text style={styles.sendEmailModalActionBtnText}>SEND REPORT VIA EMAIL</Text>
+                    {generatingPdfId === selectedReport?.id ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
+                    ) : (
+                      <FileDown color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
+                    )}
+                    <Text style={styles.downloadPdfModalActionBtnText}>
+                      {t('download_pdf_report').toUpperCase()}
+                    </Text>
                   </TouchableOpacity>
                 </ScrollView>
-              </>
-            )}
           </View>
         </View>
       </Modal>
@@ -1569,10 +1565,10 @@ export default function VisitsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0A1128',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -1580,13 +1576,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
   },
   backBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -1597,12 +1594,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
     letterSpacing: 0.2,
   },
   headerSub: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   refreshBtn: {
@@ -1626,9 +1623,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: colors.surfaceSecondary,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   tabActive: {
     backgroundColor: '#3B82F6',
@@ -1641,7 +1638,7 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   tabTextActive: {
     color: '#FFFFFF',
@@ -1655,10 +1652,10 @@ const styles = StyleSheet.create({
   },
   // Visit Card
   visitCard: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: colors.card,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
     padding: 16,
     marginBottom: 12,
   },
@@ -1683,7 +1680,7 @@ const styles = StyleSheet.create({
   reportNoText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: colors.textSecondary,
     letterSpacing: 0.2,
     marginBottom: 6,
   },
@@ -1713,18 +1710,18 @@ const styles = StyleSheet.create({
   siteNameText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#F1F5F9',
+    color: colors.text,
     marginBottom: 3,
     lineHeight: 22,
   },
   clientNameText: {
     fontSize: 13,
-    color: '#64748B',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: colors.border,
     marginVertical: 12,
   },
   metaRow: {
@@ -1738,7 +1735,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   cardBottomRow: {
     flexDirection: 'row',
@@ -1751,14 +1748,14 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontSize: 11,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 5,
     fontWeight: '600',
   },
   progressBarBg: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.border,
     overflow: 'hidden',
   },
   progressBarFill: {
@@ -1787,27 +1784,27 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#F1F5F9',
+    color: colors.text,
     marginBottom: 6,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   // Detail Modal Styles
   detailOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: colors.modalOverlay,
     justifyContent: 'flex-end',
   },
   detailContainer: {
-    backgroundColor: THEME.card,
+    backgroundColor: colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: colors.border,
   },
   detailHeader: {
     flexDirection: 'row',
@@ -1815,37 +1812,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: colors.border,
     marginBottom: 16,
   },
   detailTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: THEME.text,
+    color: colors.text,
   },
   detailSubtitle: {
     fontSize: 12,
     fontWeight: '600',
-    color: THEME.primary,
+    color: colors.primary,
     marginTop: 2,
   },
   detailCloseBtn: {
     padding: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: 12,
   },
   detailSectionCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: 14,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: colors.border,
   },
   sectionHeading: {
     fontSize: 11,
     fontWeight: '800',
-    color: THEME.textVariant,
+    color: colors.textSecondary,
     letterSpacing: 0.8,
     marginBottom: 12,
   },
@@ -1855,39 +1852,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.04)',
+    borderBottomColor: colors.border,
   },
   infoLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
   infoValue: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   remarkBox: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : '#F1F5F9',
     borderRadius: 10,
     padding: 12,
     marginTop: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: colors.border,
   },
   remarkText: {
     fontSize: 13,
-    color: '#E2E8F0',
+    color: colors.text,
     lineHeight: 18,
   },
   // Corporate Banner WEB Style
   previewCorporateBanner: {
-    backgroundColor: '#0F172A',
+    backgroundColor: isDark ? '#0F172A' : '#EFF6FF',
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1.5,
-    borderColor: '#1E3A8A',
+    borderColor: isDark ? '#1E3A8A' : '#BFDBFE',
   },
   bannerHeaderTopRow: {
     flexDirection: 'row',
@@ -1898,7 +1895,7 @@ const styles = StyleSheet.create({
   companyNameTitle: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#F8FAFC',
+    color: colors.text,
     letterSpacing: 0.2,
   },
   reportTitleBanner: {
@@ -1931,7 +1928,7 @@ const styles = StyleSheet.create({
   bannerDateText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
   navySectionTitleBox: {
     backgroundColor: '#1E3A8A',
@@ -1955,47 +1952,47 @@ const styles = StyleSheet.create({
   },
   infoRowItem: {
     width: '48%',
-    backgroundColor: 'rgba(15,23,42,0.6)',
+    backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#F8FAFC',
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: colors.border,
   },
   infoRowItemFull: {
     width: '100%',
-    backgroundColor: 'rgba(15,23,42,0.6)',
+    backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#F8FAFC',
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: colors.border,
   },
   gridLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#64748B',
+    color: colors.textSecondary,
     textTransform: 'uppercase',
     marginBottom: 2,
   },
   gridValue: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   tableWrap: {
-    backgroundColor: 'rgba(15,23,42,0.4)',
+    backgroundColor: isDark ? 'rgba(15,23,42,0.4)' : '#F8FAFC',
     borderRadius: 8,
     overflow: 'hidden',
   },
   tableHeaderRow: {
     flexDirection: 'row',
-    backgroundColor: '#334155',
+    backgroundColor: isDark ? '#334155' : '#E2E8F0',
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   thCell: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: colors.text,
     textTransform: 'uppercase',
   },
   tableBodyRow: {
@@ -2004,7 +2001,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: colors.border,
   },
   tdCell: {
     fontSize: 12,
@@ -2023,11 +2020,11 @@ const styles = StyleSheet.create({
   statusBadgePillText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   emptyTableText: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textMuted,
     fontStyle: 'italic',
     padding: 10,
   },
@@ -2038,132 +2035,86 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: colors.border,
   },
   questionText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#F1F5F9',
+    color: colors.text,
     lineHeight: 16,
   },
   questionRemarkText: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     marginTop: 2,
     fontStyle: 'italic',
   },
   remarkContentBox: {
-    backgroundColor: 'rgba(15,23,42,0.6)',
+    backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#F8FAFC',
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: colors.border,
   },
   remarkContentText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#E2E8F0',
+    color: colors.text,
     lineHeight: 18,
   },
-  headerEmailBtn: {
+  headerPdfBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: '#3B82F6',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
     marginRight: 10,
   },
-  headerEmailBtnText: {
+  headerPdfBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#10B981',
+    color: '#3B82F6',
   },
-  sendEmailModalActionBtn: {
+  downloadPdfModalActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10B981',
+    backgroundColor: '#3B82F6',
     borderRadius: 12,
     paddingVertical: 14,
     marginTop: 12,
     marginBottom: 6,
   },
-  sendEmailModalActionBtnText: {
+  downloadPdfModalActionBtnText: {
     fontSize: 14,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  emailFormLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  emailTextInput: {
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#F8FAFC',
-    fontSize: 13,
-  },
-  sendEmailSubmitBtn: {
+  cardPdfBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    paddingVertical: 14,
-    marginTop: 10,
-  },
-  sendEmailSubmitBtnText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  cardEmailBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(59, 130, 246, 0.3)',
   },
-  cardEmailBtnText: {
+  cardPdfBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#10B981',
-  },
-  disabledCardEmailBtn: {
-    backgroundColor: 'rgba(100, 116, 139, 0.12)',
-    borderColor: 'rgba(100, 116, 139, 0.25)',
-  },
-  disabledCardEmailBtnText: {
-    color: '#64748B',
-  },
-  disabledHeaderEmailBtn: {
-    backgroundColor: 'rgba(100, 116, 139, 0.12)',
-    borderColor: 'rgba(100, 116, 139, 0.25)',
-  },
-  disabledHeaderEmailBtnText: {
-    color: '#64748B',
+    color: '#3B82F6',
   },
   // Active Visit Session Banner Styles
   activeSessionBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.card,
     borderColor: '#3B82F6',
     borderWidth: 1.5,
     borderRadius: 14,
@@ -2198,12 +2149,12 @@ const styles = StyleSheet.create({
   activeSessionSiteName: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: colors.text,
     marginBottom: 2,
   },
   activeSessionSubText: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   activeSessionCheckoutBtn: {
@@ -2222,14 +2173,14 @@ const styles = StyleSheet.create({
   // Active Visit Enforcer Modal Styles
   enforcerModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: colors.modalOverlay,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
   enforcerModalCard: {
     width: '100%',
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.card,
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: '#EF4444',
@@ -2249,13 +2200,13 @@ const styles = StyleSheet.create({
   enforcerTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginBottom: 10,
     textAlign: 'center',
   },
   enforcerMessage: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
@@ -2283,11 +2234,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: colors.border,
   },
   enforcerCancelBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
 });

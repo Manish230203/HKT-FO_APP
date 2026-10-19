@@ -24,6 +24,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -47,8 +49,8 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
   useEffect(() => {
     (async () => {
       try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status !== 'granted') {
+        const notifPerm = await Notifications.getPermissionsAsync();
+        if ((notifPerm as any)?.status !== 'granted') {
           await Notifications.requestPermissionsAsync();
         }
       } catch (err) {

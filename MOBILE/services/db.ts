@@ -104,6 +104,25 @@ export const getLanguageSetting = async () => {
   }
 };
 
+export const saveThemeSetting = async (theme: 'dark' | 'light') => {
+  try {
+    await setStorageItem('user_theme_preference', theme);
+  } catch (e) {
+    console.error("Save theme setting failed", e);
+  }
+};
+
+export const getThemeSetting = async (): Promise<'dark' | 'light' | null> => {
+  try {
+    const val = await getStorageItem('user_theme_preference');
+    if (val === 'light' || val === 'dark') return val;
+    return null;
+  } catch (e) {
+    console.error("Get theme setting failed", e);
+    return null;
+  }
+};
+
 export const saveConsentSetting = async (accepted: boolean) => {
   try {
     await setStorageItem('user_consent_accepted', accepted ? 'true' : 'false');
@@ -194,9 +213,10 @@ export const getPunchRecords = async (empId?: string): Promise<any[]> => {
 export interface ActiveCheckInInfo {
   checkInTime: string;
   date: string;
-  siteId?: string | number;
+  siteId?: string | number | null;
+  customVisitId?: string | number | null;
   siteName?: string;
-  clientId?: string | number;
+  clientId?: string | number | null;
   reportSubmitted?: boolean;
   reportId?: string;
   reportType?: string;

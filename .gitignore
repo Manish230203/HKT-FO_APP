@@ -1,0 +1,7 @@
+node_modules/
+.expo/
+MOBILE/.expo/
+*.log
+__pycache__/
+.env
+.env.local

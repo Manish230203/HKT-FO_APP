@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { Clock, X, Check } from 'lucide-react-native';
 import { THEME } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 interface TimePicker24ModalProps {
   visible: boolean;
@@ -18,6 +19,7 @@ export function TimePicker24Modal({
   onConfirm,
   onClose,
 }: TimePicker24ModalProps) {
+  const { colors, isDark } = useTheme();
   const [selectedHour, setSelectedHour] = useState('10');
   const [selectedMinute, setSelectedMinute] = useState('00');
 
@@ -50,25 +52,25 @@ export function TimePicker24Modal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
+      <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>
+        <View style={[styles.container, { backgroundColor: colors.modalBg, borderColor: colors.border }]}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.titleRow}>
-              <Clock color={THEME.primary} size={20} style={{ marginRight: 8 }} />
-              <Text style={styles.title}>{title}</Text>
+              <Clock color={colors.primary} size={20} style={{ marginRight: 8 }} />
+              <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X color="#94A3B8" size={20} />
+              <X color={colors.textSecondary} size={20} />
             </TouchableOpacity>
           </View>
 
           {/* Time Display Badge */}
-          <View style={styles.displayBadge}>
-            <Text style={styles.displayText}>
+          <View style={[styles.displayBadge, { backgroundColor: colors.surfaceSecondary, borderColor: colors.primary }]}>
+            <Text style={[styles.displayText, { color: colors.primary }]}>
               {selectedHour} : {selectedMinute}
             </Text>
-            <Text style={styles.displaySubtext}>24-HOUR FORMAT (HH:mm)</Text>
+            <Text style={[styles.displaySubtext, { color: colors.textSecondary }]}>24-HOUR FORMAT (HH:mm)</Text>
           </View>
 
           <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>

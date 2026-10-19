@@ -10,6 +10,7 @@ import { getSites, getClients, getSiteGuards, Site, Client, checkOutSiteVisit } 
 import { submitDayVisitReport, getDayVisitTemplates } from '../../../services/visitService';
 import { clearActiveCheckIn, markReportSubmittedForCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
+import { useTheme } from '../../../context/ThemeContext';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
@@ -17,6 +18,7 @@ import { Badge } from '../../../components/ui/Badge';
 import { StepIndicator } from '../../../components/ui/StepIndicator';
 import { CustomAlertModal } from '../../../components/ui/CustomAlertModal';
 import { TimePicker24Modal } from '../../../components/ui/TimePicker24Modal';
+import { StatusBar } from 'react-native';
 
 const STEPS = ['General Info', 'Guards', 'Checklist', 'Feedback', 'Suggestions', 'Review'];
 
@@ -30,10 +32,23 @@ const DEFAULT_DAY_MANDATORY_QUESTIONS = [
 ];
 
 export default function CreateDayVisitReportScreen() {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const { user } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
-  const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string; checkInTime?: string; checkOutTime?: string }>();
+  const params = useLocalSearchParams<{
+    clientId?: string;
+    siteId?: string;
+    plannedId?: string;
+    checkInTime?: string;
+    checkOutTime?: string;
+    customVisitId?: string;
+    isCustom?: string;
+    customClientName?: string;
+    customSiteName?: string;
+  }>();
+  const isCustomVisit = Boolean(params.customVisitId || params.isCustom === '1');
 
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -43,9 +58,9 @@ export default function CreateDayVisitReportScreen() {
   const [clients, setClients] = useState<Client[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [clientId, setClientId] = useState(params.clientId || '');
-  const [clientName, setClientName] = useState('');
+  const [clientName, setClientName] = useState(params.customClientName ? decodeURIComponent(params.customClientName) : '');
   const [siteId, setSiteId] = useState(params.siteId || '');
-  const [siteName, setSiteName] = useState('');
+  const [siteName, setSiteName] = useState(params.customSiteName ? decodeURIComponent(params.customSiteName) : '');
   const [shift, setShift] = useState('Morning');
   const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState(
@@ -258,7 +273,14 @@ export default function CreateDayVisitReportScreen() {
       });
       setChecklist(initChecklist);
 
-      if (params.siteId && siteData) {
+      if (isCustomVisit) {
+        setClientId('');
+        setSiteId('');
+        const cName = params.customClientName ? decodeURIComponent(params.customClientName) : 'Custom Client';
+        const sName = params.customSiteName ? decodeURIComponent(params.customSiteName) : 'Custom Location';
+        setClientName(cName);
+        setSiteName(sName);
+      } else if (params.siteId && siteData) {
         const foundSite = siteData.find((s) => String(s.id) === String(params.siteId));
         if (foundSite) {
           setSiteId(String(foundSite.id));
@@ -389,12 +411,15 @@ export default function CreateDayVisitReportScreen() {
 
       const capturedPhotos = Object.values(questionPhotos).filter((p) => p && typeof p === 'string');
 
-      const payload = {
-        client_id: parseInt(clientId, 10) || 1,
-        site_id: parseInt(siteId, 10) || 1,
-        site_name: siteName || 'Selected Site',
+      const payload: any = {
+        client_id: isCustomVisit ? null : (parseInt(clientId, 10) || 1),
+        site_id: isCustomVisit ? null : (parseInt(siteId, 10) || 1),
+        custom_visit_id: isCustomVisit ? (parseInt(params.customVisitId || '0', 10) || null) : null,
+        customVisitId: isCustomVisit ? (parseInt(params.customVisitId || '0', 10) || null) : null,
+        site_name: siteName || (isCustomVisit ? decodeURIComponent(params.customSiteName || 'Custom Location') : 'Selected Site'),
+        unit: siteName || (isCustomVisit ? decodeURIComponent(params.customSiteName || 'Custom Location') : 'Selected Site'),
         visit_date: visitDate,
-        visit_type: 'Scheduled',
+        visit_type: isCustomVisit ? 'Custom Visit' : 'Scheduled',
         shift: shift,
         officer: user?.name || 'Officer',
         'check-in_time': startTime,
@@ -428,8 +453,9 @@ export default function CreateDayVisitReportScreen() {
 
       const res = await submitDayVisitReport(payload);
 
-      if (params.plannedId || siteId) {
-        await markReportSubmittedForCheckIn(params.plannedId, siteId, (res as any)?.report_id || (res as any)?.oid, 'Day Visit');
+      const markTargetId = params.plannedId || params.customVisitId || siteId;
+      if (markTargetId) {
+        await markReportSubmittedForCheckIn(markTargetId, siteId || params.customVisitId, (res as any)?.report_id || (res as any)?.oid, 'Day Visit');
       }
 
       setAlertInfo({
@@ -453,6 +479,7 @@ export default function CreateDayVisitReportScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <StepIndicator steps={STEPS} currentStep={currentStep} />
 
       <ScrollView
@@ -467,17 +494,17 @@ export default function CreateDayVisitReportScreen() {
             <Text style={styles.stepTitle}>General Information</Text>
 
             {/* Client Selector Dropdown */}
-            <Text style={styles.fieldLabel}>CLIENT {Boolean(params.siteId || params.plannedId) ? '(LOCKED)' : ''}</Text>
+            <Text style={styles.fieldLabel}>CLIENT {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (isCustomVisit ? '(CUSTOM VISIT)' : '(LOCKED)') : ''}</Text>
             <TouchableOpacity
-              activeOpacity={Boolean(params.siteId || params.plannedId) ? 1 : 0.8}
-              disabled={Boolean(params.siteId || params.plannedId)}
+              activeOpacity={Boolean(params.siteId || params.plannedId || isCustomVisit) ? 1 : 0.8}
+              disabled={Boolean(params.siteId || params.plannedId || isCustomVisit)}
               onPress={() => setClientModalVisible(true)}
-              style={[styles.pickerButton, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonLocked : null]}
+              style={[styles.pickerButton, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonLocked : null]}
             >
-              <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonTextLocked : null]}>
+              <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonTextLocked : null]}>
                 {clientName || clients.find((c) => String(c.id) === String(clientId))?.name || 'Select Client...'}
               </Text>
-              {Boolean(params.siteId || params.plannedId) ? (
+              {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (
                 <Lock color="#64748B" size={16} />
               ) : (
                 <ChevronDown color={THEME.textVariant} size={20} />
@@ -485,17 +512,17 @@ export default function CreateDayVisitReportScreen() {
             </TouchableOpacity>
 
             {/* Site Selector Dropdown */}
-            <Text style={styles.fieldLabel}>SITE {Boolean(params.siteId || params.plannedId) ? '(LOCKED)' : ''}</Text>
+            <Text style={styles.fieldLabel}>SITE {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (isCustomVisit ? '(CUSTOM VISIT)' : '(LOCKED)') : ''}</Text>
             <TouchableOpacity
-              activeOpacity={Boolean(params.siteId || params.plannedId) ? 1 : 0.8}
-              disabled={Boolean(params.siteId || params.plannedId)}
+              activeOpacity={Boolean(params.siteId || params.plannedId || isCustomVisit) ? 1 : 0.8}
+              disabled={Boolean(params.siteId || params.plannedId || isCustomVisit)}
               onPress={() => setSiteModalVisible(true)}
-              style={[styles.pickerButton, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonLocked : null]}
+              style={[styles.pickerButton, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonLocked : null]}
             >
-              <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonTextLocked : null]}>
+              <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonTextLocked : null]}>
                 {siteName || sites.find((s) => String(s.id) === String(siteId))?.name || 'Select Site...'}
               </Text>
-              {Boolean(params.siteId || params.plannedId) ? (
+              {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (
                 <Lock color="#64748B" size={16} />
               ) : (
                 <ChevronDown color={THEME.textVariant} size={20} />
@@ -988,15 +1015,15 @@ export default function CreateDayVisitReportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.background,
+    backgroundColor: colors.background,
   },
   fieldLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#94A3B8',
+    color: colors.textSecondary,
     letterSpacing: 0.5,
     marginTop: 10,
     marginBottom: 6,
@@ -1005,9 +1032,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: colors.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -1016,23 +1043,23 @@ const styles = StyleSheet.create({
   pickerButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   pickerButtonLocked: {
-    backgroundColor: '#0F172A',
-    borderColor: '#334155',
+    backgroundColor: colors.surfaceSecondary,
+    borderColor: colors.border,
   },
   pickerButtonTextLocked: {
-    color: '#CBD5E1',
+    color: colors.textSecondary,
     fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: colors.modalOverlay,
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -1045,25 +1072,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: colors.border,
     marginBottom: 10,
   },
   modalTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   modalItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
+    borderBottomColor: colors.border,
   },
   modalItemText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: colors.text,
   },
   scrollContent: {
     padding: 16,
@@ -1075,14 +1102,14 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: THEME.typography.md,
     fontWeight: '700',
-    color: THEME.text,
+    color: colors.text,
     marginBottom: 12,
   },
   guardRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     padding: 12,
     borderRadius: 10,
     marginVertical: 4,
@@ -1090,11 +1117,11 @@ const styles = StyleSheet.create({
   guardName: {
     fontSize: THEME.typography.sm,
     fontWeight: '600',
-    color: THEME.text,
+    color: colors.text,
   },
   guardMeta: {
     fontSize: THEME.typography.xs,
-    color: THEME.textVariant,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   checkRow: {
@@ -1103,29 +1130,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.border,
+    borderBottomColor: colors.border,
   },
   checkQuestion: {
     fontSize: THEME.typography.xs,
-    color: THEME.text,
+    color: colors.text,
     flex: 1,
     marginRight: 10,
   },
   reviewLabel: {
     fontSize: THEME.typography.sm,
-    color: THEME.textVariant,
+    color: colors.textSecondary,
     marginVertical: 4,
   },
   reviewVal: {
     fontWeight: '700',
-    color: THEME.text,
+    color: colors.text,
   },
   footerRow: {
     flexDirection: 'row',
     padding: 16,
-    backgroundColor: THEME.card,
+    backgroundColor: colors.card,
     borderTopWidth: 1,
-    borderTopColor: THEME.border,
+    borderTopColor: colors.border,
     gap: 12,
   },
   flexBtn: {

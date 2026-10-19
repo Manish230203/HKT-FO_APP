@@ -24,9 +24,16 @@ export interface PlannedVisit {
   plannedPeriod?: string;
   date?: string;
   clientName?: string;
+  client_name?: string;
   siteName?: string;
-  siteId?: number | string;
-  clientId?: number | string;
+  site_name?: string;
+  siteId?: number | string | null;
+  site_id?: number | string | null;
+  clientId?: number | string | null;
+  client_id?: number | string | null;
+  address?: string | null;
+  customVisitId?: number | string | null;
+  custom_visit_id?: number | string | null;
   latitude?: number;
   longitude?: number;
   visitType?: string;
@@ -46,7 +53,8 @@ export interface PlannedVisit {
 export interface ActiveSiteSession {
   id: number;
   employee_id: number;
-  site_id: number;
+  site_id?: number | null;
+  custom_visit_id?: number | null;
   site_name: string;
   start_time: string;
   status: string;
@@ -117,7 +125,8 @@ export const getActiveSiteVisitSession = async (empOid: number | string): Promis
 
 export const checkInSiteVisit = async (payload: {
   employee_id: number | string;
-  site_id: number | string;
+  site_id?: number | string | null;
+  custom_visit_id?: number | string | null;
   site_name?: string;
   latitude?: number;
   longitude?: number;
@@ -135,7 +144,8 @@ export const checkInSiteVisit = async (payload: {
 
 export const checkOutSiteVisit = async (payload: {
   employee_id: number | string;
-  site_id?: number | string;
+  site_id?: number | string | null;
+  custom_visit_id?: number | string | null;
   latitude?: number;
   longitude?: number;
 }) => {

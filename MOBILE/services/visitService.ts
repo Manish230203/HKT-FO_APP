@@ -53,3 +53,19 @@ export const sendReportEmail = async (payload: {
   const response = await api.post('/officer-visits/send-email', payload);
   return response.data;
 };
+
+export const getSiteChecklist = async (siteId: number | string) => {
+  const response = await api.get(`/sites/${siteId}/checklist`);
+  return response.data;
+};
+
+export const validateSiteQr = async (siteId: number | string, qrCode: string) => {
+  const response = await api.post(`/sites/${siteId}/validate-qr`, { qr_code: qrCode });
+  return response.data;
+};
+
+export const submitSiteChecklist = async (payload: any) => {
+  const response = await api.post('/sites/checklist-submit', payload);
+  return response.data;
+};
+

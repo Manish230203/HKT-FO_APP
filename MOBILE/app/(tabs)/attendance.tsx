@@ -28,14 +28,18 @@ import {
   Building,
   ChevronLeft,
   ChevronRight,
+  Power,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 import { getPunchRecords } from '../../services/db';
 
 export default function AttendanceScreen() {
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const { user, profileImage } = useAuth();
   const { todayRecord, attendanceLogs, monthlyStats: apiMonthlyStats, refreshStatus } = useAttendance();
   const { t } = useLanguage();
@@ -383,25 +387,25 @@ export default function AttendanceScreen() {
   return (
     <SwipeableBackWrapper>
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
 
         {/* ----------------- SUB-VIEW 1: ATTENDANCE DASHBOARD ----------------- */}
         {activeSubView === 'dashboard' && (
           <ScrollView
             contentContainerStyle={styles.scrollContent}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor="#FFFFFF" />}
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor={colors.text} />}
           >
             {/* 1. Header Profile Card */}
             <View style={styles.headerProfileCard}>
               <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <ArrowLeft color="#FFFFFF" size={20} />
+                <ArrowLeft color={colors.text} size={20} />
               </TouchableOpacity>
 
               <View style={styles.avatarBox}>
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.avatarImg} />
                 ) : (
-                  <User color="#FFFFFF" size={32} />
+                  <User color={colors.text} size={32} />
                 )}
               </View>
 
@@ -470,16 +474,33 @@ export default function AttendanceScreen() {
               <Text style={styles.liveTimerDigits}>{sessionTime}</Text>
             </LinearGradient>
 
-            {/* 3. Mark Attendance Big Card */}
+            {/* 3. Duty Status Action Big Card */}
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={() => router.push('/mark-attendance')}
-              style={styles.markAttendanceBigCard}
+              style={[
+                styles.markAttendanceBigCard,
+                sessionTime !== '00:00:00' ? { borderColor: 'rgba(239, 68, 68, 0.4)' } : { borderColor: 'rgba(16, 185, 129, 0.4)' },
+              ]}
             >
-              <View style={styles.bigFingerprintBox}>
-                <Fingerprint color="#3B82F6" size={42} />
+              <View
+                style={[
+                  styles.bigFingerprintBox,
+                  sessionTime !== '00:00:00'
+                    ? { backgroundColor: 'rgba(239, 68, 68, 0.15)' }
+                    : { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
+                ]}
+              >
+                <Power color={sessionTime !== '00:00:00' ? '#EF4444' : '#10B981'} size={38} />
               </View>
-              <Text style={styles.markAttendanceTitle}>MARK ATTENDANCE</Text>
+              <Text
+                style={[
+                  styles.markAttendanceTitle,
+                  { color: sessionTime !== '00:00:00' ? '#EF4444' : '#10B981' },
+                ]}
+              >
+                {sessionTime !== '00:00:00' ? 'DEACTIVATE DUTY' : 'ACTIVATE DUTY'}
+              </Text>
             </TouchableOpacity>
 
             {/* 4. Monthly Attendance Stats Card */}
@@ -557,12 +578,12 @@ export default function AttendanceScreen() {
         {activeSubView === 'logs' && (
           <ScrollView
             contentContainerStyle={styles.scrollContent}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor="#FFFFFF" />}
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor={colors.text} />}
           >
             {/* Header Bar */}
             <View style={styles.logsHeaderBar}>
               <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <ArrowLeft color="#FFFFFF" size={22} />
+                <ArrowLeft color={colors.text} size={22} />
               </TouchableOpacity>
               <View style={styles.logsTitleCol}>
                 <Text style={styles.officerNameText}>{user?.name || 'PAPPU KUMAR'}</Text>
@@ -572,11 +593,11 @@ export default function AttendanceScreen() {
 
             {/* Search Input Bar */}
             <View style={styles.searchBarBox}>
-              <Search color="#64748B" size={18} style={{ marginRight: 10 }} />
+              <Search color={colors.textMuted} size={18} style={{ marginRight: 10 }} />
               <TextInput
                 style={styles.searchInputText}
                 placeholder="Search logs..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.placeholder}
                 value={searchLogs}
                 onChangeText={setSearchLogs}
               />
@@ -764,12 +785,12 @@ export default function AttendanceScreen() {
         {activeSubView === 'missed' && (
           <ScrollView
             contentContainerStyle={styles.scrollContent}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor="#FFFFFF" />}
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchLogs} tintColor={colors.text} />}
           >
             {/* Header Bar */}
             <View style={styles.logsHeaderBar}>
               <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                <ArrowLeft color="#FFFFFF" size={22} />
+                <ArrowLeft color={colors.text} size={22} />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={styles.missedTitleText}>Missed Punches</Text>
@@ -949,10 +970,10 @@ export default function AttendanceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
+    backgroundColor: colors.background,
   },
   scrollContent: {
     padding: 16,
@@ -961,7 +982,7 @@ const styles = StyleSheet.create({
 
   /* HEADER PROFILE CARD */
   headerProfileCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 16,
     flexDirection: 'row',
@@ -969,7 +990,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     marginTop: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   backBtn: {
     padding: 4,
@@ -979,7 +1000,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 20,
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -997,7 +1018,7 @@ const styles = StyleSheet.create({
   greetingText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
   nameRow: {
     flexDirection: 'row',
@@ -1007,7 +1028,7 @@ const styles = StyleSheet.create({
   userNameText: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   versionBadge: {
     backgroundColor: 'rgba(59, 130, 246, 0.2)',
@@ -1022,7 +1043,7 @@ const styles = StyleSheet.create({
   },
   empIdText: {
     fontSize: 11,
-    color: '#64748B',
+    color: colors.textMuted,
     fontWeight: '700',
     marginTop: 2,
   },
@@ -1120,14 +1141,14 @@ const styles = StyleSheet.create({
 
   /* MARK ATTENDANCE BIG CARD */
   markAttendanceBigCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   bigFingerprintBox: {
     width: 88,
@@ -1147,17 +1168,17 @@ const styles = StyleSheet.create({
 
   /* STANDARD CARD DESIGN */
   standardCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   cardHeaderTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     letterSpacing: 0.8,
     marginBottom: 16,
   },
@@ -1172,7 +1193,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 54,
     borderRadius: 18,
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
@@ -1184,7 +1205,7 @@ const styles = StyleSheet.create({
   statLabelText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
 
   /* RECENT ACTIVITY */
@@ -1206,7 +1227,7 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   activityItemBox: {
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: 16,
     padding: 14,
     flexDirection: 'row',
@@ -1227,15 +1248,15 @@ const styles = StyleSheet.create({
   activityMainText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   activitySubText: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   noActivityText: {
-    color: '#64748B',
+    color: colors.textMuted,
     fontSize: 12,
     textAlign: 'center',
     paddingVertical: 10,
@@ -1264,11 +1285,11 @@ const styles = StyleSheet.create({
   officerNameText: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   officerRoleText: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -1286,7 +1307,7 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
   },
   searchBarBox: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.inputBg,
     borderRadius: 16,
     paddingHorizontal: 14,
     height: 48,
@@ -1294,21 +1315,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.inputBorder,
   },
   searchInputText: {
     flex: 1,
-    color: '#FFFFFF',
+    color: colors.text,
     fontSize: 14,
   },
   filterPillsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 14,
     padding: 4,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   filterPillBtn: {
     flex: 1,
@@ -1317,14 +1338,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   filterPillActive: {
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : '#E2E8F0',
     borderWidth: 1,
     borderColor: 'rgba(59, 130, 246, 0.3)',
   },
   filterPillText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   filterPillTextActive: {
     color: '#3B82F6',
@@ -1334,7 +1355,7 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
   },
   emptyLogText: {
-    color: '#64748B',
+    color: colors.textMuted,
     fontSize: 13,
     fontWeight: '600',
     marginTop: 8,
@@ -1342,14 +1363,14 @@ const styles = StyleSheet.create({
 
   /* LOG CARD ITEM WITH ORANGE ACCENT BAR */
   logCardItem: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 18,
     marginBottom: 14,
     borderLeftWidth: 4,
     borderLeftColor: '#F59E0B',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   logHeaderRow: {
     flexDirection: 'row',
@@ -1384,13 +1405,13 @@ const styles = StyleSheet.create({
   fieldSubLabel: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#64748B',
+    color: colors.textMuted,
     letterSpacing: 0.8,
   },
   timeValText: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 2,
   },
   siteValText: {
@@ -1409,38 +1430,38 @@ const styles = StyleSheet.create({
   missedSubText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#64748B',
+    color: colors.textMuted,
     letterSpacing: 0.8,
     marginTop: 2,
   },
   warningBannerCard: {
-    backgroundColor: '#2A1215',
+    backgroundColor: isDark ? '#2A1215' : '#FEE2E2',
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#7F1D1D',
+    borderColor: isDark ? '#7F1D1D' : '#FCA5A5',
   },
   warningBannerTitle: {
     fontSize: 13,
-    color: '#FCA5A5',
+    color: isDark ? '#FCA5A5' : '#991B1B',
     fontWeight: '700',
   },
   warningBannerSub: {
     fontSize: 11,
-    color: '#F87171',
+    color: isDark ? '#F87171' : '#B91C1C',
     marginTop: 2,
   },
   rangeFilterContainer: {
     flexDirection: 'row',
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 14,
     padding: 4,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   rangePillBtn: {
     flex: 1,
@@ -1449,14 +1470,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   rangePillActive: {
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : '#E2E8F0',
     borderWidth: 1,
     borderColor: 'rgba(59, 130, 246, 0.3)',
   },
   rangePillText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#64748B',
+    color: colors.textSecondary,
     letterSpacing: 0.5,
   },
   rangePillTextActive: {
@@ -1470,7 +1491,7 @@ const styles = StyleSheet.create({
   missedDateTitle: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#94A3B8',
+    color: colors.textSecondary,
     letterSpacing: 0.5,
   },
   onTimeStatusRow: {
@@ -1493,12 +1514,12 @@ const styles = StyleSheet.create({
 
   /* DYNAMIC DATE SELECTOR STRIP STYLES */
   dateStripCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 14,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   monthNavHeader: {
     flexDirection: 'row',
@@ -1510,12 +1531,12 @@ const styles = StyleSheet.create({
   navArrowBtn: {
     padding: 6,
     borderRadius: 10,
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
   },
   monthNavTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     letterSpacing: 1,
   },
   dateStripScroll: {
@@ -1527,7 +1548,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 64,
     borderRadius: 16,
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1544,12 +1565,12 @@ const styles = StyleSheet.create({
   },
   dayPillHasRecord: {
     borderColor: 'rgba(59, 130, 246, 0.4)',
-    backgroundColor: '#1A2438',
+    backgroundColor: isDark ? '#1A2438' : '#EFF6FF',
   },
   dayNameLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
   dayNameActive: {
     color: '#E0F2FE',
@@ -1557,7 +1578,7 @@ const styles = StyleSheet.create({
   dayNumDigits: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 2,
   },
   dayNumActive: {
@@ -1577,11 +1598,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
+    borderTopColor: colors.border,
   },
   selectedDateText: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     fontWeight: '600',
   },
   clearFilterText: {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,24 +9,27 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ArrowLeft,
   User,
-  CheckCircle2,
-  AlertCircle,
   ShieldCheck,
   Clock,
   AlertTriangle,
   Camera,
+  CheckCircle2,
+  AlertCircle,
+  Power,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useAttendance } from '../context/AttendanceContext';
-import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 import { CustomAlertModal } from '../components/ui/CustomAlertModal';
 import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns } from '../services/db';
@@ -34,30 +37,30 @@ import { getActiveSiteVisitSession } from '../services/siteService';
 
 export default function MarkAttendanceScreen() {
   const { user, profileImage } = useAuth();
-  const { markAttendance, validateSelfie, todayRecord, refreshStatus } = useAttendance();
-  const { t } = useLanguage();
+  const { markAttendance, validateSelfie, todayRecord, refreshStatus, profileData } = useAttendance();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
-  const cameraRef = useRef<any>(null);
+  // Check if officer has a registered profile photo
+  const hasProfilePhoto = Boolean(
+    profileImage ||
+    (profileData && profileData.profile_photo) ||
+    (user && (user as any).profile_photo)
+  );
 
-  const [permission, requestPermission] = useCameraPermissions();
   const [localTime, setLocalTime] = useState('');
-  const [currentStep, setCurrentStep] = useState<1 | 2>(1);
-  const [countdown, setCountdown] = useState(3);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationSuccess, setVerificationSuccess] = useState(false);
-  const [livenessStatus, setLivenessStatus] = useState<string>('Verifying Face...');
-  const [similarityScore, setSimilarityScore] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
+  const [isVerifyingPhoto, setIsVerifyingPhoto] = useState(false);
 
-  // Active Punch, Buffer & Profile Photo Missing States
+  // Active Punch & Buffer states
   const [activePunchRecord, setActivePunchRecord] = useState<any | null>(null);
   const [bufferError, setBufferError] = useState<string | null>(null);
-  const [profileMissingError, setProfileMissingError] = useState(false);
 
   // GPS Location
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // Alert State
+  // Alert Modal State
   const [alertInfo, setAlertInfo] = useState<{
     visible: boolean;
     title: string;
@@ -69,6 +72,10 @@ export default function MarkAttendanceScreen() {
     message: '',
     type: 'info',
   });
+
+  // Determine current active status strictly from server record and local active session
+  const isServerActive = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+  const isOfficerActive = isServerActive || !!activePunchRecord;
 
   // Digital Live Clock
   useEffect(() => {
@@ -84,26 +91,11 @@ export default function MarkAttendanceScreen() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  // Check Profile Photo & Active Punch In Buffer
+  // Check active punch session & 10-minute buffer without capturing any photo
   useEffect(() => {
     (async () => {
       try {
         const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
-
-        // REQUIREMENT: If Profile Photo is NOT registered, BLOCK attendance marking!
-        if (!profileImage) {
-          setProfileMissingError(true);
-          setAlertInfo({
-            visible: true,
-            title: 'Profile Photo Required',
-            message: `No reference profile photo found for ${user?.name || 'Officer'}! Please register/capture your profile photo in Settings first before marking attendance.`,
-            type: 'error',
-          });
-          return;
-        } else {
-          setProfileMissingError(false);
-        }
-
         const records = await getPunchRecords(empId);
         const nowMs = Date.now();
         const active = records.find((r) => {
@@ -112,17 +104,15 @@ export default function MarkAttendanceScreen() {
           const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
           return isPunchedIn && isWithin16Hours;
         });
+
         if (active) {
           setActivePunchRecord(active);
-
-          // Calculate time difference in minutes
           const punchInTimeMs = active.timestamp || Date.now() - 3 * 60 * 1000;
           const diffMins = Math.floor((Date.now() - punchInTimeMs) / 60000);
-
           if (diffMins < 10) {
             const remaining = 10 - diffMins;
             setBufferError(
-              `10-Minute Buffer Required: Punched-in at ${active.punchInTime || '11:00'} (${diffMins} mins ago). Please wait ${remaining} more mins to Punch Out.`
+              `10-Minute Buffer Required: Activated at ${active.punchInTime || 'recently'} (${diffMins} mins ago). Please wait ${remaining} more mins to deactivate.`
             );
           } else {
             setBufferError(null);
@@ -135,9 +125,9 @@ export default function MarkAttendanceScreen() {
         console.error('Check active punch error', e);
       }
     })();
-  }, [user, profileImage]);
+  }, [user]);
 
-  // Fetch Location with resilient fallbacks (prevents kCLErrorDomain error 0 / GPS lock timeouts)
+  // Fetch Location gracefully
   useEffect(() => {
     (async () => {
       try {
@@ -146,8 +136,7 @@ export default function MarkAttendanceScreen() {
           let loc: Location.LocationObject | null = null;
           try {
             loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          } catch (e) {
-            console.warn('getCurrentPositionAsync balanced failed, trying last known position:', e);
+          } catch {
             loc = await Location.getLastKnownPositionAsync();
           }
 
@@ -159,141 +148,120 @@ export default function MarkAttendanceScreen() {
           }
         }
       } catch (e) {
-        console.warn('Location fetch warning:', e);
+        console.warn('Location fetch error (non-blocking):', e);
       }
     })();
   }, []);
 
-  // Auto-Capture 3s Countdown Loop (Only runs if profile photo exists, no 10-min buffer error, and NO alert modal visible)
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (currentStep === 1 && !verificationSuccess && !isVerifying && !bufferError && !profileMissingError && profileImage && !alertInfo.visible) {
-      if (countdown > 0) {
-        timer = setInterval(() => {
-          setCountdown((prev) => prev - 1);
-        }, 1000);
-      } else {
-        handleAutoFaceVerification();
-      }
-    }
-    return () => clearInterval(timer);
-  }, [countdown, currentStep, verificationSuccess, isVerifying, bufferError, profileMissingError, profileImage, alertInfo.visible]);
+  // MANUAL image capture triggered ONLY upon explicit tap on avatar/photo container
+  const handleManualImageTap = async () => {
+    if (isSubmitting) return;
 
-  // Real-Time Liveness Detection & Face Embeddings Comparison via backend validateSelfie
-  const handleAutoFaceVerification = async () => {
-    if (!profileImage) {
-      setAlertInfo({
-        visible: true,
-        title: 'Profile Photo Missing',
-        message: 'Cannot verify face identity. Please register your profile photo in Settings first.',
-        type: 'error',
-      });
-      return;
-    }
-
-    setIsVerifying(true);
-    setLivenessStatus('Verifying Face...');
     try {
-      let photoUri: string | null = null;
-      if (cameraRef.current) {
-        try {
-          const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
-          if (photo && photo.uri) {
-            photoUri = photo.uri;
-          }
-        } catch (camErr) {
-          console.warn('Camera takePictureAsync error:', camErr);
-        }
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Camera Permission Required',
+          'Camera access is required to capture your verification photo for activation.'
+        );
+        return;
       }
 
-      if (photoUri) {
-        // Send camera selfie to backend selfieValidation endpoint
-        const vRes = await validateSelfie(photoUri);
-        if (!vRes || !vRes.success) {
-          setIsVerifying(false);
-          setAlertInfo({
-            visible: true,
-            title: 'Face Verification Failed',
-            message: vRes?.message || 'No face detected in camera frame. Please position your face clearly.',
-            type: 'error',
-          });
-          setCountdown(3);
-          return;
-        }
-      }
-
-      setLivenessStatus('Face Verified Successfully');
-      const matchScore = parseFloat((98 + Math.random() * 1.5).toFixed(1));
-      setSimilarityScore(matchScore);
-      setVerificationSuccess(true);
-      setIsVerifying(false);
-
-      // AUTOMATICALLY MARK PUNCH IN OR PUNCH OUT IMMEDIATELY
-      await autoExecuteAttendance(matchScore);
-    } catch (e) {
-      console.error('Verification error', e);
-      setIsVerifying(false);
-      setAlertInfo({
-        visible: true,
-        title: 'Verification Failed',
-        message: 'Could not verify face. Please position your face clearly and retry.',
-        type: 'error',
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        cameraType: ImagePicker.CameraType.front,
       });
-      setCountdown(3);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const photoUri = result.assets[0].uri;
+        setCapturedPhotoUri(photoUri);
+
+        // Optional server-side face validation feedback
+        setIsVerifyingPhoto(true);
+        try {
+          const vRes = await validateSelfie(photoUri);
+          if (vRes && !vRes.success) {
+            Alert.alert(
+              'Face Verification Notice',
+              vRes.message || 'Face unclear in photo. Please ensure good lighting and clear positioning.'
+            );
+          }
+        } catch (valErr) {
+          console.warn('Selfie validation error:', valErr);
+        } finally {
+          setIsVerifyingPhoto(false);
+        }
+      }
+    } catch (err) {
+      console.error('Manual camera capture error:', err);
+      Alert.alert('Capture Error', 'Could not open camera. Please try again.');
     }
   };
 
-  // Automatically execute Punch-In or Punch-Out immediately via Backend API (updates attendance_row & attendance_cell)
-  const autoExecuteAttendance = async (matchScore: number) => {
-    try {
-      const todayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
+  // Explicit Activation or Deactivation handler
+  const handleToggleDutyStatus = async () => {
+    if (isSubmitting) return;
 
-      const lat = location?.latitude || 18.605555;
-      const long = location?.longitude || 73.827115;
+    // Check location
+    const lat = location?.latitude || 18.605555;
+    const long = location?.longitude || 73.827115;
+    const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
+    const todayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // Check if officer is attempting to Punch Out while an active site visit session is in progress
-      if (activePunchRecord) {
-        const empOid = user?.id || (user as any)?.oid || user?.employee_id || 7558;
-        let activeSiteSession = await getActiveSiteVisitSession(empOid);
-        if (!activeSiteSession) {
-          const localCheckIns = await getActiveCheckIns();
-          const activeKeys = Object.keys(localCheckIns);
-          if (activeKeys.length > 0) {
-            const firstActive = localCheckIns[activeKeys[0]];
-            activeSiteSession = {
-              id: 1,
-              employee_id: Number(empOid) || 7558,
-              site_id: Number(firstActive.siteId) || 1,
-              site_name: firstActive.siteName || 'Site Visit',
-              start_time: firstActive.checkInTime || 'Active',
-              status: 'IN_PROGRESS',
-              duration_minutes: 0,
-            };
-          }
-        }
+    if (isOfficerActive) {
+      // --- DEACTIVATION WORKFLOW ---
+      // Check buffer
+      if (bufferError) {
+        setAlertInfo({
+          visible: true,
+          title: 'Buffer Required',
+          message: bufferError,
+          type: 'error',
+        });
+        return;
+      }
 
-        if (activeSiteSession) {
-          setIsVerifying(false);
-          setAlertInfo({
-            visible: true,
-            title: 'Site Check-Out Required',
-            message: `You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before punching out for duty.`,
-            type: 'error',
-          });
-          return;
+      // Check active site visit session
+      const empOid = user?.id || (user as any)?.oid || user?.employee_id || 7558;
+      let activeSiteSession = await getActiveSiteVisitSession(empOid);
+      if (!activeSiteSession) {
+        const localCheckIns = await getActiveCheckIns();
+        const activeKeys = Object.keys(localCheckIns);
+        if (activeKeys.length > 0) {
+          const firstActive = localCheckIns[activeKeys[0]];
+          activeSiteSession = {
+            id: 1,
+            employee_id: Number(empOid) || 7558,
+            site_id: Number(firstActive.siteId) || 1,
+            site_name: firstActive.siteName || 'Site Visit',
+            start_time: firstActive.checkInTime || 'Active',
+            status: 'IN_PROGRESS',
+            duration_minutes: 0,
+          };
         }
       }
 
-      const res = await markAttendance(lat, long);
+      if (activeSiteSession) {
+        setAlertInfo({
+          visible: true,
+          title: 'Site Check-Out Required',
+          message: `You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before deactivating.`,
+          type: 'error',
+        });
+        return;
+      }
 
-      if (res && res.success) {
-        if (activePunchRecord) {
-          // MARK PUNCH OUT in local DB cache
+      setIsSubmitting(true);
+      try {
+        const res = await markAttendance(lat, long);
+        if (res && res.success) {
+          // Update local DB cache
           const allRecords = await getPunchRecords();
           const updated = allRecords.map((r) => {
-            if (r.id === activePunchRecord.id) {
+            if (activePunchRecord && r.id === activePunchRecord.id) {
               return {
                 ...r,
                 punchOutTime: nowTime,
@@ -305,15 +273,63 @@ export default function MarkAttendanceScreen() {
             return r;
           });
           await updatePunchRecordsList(updated);
+          setActivePunchRecord(null);
 
           setAlertInfo({
             visible: true,
-            title: 'Punch Out Successful',
-            message: `${res.message || 'Punch Out logged successfully'} at ${nowTime} for ${user?.name || 'Officer'}. Duty session completed!`,
+            title: 'Duty Deactivated',
+            message: `Officer status is now INACTIVE. Duty session completed at ${nowTime}.`,
             type: 'success',
           });
+          await refreshStatus();
         } else {
-          // MARK PUNCH IN in local DB cache
+          setAlertInfo({
+            visible: true,
+            title: 'Deactivation Failed',
+            message: res?.message || 'Could not deactivate duty on server. Please try again.',
+            type: 'error',
+          });
+        }
+      } catch (err) {
+        console.error('Deactivation error:', err);
+        setAlertInfo({
+          visible: true,
+          title: 'Error',
+          message: 'Network or system error occurred while deactivating duty.',
+          type: 'error',
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      // --- ACTIVATION WORKFLOW ---
+      // 1. Mandatory Profile Photo Check: Officer MUST have an uploaded profile photo in the system!
+      if (!hasProfilePhoto) {
+        setAlertInfo({
+          visible: true,
+          title: 'Profile Photo Required',
+          message: 'You have not uploaded a profile photo yet. Please upload your profile photo first in Settings before activating duty.',
+          type: 'error',
+        });
+        return;
+      }
+
+      // 2. Mandatory Verification Photo: Must capture selfie to activate duty
+      if (!capturedPhotoUri) {
+        setAlertInfo({
+          visible: true,
+          title: 'Verification Photo Required',
+          message: 'Please tap the camera box above to take your verification photo before activating duty.',
+          type: 'error',
+        });
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const res = await markAttendance(lat, long);
+        if (res && res.success) {
+          // Save active record locally
           await savePunchRecord(
             {
               id: `punch_${Date.now()}`,
@@ -335,172 +351,203 @@ export default function MarkAttendanceScreen() {
 
           setAlertInfo({
             visible: true,
-            title: 'Punch In Successful',
-            message: `${res.message || 'Punch In logged successfully'} at ${nowTime} for ${user?.name || 'Officer'}. Duty session started!`,
+            title: 'Duty Activated',
+            message: `Officer status is now ACTIVE. Duty session started at ${nowTime}.`,
             type: 'success',
           });
+          await refreshStatus();
+        } else {
+          setAlertInfo({
+            visible: true,
+            title: 'Activation Failed',
+            message: res?.message || 'Could not activate duty on server. Please check connection and retry.',
+            type: 'error',
+          });
         }
-
-        await refreshStatus();
-
-        setTimeout(() => {
-          router.replace('/(tabs)/dashboard');
-        }, 800);
-      } else {
-        setIsVerifying(false);
+      } catch (err) {
+        console.error('Activation error:', err);
         setAlertInfo({
           visible: true,
-          title: 'Punch Restricted',
-          message: res?.message || 'Attendance marking failed on server. Please check out of active site visits and try again.',
+          title: 'Error',
+          message: 'Network or system error occurred while activating duty.',
           type: 'error',
         });
-        setCountdown(3);
-        setVerificationSuccess(false);
+      } finally {
+        setIsSubmitting(false);
       }
-    } catch (e) {
-      console.error('Auto attendance error', e);
-      setAlertInfo({
-        visible: true,
-        title: 'Error',
-        message: 'Network or system error occurred while submitting attendance.',
-        type: 'error',
-      });
     }
   };
 
-  if (!permission) {
-    return <View style={styles.container} />;
-  }
-
-  if (!permission.granted) {
-    return (
-      <SwipeableBackWrapper>
-        <SafeAreaView style={styles.safeContainer}>
-          <View style={styles.permissionBox}>
-            <AlertCircle color="#EF4444" size={48} style={{ marginBottom: 14 }} />
-            <Text style={styles.permissionTitle}>Camera Permission Needed</Text>
-            <Text style={styles.permissionSub}>
-              Camera access is required for face verification & attendance marking.
-            </Text>
-            <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
-              <Text style={styles.grantBtnText}>GRANT CAMERA PERMISSION</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </SwipeableBackWrapper>
-    );
-  }
+  const displayImageUri = capturedPhotoUri || profileImage;
 
   return (
     <SwipeableBackWrapper>
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={styles.safeContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#0A1128" />
+      <SafeAreaView style={[styles.safeContainer, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
         <ScrollView contentContainerStyle={styles.content}>
-          {/* 1. HEADER BAR MATCHING USER SCREENSHOT */}
+          {/* Header Bar */}
           <View style={styles.headerBar}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <ArrowLeft color="#FFFFFF" size={22} />
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.8}>
+              <ArrowLeft color={colors.text} size={22} />
             </TouchableOpacity>
 
             <View style={styles.headerTitleCol}>
-              <Text style={styles.mainTitleText}>{t('mark_attendance')}</Text>
+              <Text style={[styles.mainTitleText, { color: colors.text }]}>Officer Duty Status</Text>
               <Text style={styles.userSubText}>
-                {t('user_label')}: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
+                Officer: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
               </Text>
               <Text style={styles.sessionIdText}>
-                {t('session_id')}: {user?.employee_id || 'EMP002'}
+                ID: {user?.employee_id || 'EMP002'}
               </Text>
             </View>
 
             <View style={styles.timeCol}>
-              <Text style={styles.localTimeLabel}>{t('local_time')}</Text>
-              <Text style={styles.localTimeDigits}>{localTime || '13:34:11'}</Text>
+              <Text style={styles.localTimeLabel}>LOCAL TIME</Text>
+              <Text style={[styles.localTimeDigits, { color: colors.text }]}>{localTime || '12:00:00'}</Text>
             </View>
           </View>
 
-          {/* PROFILE PHOTO MISSING BLOCKING WARNING BANNER */}
-          {profileMissingError || !profileImage ? (
-            <View style={styles.profileMissingCard}>
-              <AlertCircle color="#EF4444" size={26} style={{ marginRight: 12 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.profileMissingTitle}>{t('profile_photo_not_registered')}</Text>
-                <Text style={styles.profileMissingSub}>
-                  {t('profile_photo_required_desc')}
-                </Text>
-
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => router.push('/settings')}
-                  style={styles.takePhotoNowBtn}
-                >
-                  <Camera color="#FFFFFF" size={16} style={{ marginRight: 6 }} />
-                  <Text style={styles.takePhotoBtnText}>{t('register_photo_now')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-
-          {/* 10-MINUTE BUFFER WARNING BANNER */}
-          {bufferError && !profileMissingError && (
+          {/* Buffer Warning Card */}
+          {bufferError && (
             <View style={styles.bufferWarningCard}>
-              <AlertTriangle color="#F59E0B" size={22} style={{ marginRight: 10 }} />
+              <AlertTriangle color="#F59E0B" size={20} style={{ marginRight: 10 }} />
               <Text style={styles.bufferWarningText}>{bufferError}</Text>
             </View>
           )}
 
-          {/* 3. REAL-TIME FACE VERIFICATION CARD */}
-          <View style={styles.verificationCard}>
-            <View style={styles.livenessHeaderRow}>
-              <View style={styles.redLiveDot} />
-              <Text style={styles.livenessTitle}>VERIFY FACE IDENTITY</Text>
+          {/* Status Badge Card */}
+          <View style={[styles.statusCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.statusHeaderRow}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: isOfficerActive ? '#10B981' : '#EF4444' },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.statusTitle,
+                  { color: isOfficerActive ? '#10B981' : '#EF4444' },
+                ]}
+              >
+                {isOfficerActive ? 'STATUS: ACTIVE' : 'STATUS: INACTIVE'}
+              </Text>
+            </View>
+            <Text style={[styles.statusSubText, { color: colors.textVariant }]}>
+              {isOfficerActive
+                ? 'Your duty session is active. Background location tracking and visit logging are enabled.'
+                : 'Your duty session is currently inactive. Tap your photo below to verify, then tap Activate to start duty.'}
+            </Text>
+          </View>
+
+          {/* Manual Photo Capture Box */}
+          <View style={[styles.photoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.photoCardHeader}>
+              <View style={[styles.headerDot, { backgroundColor: '#EF4444' }]} />
+              <Text style={[styles.photoCardTitle, { color: colors.text }]}>
+                VERIFY FACE IDENTITY ({isOfficerActive ? 'DEACTIVATE DUTY' : 'ACTIVATE DUTY'})
+              </Text>
             </View>
 
-            {/* LIVE CAMERA VIEWFINDER WITH ORANGE CORNER RETICLES */}
-            <View style={styles.viewfinderContainer}>
-              <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="front" />
-
-              {/* Corner Orange Reticles [ ] */}
-              <View style={[styles.reticleCorner, styles.topRightReticle]} />
-              <View style={[styles.reticleCorner, styles.bottomLeftReticle]} />
-              <View style={[styles.reticleCorner, styles.bottomRightReticle]} />
-              <View style={[styles.reticleCorner, styles.topLeftReticle]} />
-            </View>
-
-            {/* AUTO-CAPTURE & ATTENDANCE STATUS BOX */}
-            <View style={styles.autoCaptureStatusBox}>
-              {profileMissingError || !profileImage ? (
-                <Text style={[styles.autoCaptureText, { color: '#EF4444', fontWeight: '800' }]}>
-                  ⚠️ ATTENDANCE BLOCKED: Profile photo missing. Register profile photo in Settings first.
-                </Text>
-              ) : bufferError ? (
-                <Text style={[styles.autoCaptureText, { color: '#F59E0B' }]}>{bufferError}</Text>
-              ) : isVerifying ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <ActivityIndicator color="#3B82F6" size="small" style={{ marginRight: 8 }} />
-                  <Text style={[styles.autoCaptureText, { color: '#60A5FA', fontWeight: '700' }]}>
-                    {activePunchRecord ? 'Verifying Face for Punch Out...' : 'Verifying Face for Punch In...'}
+            {/* Square Viewfinder Container with Orange Corner Brackets */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={[
+                styles.viewfinderContainer,
+                { backgroundColor: isDark ? '#0A1128' : '#F1F5F9' },
+              ]}
+              onPress={handleManualImageTap}
+              disabled={isSubmitting || isVerifyingPhoto}
+            >
+              {displayImageUri ? (
+                <Image source={{ uri: displayImageUri }} style={styles.viewfinderImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.placeholderBox}>
+                  <User color="#64748B" size={72} />
+                  <Text style={[styles.placeholderPrompt, { color: colors.textVariant }]}>
+                    POSITION FACE INSIDE FRAME
                   </Text>
                 </View>
-              ) : verificationSuccess ? (
-                <View style={styles.verifiedCol}>
-                  <View style={styles.verifiedRow}>
-                    <ShieldCheck color="#10B981" size={20} style={{ marginRight: 8 }} />
-                    <Text style={styles.verifiedText}>
-                      {activePunchRecord
-                        ? 'PUNCH OUT SUCCESSFUL! Duty session completed.'
-                        : 'PUNCH IN SUCCESSFUL! Duty session started.'}
-                    </Text>
-                  </View>
-                </View>
-              ) : (
-                <Text style={styles.autoCaptureText}>
-                  <Text style={{ color: '#3B82F6', fontWeight: '800' }}>Position Face: </Text>
-                  {activePunchRecord ? 'Punching Out' : 'Punching In'} in {countdown}s...
-                </Text>
               )}
+
+              {/* 4 Viewfinder Orange Corner Brackets */}
+              <View style={[styles.cornerBracket, styles.cornerTL]} />
+              <View style={[styles.cornerBracket, styles.cornerTR]} />
+              <View style={[styles.cornerBracket, styles.cornerBL]} />
+              <View style={[styles.cornerBracket, styles.cornerBR]} />
+            </TouchableOpacity>
+
+            {/* Blue Capture Photo Button */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.capturePhotoButton}
+              onPress={handleManualImageTap}
+              disabled={isSubmitting || isVerifyingPhoto}
+            >
+              <Camera color="#FFFFFF" size={20} style={{ marginRight: 8 }} />
+              <Text style={styles.capturePhotoBtnText}>
+                {capturedPhotoUri ? 'Retake Photo' : 'Capture Photo'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Helper Description Box */}
+            <View
+              style={[
+                styles.readyHelperBox,
+                {
+                  backgroundColor: isDark ? 'rgba(15, 23, 42, 0.85)' : '#F8FAFC',
+                  borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                },
+              ]}
+            >
+              <Text style={[styles.readyHelperText, { color: colors.textVariant }]}>
+                <Text style={styles.readyHelperTitle}>Ready to Capture: </Text>
+                Position your face clearly within the frame and tap "Capture Photo" to {isOfficerActive ? 'deactivate duty' : 'activate duty'}.
+              </Text>
             </View>
+
+            {isVerifyingPhoto ? (
+              <View style={styles.verifyingRow}>
+                <ActivityIndicator size="small" color="#3B82F6" style={{ marginRight: 8 }} />
+                <Text style={styles.verifyingText}>Verifying face quality...</Text>
+              </View>
+            ) : capturedPhotoUri ? (
+              <Text style={styles.photoCapturedSuccessText}>
+                ✓ Verification photo ready. Tap button below to proceed.
+              </Text>
+            ) : null}
           </View>
+
+          {/* Main Action Button */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[
+              styles.actionButton,
+              {
+                backgroundColor: isOfficerActive ? '#DC2626' : '#10B981',
+                opacity: isSubmitting ? 0.7 : 1,
+              },
+            ]}
+            onPress={handleToggleDutyStatus}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <View style={styles.btnLoadingRow}>
+                <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 10 }} />
+                <Text style={styles.actionBtnText}>
+                  {isOfficerActive ? 'DEACTIVATING...' : 'ACTIVATING...'}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.btnRow}>
+                <Power color="#FFFFFF" size={20} style={{ marginRight: 10 }} />
+                <Text style={styles.actionBtnText}>
+                  {isOfficerActive ? 'DEACTIVATE DUTY' : 'ACTIVATE DUTY'}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
           <Text style={styles.copyrightText}>© 2026 HUMANKIND TECHNOLOGY</Text>
         </ScrollView>
@@ -513,7 +560,6 @@ export default function MarkAttendanceScreen() {
           onClose={() => {
             const isSuccess = alertInfo.type === 'success';
             setAlertInfo({ ...alertInfo, visible: false });
-            setCountdown(3);
             if (isSuccess) {
               router.replace('/(tabs)/dashboard');
             }
@@ -527,18 +573,11 @@ export default function MarkAttendanceScreen() {
 const styles = StyleSheet.create({
   safeContainer: {
     flex: 1,
-    backgroundColor: '#0A1128',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1128',
   },
   content: {
     padding: 16,
     paddingBottom: 40,
   },
-
-  /* HEADER BAR */
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -554,9 +593,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mainTitleText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
   },
   userSubText: {
     fontSize: 12,
@@ -584,52 +622,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   localTimeDigits: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
     marginTop: 2,
   },
 
-  /* PROFILE MISSING BLOCKING CARD */
-  profileMissingCard: {
-    backgroundColor: '#2A1215',
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#7F1D1D',
-  },
-  profileMissingTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#EF4444',
-  },
-  profileMissingSub: {
-    fontSize: 12,
-    color: '#FCA5A5',
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  takePhotoNowBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginTop: 12,
-    alignSelf: 'flex-start',
-  },
-  takePhotoBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-
-  /* BUFFER WARNING BANNER */
   bufferWarningCard: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
     borderRadius: 16,
@@ -648,208 +645,195 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  /* STEP INDICATOR CARD */
-  stepIndicatorCard: {
-    backgroundColor: '#131C33',
-    borderRadius: 24,
-    padding: 20,
+  statusCard: {
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  statusHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  stepItem: {
-    alignItems: 'center',
-  },
-  stepCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1E293B',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 8,
   },
-  stepCircleActive: {
-    backgroundColor: '#3B82F6',
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
   },
-  stepNumText: {
-    fontSize: 16,
+  statusTitle: {
+    fontSize: 15,
     fontWeight: '800',
-    color: '#94A3B8',
+    letterSpacing: 0.8,
   },
-  stepNumTextActive: {
-    color: '#FFFFFF',
-  },
-  stepLabelText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  stepLabelActive: {
-    color: '#3B82F6',
-  },
-  stepLine: {
-    height: 2,
-    flex: 0.5,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginHorizontal: 10,
+  statusSubText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
   },
 
-  /* REAL-TIME LIVENESS VERIFICATION CARD */
-  verificationCard: {
-    backgroundColor: '#131C33',
+  photoCard: {
     borderRadius: 24,
     padding: 20,
+    alignItems: 'center',
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
   },
-  livenessHeaderRow: {
+  photoCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     marginBottom: 16,
   },
-  redLiveDot: {
+  headerDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#EF4444',
     marginRight: 8,
   },
-  livenessTitle: {
-    fontSize: 12,
+  photoCardTitle: {
+    fontSize: 13,
     fontWeight: '800',
-    color: '#FFFFFF',
     letterSpacing: 0.8,
   },
-
-  /* VIEWFINDER & RETICLES */
   viewfinderContainer: {
-    height: 380,
+    width: '100%',
+    height: 330,
     borderRadius: 24,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 18,
   },
-  reticleCorner: {
+  viewfinderImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
+  },
+  placeholderBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+  },
+  placeholderPrompt: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginTop: 12,
+  },
+  cornerBracket: {
     position: 'absolute',
     width: 44,
     height: 44,
     borderColor: '#FF5722',
-    borderWidth: 4,
   },
-  topLeftReticle: {
-    top: 20,
-    left: 20,
-    borderRightWidth: 0,
-    borderBottomWidth: 0,
-    borderTopLeftRadius: 12,
+  cornerTL: {
+    top: 18,
+    left: 18,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderTopLeftRadius: 14,
   },
-  topRightReticle: {
-    top: 20,
-    right: 20,
-    borderLeftWidth: 0,
-    borderBottomWidth: 0,
-    borderTopRightRadius: 12,
+  cornerTR: {
+    top: 18,
+    right: 18,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderTopRightRadius: 14,
   },
-  bottomLeftReticle: {
-    bottom: 20,
-    left: 20,
-    borderRightWidth: 0,
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 12,
+  cornerBL: {
+    bottom: 18,
+    left: 18,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderBottomLeftRadius: 14,
   },
-  bottomRightReticle: {
-    bottom: 20,
-    right: 20,
-    borderLeftWidth: 0,
-    borderTopWidth: 0,
-    borderBottomRightRadius: 12,
+  cornerBR: {
+    bottom: 18,
+    right: 18,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderBottomRightRadius: 14,
   },
-  floatingPill: {
+  capturePhotoButton: {
+    width: '100%',
+    backgroundColor: '#2563EB',
+    borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    marginTop: 16,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  floatingPillText: {
+  capturePhotoBtnText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  readyHelperBox: {
+    width: '100%',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+  },
+  readyHelperText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  readyHelperTitle: {
+    color: '#3B82F6',
+    fontWeight: '800',
+  },
+  photoCapturedSuccessText: {
     fontSize: 12,
     fontWeight: '700',
+    color: '#10B981',
+    textAlign: 'center',
+    marginTop: 14,
+  },
+  verifyingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  verifyingText: {
+    fontSize: 12,
+    color: '#3B82F6',
+    fontWeight: '600',
   },
 
-  /* AUTO-CAPTURE STATUS BOX */
-  autoCaptureStatusBox: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
-  },
-  autoCaptureText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  redHighlight: {
-    color: '#EF4444',
-    fontWeight: '800',
-  },
-  verifiedCol: {
+  actionButton: {
+    borderRadius: 18,
+    paddingVertical: 18,
+    alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  verifiedRow: {
+  btnRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  verifiedText: {
-    color: '#10B981',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-
-  /* PERMISSION SCREEN */
-  permissionBox: {
-    flex: 1,
+  btnLoadingRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
   },
-  permissionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+  actionBtnText: {
     color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  permissionSub: {
-    fontSize: 13,
-    color: '#94A3B8',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  grantBtn: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
-  grantBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   copyrightText: {
     textAlign: 'center',
@@ -857,6 +841,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
-    marginTop: 20,
+    marginTop: 24,
   },
 });

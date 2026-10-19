@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "vigiloo",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#010F22"
-    },
     "ios": {
       "supportsTablet": true,
       "icon": "./assets/icon.png",
@@ -75,6 +70,14 @@
         "expo-camera",
         {
           "cameraPermission": "Allow VIGILO-OFFICER to access your camera for site observation photos."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#010F22"
         }
       ]
     ],

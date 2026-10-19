@@ -10,23 +10,38 @@ import { getSites, getClients, Site, Client } from '../../../services/siteServic
 import { submitGeneralVisit } from '../../../services/visitService';
 import { markReportSubmittedForCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
+import { useTheme } from '../../../context/ThemeContext';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { CustomAlertModal } from '../../../components/ui/CustomAlertModal';
+import { StatusBar } from 'react-native';
 
 export default function CreateGeneralVisitScreen() {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const { user } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
-  const params = useLocalSearchParams<{ clientId?: string; siteId?: string; plannedId?: string; checkInTime?: string; checkOutTime?: string }>();
+  const params = useLocalSearchParams<{
+    clientId?: string;
+    siteId?: string;
+    plannedId?: string;
+    checkInTime?: string;
+    checkOutTime?: string;
+    customVisitId?: string;
+    isCustom?: string;
+    customClientName?: string;
+    customSiteName?: string;
+  }>();
+  const isCustomVisit = Boolean(params.customVisitId || params.isCustom === '1');
 
   const [clients, setClients] = useState<Client[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [clientId, setClientId] = useState(params.clientId || '');
-  const [clientName, setClientName] = useState('');
+  const [clientName, setClientName] = useState(params.customClientName ? decodeURIComponent(params.customClientName) : '');
   const [siteId, setSiteId] = useState(params.siteId || '');
-  const [siteName, setSiteName] = useState('');
+  const [siteName, setSiteName] = useState(params.customSiteName ? decodeURIComponent(params.customSiteName) : '');
 
   // Modal selector states
   const [clientModalVisible, setClientModalVisible] = useState(false);
@@ -117,7 +132,14 @@ export default function CreateGeneralVisitScreen() {
       const clientData = await getClients();
       setClients(clientData);
 
-      if (params.clientId) {
+      if (isCustomVisit) {
+        setClientId('');
+        setSiteId('');
+        const cName = params.customClientName ? decodeURIComponent(params.customClientName) : 'Custom Client';
+        const sName = params.customSiteName ? decodeURIComponent(params.customSiteName) : 'Custom Location';
+        setClientName(cName);
+        setSiteName(sName);
+      } else if (params.clientId) {
         const initialClient = clientData.find((c) => String(c.id) === String(params.clientId));
         if (initialClient) {
           setClientName(initialClient.name);
@@ -166,7 +188,7 @@ export default function CreateGeneralVisitScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!clientId) {
+    if (!isCustomVisit && !clientId) {
       setAlertInfo({
         visible: true,
         title: t('missing_fields'),
@@ -176,7 +198,7 @@ export default function CreateGeneralVisitScreen() {
       return;
     }
 
-    if (!siteId) {
+    if (!isCustomVisit && !siteId) {
       setAlertInfo({
         visible: true,
         title: t('missing_fields'),
@@ -213,16 +235,22 @@ export default function CreateGeneralVisitScreen() {
         currentGps = await fetchCurrentLocation();
       }
 
-      const cName = clientName || clients.find((c) => String(c.id) === String(clientId))?.name || 'Selected Client';
-      const sName = siteName || sites.find((s) => String(s.id) === String(siteId))?.name || 'Selected Site';
+      const cName = isCustomVisit
+        ? (params.customClientName ? decodeURIComponent(params.customClientName) : (clientName || 'Custom Client'))
+        : (clientName || clients.find((c) => String(c.id) === String(clientId))?.name || 'Selected Client');
+      const sName = isCustomVisit
+        ? (params.customSiteName ? decodeURIComponent(params.customSiteName) : (siteName || 'Custom Location'))
+        : (siteName || sites.find((s) => String(s.id) === String(siteId))?.name || 'Selected Site');
 
       const payload = {
-        client_id: parseInt(clientId, 10) || 1,
-        clientId: parseInt(clientId, 10) || 1,
+        client_id: isCustomVisit ? null : (parseInt(clientId, 10) || 1),
+        clientId: isCustomVisit ? null : (parseInt(clientId, 10) || 1),
         client_name: cName,
         clientName: cName,
-        site_id: parseInt(siteId, 10) || 187,
-        siteId: parseInt(siteId, 10) || 187,
+        site_id: isCustomVisit ? null : (parseInt(siteId, 10) || 187),
+        siteId: isCustomVisit ? null : (parseInt(siteId, 10) || 187),
+        custom_visit_id: isCustomVisit ? (parseInt(params.customVisitId || '0', 10) || null) : null,
+        customVisitId: isCustomVisit ? (parseInt(params.customVisitId || '0', 10) || null) : null,
         site_name: sName,
         siteName: sName,
         person_visited: personVisited,
@@ -241,13 +269,14 @@ export default function CreateGeneralVisitScreen() {
         remark: remark,
         officer: user?.name || 'Amit Kulkarni',
         employee_oid: user?.id || user?.employee_id || 7558,
-        visit_type: 'General Visit',
+        visit_type: isCustomVisit ? 'Custom Visit' : 'General Visit',
       };
 
       const res = await submitGeneralVisit(payload);
 
-      if (params.plannedId || siteId) {
-        await markReportSubmittedForCheckIn(params.plannedId, siteId, (res as any)?.report_id || (res as any)?.oid, 'General Visit');
+      const markTargetId = params.plannedId || params.customVisitId || siteId;
+      if (markTargetId) {
+        await markReportSubmittedForCheckIn(markTargetId, siteId || params.customVisitId, (res as any)?.report_id || (res as any)?.oid, 'General Visit');
       }
 
       setAlertInfo({
@@ -291,10 +320,11 @@ export default function CreateGeneralVisitScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: THEME.background }}
+      style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, { paddingBottom: 140 }]}
@@ -309,17 +339,17 @@ export default function CreateGeneralVisitScreen() {
         </View>
 
         {/* Client Selector Dropdown */}
-        <Text style={styles.fieldLabel}>CLIENT {Boolean(params.siteId || params.plannedId) ? '(LOCKED)' : ''}</Text>
+        <Text style={styles.fieldLabel}>CLIENT {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (isCustomVisit ? '(CUSTOM VISIT)' : '(LOCKED)') : ''}</Text>
         <TouchableOpacity
-          activeOpacity={Boolean(params.siteId || params.plannedId) ? 1 : 0.8}
-          disabled={Boolean(params.siteId || params.plannedId)}
+          activeOpacity={Boolean(params.siteId || params.plannedId || isCustomVisit) ? 1 : 0.8}
+          disabled={Boolean(params.siteId || params.plannedId || isCustomVisit)}
           onPress={() => setClientModalVisible(true)}
-          style={[styles.pickerButton, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonLocked : null]}
+          style={[styles.pickerButton, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonLocked : null]}
         >
-          <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonTextLocked : null]}>
+          <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonTextLocked : null]}>
             {clientName || clients.find((c) => String(c.id) === String(clientId))?.name || 'Select Client...'}
           </Text>
-          {Boolean(params.siteId || params.plannedId) ? (
+          {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (
             <Lock color="#64748B" size={16} />
           ) : (
             <ChevronDown color={THEME.textVariant} size={20} />
@@ -327,17 +357,17 @@ export default function CreateGeneralVisitScreen() {
         </TouchableOpacity>
 
         {/* Site Selector Dropdown */}
-        <Text style={styles.fieldLabel}>SITE {Boolean(params.siteId || params.plannedId) ? '(LOCKED)' : ''}</Text>
+        <Text style={styles.fieldLabel}>SITE {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (isCustomVisit ? '(CUSTOM VISIT)' : '(LOCKED)') : ''}</Text>
         <TouchableOpacity
-          activeOpacity={Boolean(params.siteId || params.plannedId) ? 1 : 0.8}
-          disabled={Boolean(params.siteId || params.plannedId)}
+          activeOpacity={Boolean(params.siteId || params.plannedId || isCustomVisit) ? 1 : 0.8}
+          disabled={Boolean(params.siteId || params.plannedId || isCustomVisit)}
           onPress={() => setSiteModalVisible(true)}
-          style={[styles.pickerButton, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonLocked : null]}
+          style={[styles.pickerButton, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonLocked : null]}
         >
-          <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId) ? styles.pickerButtonTextLocked : null]}>
+          <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonTextLocked : null]}>
             {siteName || sites.find((s) => String(s.id) === String(siteId))?.name || 'Select Site...'}
           </Text>
-          {Boolean(params.siteId || params.plannedId) ? (
+          {Boolean(params.siteId || params.plannedId || isCustomVisit) ? (
             <Lock color="#64748B" size={16} />
           ) : (
             <ChevronDown color={THEME.textVariant} size={20} />
@@ -545,10 +575,10 @@ export default function CreateGeneralVisitScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.background,
+    backgroundColor: colors.background,
   },
   content: {
     padding: 16,
@@ -567,12 +597,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: THEME.text,
+    color: colors.text,
   },
   fieldLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: THEME.textVariant,
+    color: colors.textSecondary,
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -581,25 +611,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.surfaceSecondary,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: colors.border,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 14,
     marginBottom: 16,
   },
   pickerButtonText: {
-    color: THEME.text,
+    color: colors.text,
     fontSize: 14,
     flex: 1,
   },
   pickerButtonLocked: {
-    backgroundColor: 'rgba(15, 23, 42, 0.7)',
-    borderColor: '#334155',
+    backgroundColor: colors.surfaceSecondary,
+    borderColor: colors.border,
   },
   pickerButtonTextLocked: {
-    color: '#CBD5E1',
+    color: colors.textSecondary,
     fontWeight: '700',
   },
   submitBtn: {
@@ -608,11 +638,11 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: colors.modalOverlay,
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -628,17 +658,17 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   modalItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: colors.border,
   },
   modalItemText: {
-    color: '#FFFFFF',
+    color: colors.text,
     fontSize: 15,
   },
 });

@@ -19,10 +19,14 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { CustomAlertModal } from '../../components/ui/CustomAlertModal';
 import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
+import { StatusBar } from 'react-native';
 
 export default function ProfileScreen() {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const { user, logout, profileImage } = useAuth();
   const { t } = useLanguage();
   const router = useRouter();
@@ -72,6 +76,7 @@ export default function ProfileScreen() {
   return (
     <SwipeableBackWrapper>
       <SafeAreaView style={styles.container}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
         <ScrollView contentContainerStyle={styles.content}>
           {/* 1. EXECUTIVE PROFILE HEADER CARD */}
           <View style={styles.executiveHeaderCard}>
@@ -83,7 +88,7 @@ export default function ProfileScreen() {
               {profileImage ? (
                 <Image source={{ uri: profileImage }} style={styles.avatarImage} />
               ) : (
-                <User color="#FFFFFF" size={38} />
+                <User color={colors.text} size={38} />
               )}
             </View>
 
@@ -170,10 +175,10 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
+    backgroundColor: colors.background,
   },
   content: {
     padding: 16,
@@ -182,13 +187,13 @@ const styles = StyleSheet.create({
 
   /* EXECUTIVE PROFILE HEADER CARD */
   executiveHeaderCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     marginBottom: 24,
     position: 'relative',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   backBtn: {
     alignSelf: 'flex-start',
@@ -202,7 +207,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -223,13 +228,13 @@ const styles = StyleSheet.create({
   execName: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 4,
   },
   execRole: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: colors.textSecondary,
     marginTop: 2,
     letterSpacing: 0.5,
   },
@@ -242,9 +247,9 @@ const styles = StyleSheet.create({
   empBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    backgroundColor: colors.surfaceSecondary,
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
+    borderColor: colors.border,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -252,7 +257,7 @@ const styles = StyleSheet.create({
   empBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   activeBadge: {
     flexDirection: 'row',
@@ -274,18 +279,18 @@ const styles = StyleSheet.create({
   sectionHeaderTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginBottom: 16,
   },
 
   /* DETAILS CARDS */
   detailsCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   cardRowHeader: {
     flexDirection: 'row',
@@ -295,17 +300,17 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#94A3B8',
+    color: colors.textSecondary,
     letterSpacing: 0.8,
   },
   mainValText: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     marginTop: 4,
   },
   subDetailPill: {
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -317,13 +322,13 @@ const styles = StyleSheet.create({
   pillLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#64748B',
+    color: colors.textMuted,
     letterSpacing: 0.5,
   },
   pillValue: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
 
   /* SIGN OUT BUTTON */
@@ -345,7 +350,7 @@ const styles = StyleSheet.create({
   },
   copyrightText: {
     textAlign: 'center',
-    color: '#64748B',
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,

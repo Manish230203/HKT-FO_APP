@@ -5,23 +5,36 @@ const tintColorDark = '#3B82F6';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#F4F7FA',
+    text: '#0F172A',
+    textSecondary: '#475569',
+    textMuted: '#64748B',
+    background: '#F8FAFC',
     tint: tintColorLight,
     secondary: '#10B981',
     accent: '#F59E0B',
-    icon: '#687076',
+    icon: '#475569',
     tabIconDefault: '#94A3B8',
     tabIconSelected: tintColorLight,
     card: '#FFFFFF',
-    border: 'rgba(0,0,0,0.08)',
+    border: '#E2E8F0',
     surface: '#FFFFFF',
-    textVariant: '#64748b',
-    primary: '#1A237E',
+    surfaceSecondary: '#F1F5F9',
+    inputBg: '#F8FAFC',
+    inputBorder: '#CBD5E1',
+    placeholder: '#94A3B8',
+    modalBg: '#FFFFFF',
+    modalOverlay: 'rgba(0, 0, 0, 0.5)',
+    gridIconBg: '#EFF6FF',
+    gridIconBorder: '#DBEAFE',
+    headerBg: '#FFFFFF',
+    textVariant: '#64748B',
+    primary: '#2563EB',
     danger: '#EF4444',
   },
   dark: {
     text: '#FFFFFF',
+    textSecondary: '#94A3B8',
+    textMuted: '#64748B',
     background: '#0A1128', // Deep Navy Blue
     tint: tintColorDark,
     secondary: '#10B981',
@@ -32,6 +45,15 @@ export const Colors = {
     card: '#131C33', // Dark Bluish Card
     border: 'rgba(255,255,255,0.08)',
     surface: '#131C33',
+    surfaceSecondary: '#0A1128',
+    inputBg: '#0A1128',
+    inputBorder: 'rgba(255,255,255,0.12)',
+    placeholder: '#64748B',
+    modalBg: '#131C33',
+    modalOverlay: 'rgba(0, 0, 0, 0.85)',
+    gridIconBg: '#000000',
+    gridIconBorder: 'rgba(255,255,255,0.1)',
+    headerBg: '#0A1128',
     textVariant: '#94A3B8',
     primary: '#3B82F6',
     danger: '#EF4444',
@@ -73,6 +95,16 @@ export const THEME = {
     xl: 22,
     xxl: 28,
   },
+};
+
+export const getTheme = (mode: 'dark' | 'light') => {
+  const palette = Colors[mode] || Colors.dark;
+  return {
+    ...palette,
+    gradients: THEME.gradients,
+    shadows: THEME.shadows,
+    typography: THEME.typography,
+  };
 };
 
 export const Fonts = Platform.select({

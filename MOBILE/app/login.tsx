@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { getConsentSetting } from '../services/db';
 import { THEME } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -15,6 +16,7 @@ import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 export default function LoginScreen() {
   const { login } = useAuth();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
 
   const [mobileNumber, setMobileNumber] = useState('');
@@ -57,6 +59,8 @@ export default function LoginScreen() {
     }
   };
 
+  const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
+
   return (
     <SwipeableBackWrapper fallbackRoute="/lang/lang-selection">
       <SafeAreaView style={styles.container}>
@@ -67,7 +71,7 @@ export default function LoginScreen() {
             onPress={() => router.replace('/lang/lang-selection')}
             activeOpacity={0.7}
           >
-            <ArrowLeft color="#FFFFFF" size={20} />
+            <ArrowLeft color={colors.text} size={20} />
           </TouchableOpacity>
         </View>
 
@@ -81,7 +85,7 @@ export default function LoginScreen() {
                 <Image source={require('../assets/images/app_logo.png')} style={styles.logoImage} resizeMode="contain" />
               </View>
               <Text style={styles.appTitle}>
-                <Text style={{ color: '#60A5FA' }}>VIGILO-OFFICER</Text>
+                <Text style={{ color: '#3B82F6' }}>VIGILO-OFFICER</Text>
               </Text>
               <Text style={styles.subtitle}>{t('login_subtitle')}</Text>
             </View>
@@ -105,7 +109,7 @@ export default function LoginScreen() {
                 }}
                 keyboardType="phone-pad"
                 maxLength={10}
-                leftIcon={<Smartphone color="#64748B" size={20} />}
+                leftIcon={<Smartphone color={colors.textSecondary} size={20} />}
               />
 
               <Button
@@ -124,10 +128,10 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.background,
+    backgroundColor: colors.background,
   },
   topNav: {
     paddingHorizontal: 16,
@@ -140,11 +144,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: colors.border,
   },
   scrollContent: {
     flexGrow: 1,
@@ -171,12 +175,12 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: THEME.typography.xxl,
     fontWeight: '800',
-    color: THEME.text,
+    color: colors.text,
     letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: THEME.typography.sm,
-    color: THEME.textVariant,
+    color: colors.textSecondary,
     marginTop: 4,
   },
   loginCard: {

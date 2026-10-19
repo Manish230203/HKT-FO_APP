@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { THEME } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { Button } from './Button';
 
 interface CustomAlertModalProps {
@@ -22,12 +23,14 @@ export const CustomAlertModal: React.FC<CustomAlertModalProps> = ({
   onConfirm,
   confirmText = 'OK',
 }) => {
+  const { colors } = useTheme();
+
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <Text style={[styles.title, type === 'error' && { color: THEME.danger }]}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+      <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>
+        <View style={[styles.container, { backgroundColor: colors.modalBg, borderColor: colors.border }]}>
+          <Text style={[styles.title, { color: colors.text }, type === 'error' && { color: THEME.danger }]}>{title}</Text>
+          <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>
           
           <View style={styles.buttonRow}>
             {onConfirm ? (

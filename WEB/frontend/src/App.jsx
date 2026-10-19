@@ -23,6 +23,7 @@ import Dashboard from "./pages/Dashboard";
 import GeneralVisit from "./pages/general-visit/GeneralVisit";
 import GeneralVisitPreview from "./pages/general-visit/GeneralVisitPreview";
 import MySites from "./pages/MySites";
+import SiteChecklists from "./pages/SiteChecklists";
 
 import GuardAttendance from "./pages/attendance/GuardAttendance";
 import RegularizationHistory from "./pages/attendance/RegularizationHistory";
@@ -217,6 +218,10 @@ const App = () => {
                       <Route
                         path="/my-sites"
                         element={<MySites />}
+                      />
+                      <Route
+                        path="/site-checklists"
+                        element={<SiteChecklists />}
                       />
                       <Route
                         path="/select-visit-type"

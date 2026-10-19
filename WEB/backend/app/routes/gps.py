@@ -44,7 +44,8 @@ class PlannedVisitCreateRequest(BaseModel):
 
 class SiteCheckInRequest(BaseModel):
     employee_id: int
-    site_id: int
+    site_id: Optional[int] = None
+    custom_visit_id: Optional[int] = None
     site_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -52,20 +53,23 @@ class SiteCheckInRequest(BaseModel):
 class SiteCheckOutRequest(BaseModel):
     employee_id: int
     site_id: Optional[int] = None
+    custom_visit_id: Optional[int] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
 
 @router.get("/site-visit/active")
+@router.get("/gps/active-site-visit-session")
 def get_active_site_visit_session(
     employee_id: int = Query(...),
     db: Session = Depends(get_patrol_db)
 ):
     session = get_active_site_visit_session_service(db, employee_id)
-    return {"success": True, "active_session": session}
+    return {"success": True, "active_session": session, "has_active_session": session is not None}
 
 
 @router.post("/site-visit/check-in")
+@router.post("/gps/manual-site-check-in")
 def manual_site_check_in(
     payload: SiteCheckInRequest,
     db: Session = Depends(get_patrol_db)
@@ -74,6 +78,7 @@ def manual_site_check_in(
         db=db,
         employee_id=payload.employee_id,
         site_id=payload.site_id,
+        custom_visit_id=payload.custom_visit_id,
         site_name=payload.site_name,
         latitude=payload.latitude,
         longitude=payload.longitude
@@ -84,6 +89,7 @@ def manual_site_check_in(
 
 
 @router.post("/site-visit/check-out")
+@router.post("/gps/manual-site-check-out")
 def manual_site_check_out(
     payload: SiteCheckOutRequest,
     db: Session = Depends(get_patrol_db)
@@ -92,6 +98,7 @@ def manual_site_check_out(
         db=db,
         employee_id=payload.employee_id,
         site_id=payload.site_id,
+        custom_visit_id=payload.custom_visit_id,
         latitude=payload.latitude,
         longitude=payload.longitude
     )

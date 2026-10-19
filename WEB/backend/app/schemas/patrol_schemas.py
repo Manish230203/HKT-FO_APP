@@ -54,3 +54,35 @@ class DashboardResponse(BaseModel):
     active_shift_id: Optional[int]
     recent_activities: List[Any]
     pending_checklists: int
+
+class CheckpointVerifyRequest(BaseModel):
+    qr_code: str
+    checkpoint_id: int
+    tour_name: str
+    latitude: float
+    longitude: float
+    site_id: Optional[int] = None
+
+class QuestionAnswerItem(BaseModel):
+    link_id: Optional[int] = None
+    question_id: int
+    answer_value: str
+    comment: Optional[str] = None
+    photo_base64: Optional[str] = None
+    photo_url: Optional[str] = None
+
+class CheckpointChecklistSubmitRequest(BaseModel):
+    tour_name: str
+    latitude: float
+    longitude: float
+    site_id: Optional[int] = None
+    answers: List[QuestionAnswerItem] = []
+
+class PassBatonRequest(BaseModel):
+    tour_name: str
+    forwarded_to: int
+    reason: str
+    latitude: float
+    longitude: float
+    site_id: Optional[int] = None
+

@@ -7,11 +7,13 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { saveConsentSetting } from '../services/db';
 import { THEME } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 import { Button } from '../components/ui/Button';
 
 export default function ConsentScreen() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,6 +37,8 @@ export default function ConsentScreen() {
       setSubmitting(false);
     }
   };
+
+  const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -123,10 +127,10 @@ export default function ConsentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1128',
+    backgroundColor: colors.background,
   },
   scrollContent: {
     padding: 20,
@@ -151,17 +155,17 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
     textAlign: 'center',
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 4,
   },
   consentNoticeCard: {
-    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+    backgroundColor: isDark ? 'rgba(59, 130, 246, 0.08)' : 'rgba(59, 130, 246, 0.06)',
     borderRadius: 20,
     padding: 18,
     marginBottom: 20,
@@ -185,21 +189,21 @@ const styles = StyleSheet.create({
   consentNoticeTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#60A5FA',
+    color: '#3B82F6',
   },
   consentNoticeText: {
     fontSize: 13,
-    color: '#E2E8F0',
+    color: isDark ? '#E2E8F0' : '#334155',
     lineHeight: 20,
     fontWeight: '500',
   },
   policyCard: {
-    backgroundColor: '#131C33',
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 18,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: colors.border,
   },
   blueIconCircle: {
     width: 32,
@@ -222,11 +226,11 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   policySubtitle: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     marginBottom: 14,
     fontWeight: '600',
   },
@@ -234,7 +238,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pointItem: {
-    backgroundColor: '#1E293B',
+    backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
     borderRadius: 12,
     padding: 14,
     borderLeftWidth: 3,
@@ -242,21 +246,21 @@ const styles = StyleSheet.create({
   },
   pointText: {
     fontSize: 13,
-    color: '#CBD5E1',
+    color: colors.text,
     lineHeight: 19,
     fontWeight: '400',
   },
   cookieFooterBox: {
     marginTop: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
     padding: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: colors.border,
   },
   cookieFooterText: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
   },
@@ -265,12 +269,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#0A1128',
+    backgroundColor: colors.background,
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 24,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    borderTopColor: colors.border,
   },
   acceptButton: {
     backgroundColor: '#3B82F6',

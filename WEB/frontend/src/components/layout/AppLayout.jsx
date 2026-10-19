@@ -20,6 +20,7 @@ import {
   Radio,
   History,
   CheckSquare,
+  ClipboardCheck,
 } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useTheme } from "@/hooks/useTheme";
@@ -297,6 +298,18 @@ export function AppLayout({ children }) {
             >
               <MapPin className="h-5 w-5 shrink-0" />
               {!isCollapsed && <span>My Sites</span>}
+            </Link>
+            <Link
+              to="/site-checklists"
+              title="Site Checklists"
+              className={`flex items-center ${isCollapsed ? "justify-center p-2.5" : "gap-3 px-4 py-2.5"
+                } rounded-xl text-base font-semibold transition-all ${location.pathname.startsWith("/site-checklists")
+                  ? "bg-sky-500 text-white shadow-sm"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100"
+                }`}
+            >
+              <ClipboardCheck className="h-5 w-5 shrink-0" />
+              {!isCollapsed && <span>Site Checklists</span>}
             </Link>
 
             {renderGroup(gpsGroup)}

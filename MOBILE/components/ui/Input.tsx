@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, TextInput, StyleSheet, TextInputProps, ViewStyle } from 'react-native';
 import { THEME } from '../../constants/theme';
 
+import { useTheme } from '../../context/ThemeContext';
+
 export interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
@@ -17,14 +19,19 @@ export const Input: React.FC<InputProps> = ({
   style,
   ...props
 }) => {
+  const { colors, isDark } = useTheme();
   const isMultiline = !!props.multiline;
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>}
       <View
         style={[
           styles.inputWrapper,
+          {
+            backgroundColor: colors.inputBg,
+            borderColor: colors.inputBorder,
+          },
           isMultiline ? styles.inputWrapperMultiline : null,
           error ? styles.inputError : null,
         ]}
@@ -33,11 +40,12 @@ export const Input: React.FC<InputProps> = ({
         <TextInput
           style={[
             styles.input,
+            { color: colors.text },
             isMultiline ? styles.inputMultiline : null,
             style,
           ]}
           textAlignVertical={isMultiline ? 'top' : 'center'}
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.placeholder}
           {...props}
         />
       </View>

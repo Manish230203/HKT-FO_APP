@@ -1567,7 +1567,14 @@ def get_profile_logic(empOid: int):
         
         if profile:
             profile["date_of_joining"] = profile["date_of_joining"].isoformat() if profile["date_of_joining"] else None
-            profile["profile_photo"] = None
+            import os
+            emp_code = profile.get("emp_code")
+            if os.path.exists(os.path.join("uploads", f"{empOid}.jpg")):
+                profile["profile_photo"] = f"/uploads/{empOid}.jpg"
+            elif emp_code and os.path.exists(os.path.join("uploads", f"{emp_code}.jpg")):
+                profile["profile_photo"] = f"/uploads/{emp_code}.jpg"
+            else:
+                profile["profile_photo"] = None
 
         cursor.close()
         conn.close()
