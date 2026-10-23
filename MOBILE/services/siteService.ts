@@ -43,12 +43,80 @@ export interface PlannedVisit {
   completedVisits?: number;
   pendingVisits?: number;
   status?: string;
+  weekStartDate?: string;
+  weekEndDate?: string;
+  visitDate?: string;
+  planningMonth?: number | string;
+  planningYear?: number | string;
+  isExpired?: boolean;
   radius?: number;
   customClientName?: string;
   customSiteName?: string;
   isCustomVisit?: boolean;
   is_custom?: boolean;
 }
+
+/**
+ * Checks whether the date or date range of an assigned planned visit has expired (i.e. is in the past).
+ * If the visit's date range is gone, returns true so the visit can be removed from pending visits.
+ */
+export const isVisitDateRangeExpired = (pv: PlannedVisit): boolean => {
+  if (pv.isExpired !== undefined) return Boolean(pv.isExpired);
+
+  const now = Date.now();
+
+  // 1. Direct weekEndDate check (e.g. '2026-10-18')
+  if (pv.weekEndDate) {
+    const endDt = new Date(pv.weekEndDate);
+    if (!isNaN(endDt.getTime())) {
+      endDt.setHours(23, 59, 59, 999);
+      return endDt.getTime() < now;
+    }
+  }
+
+  // 2. Direct visitDate check (e.g. '2026-10-19')
+  if (pv.visitDate) {
+    const visitDt = new Date(pv.visitDate);
+    if (!isNaN(visitDt.getTime())) {
+      visitDt.setHours(23, 59, 59, 999);
+      return visitDt.getTime() < now;
+    }
+  }
+
+  // 3. Planning month & year check
+  if (pv.planningMonth && pv.planningYear) {
+    const m = parseInt(String(pv.planningMonth), 10);
+    const y = parseInt(String(pv.planningYear), 10);
+    if (!isNaN(m) && !isNaN(y)) {
+      // Day 0 of next month is the last day of month m
+      const lastDayDt = new Date(y, m, 0, 23, 59, 59, 999);
+      return lastDayDt.getTime() < now;
+    }
+  }
+
+  // 4. plannedPeriod or date parsing (e.g. '24 Sep 2026 - 30 Sep 2026' or '19 Oct 2026' or '2026-10-19')
+  const periodStr = pv.plannedPeriod || pv.date || '';
+  if (periodStr) {
+    let endStr = '';
+    if (periodStr.includes(' - ')) {
+      const rangeParts = periodStr.split(' - ');
+      endStr = rangeParts[rangeParts.length - 1].trim();
+    } else if (periodStr.includes(' to ')) {
+      const rangeParts = periodStr.split(' to ');
+      endStr = rangeParts[rangeParts.length - 1].trim();
+    } else {
+      endStr = periodStr.trim();
+    }
+
+    const dt = new Date(endStr);
+    if (!isNaN(dt.getTime())) {
+      dt.setHours(23, 59, 59, 999);
+      return dt.getTime() < now;
+    }
+  }
+
+  return false;
+};
 
 export interface ActiveSiteSession {
   id: number;

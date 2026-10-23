@@ -67,7 +67,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
     try {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⚠️ WARNING: Duty Location (GPS) Turned OFF!',
+          title: '⚠️ WARNING: Location (GPS) Turned OFF!',
           body: 'Location is mandatory for your active shift. Tap here to turn on GPS immediately.',
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,

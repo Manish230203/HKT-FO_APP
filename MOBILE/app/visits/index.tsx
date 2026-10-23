@@ -35,6 +35,7 @@ import {
   checkInSiteVisit,
   checkOutSiteVisit,
   ActiveSiteSession,
+  isVisitDateRangeExpired,
 } from '../../services/siteService';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits, sendReportEmail } from '../../services/visitService';
 import { getActiveCheckIns, saveActiveCheckIns, clearActiveCheckIn, ActiveCheckInInfo } from '../../services/db';
@@ -89,6 +90,8 @@ export default function VisitsScreen() {
     (profileData && profileData.profile_photo) ||
     (user && (user as any).profile_photo)
   );
+
+  const isOfficerActive = Boolean(todayRecord && todayRecord.check_in && !todayRecord.check_out);
 
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [loading, setLoading] = useState(false);
@@ -262,14 +265,14 @@ export default function VisitsScreen() {
       return;
     }
 
-    // 1. Enforce active duty requirement
-    if (!todayRecord || !todayRecord.check_in || todayRecord.check_out) {
+    // 1. Enforce active requirement
+    if (!isOfficerActive) {
       Alert.alert(
-        'Active Duty Required',
-        'You are currently INACTIVE. You must activate your duty status before starting or checking into a site visit.',
+        'First Activate Yourself',
+        'You are currently INACTIVE. You must first activate yourself before checking in to this site.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Activate Duty', onPress: () => router.push('/mark-attendance') }
+          { text: 'Activate Now', onPress: () => router.push('/mark-attendance') }
         ]
       );
       return;
@@ -811,14 +814,24 @@ export default function VisitsScreen() {
   };
 
   const pendingVisits = plannedVisits.filter((pv) => {
+    // 1. If completed, hide from pending
     if (pv.status === 'Completed') return false;
+
+    // 2. If all required frequencies done, hide from pending
     const done = pv.completedVisits || 0;
     const freq = pv.visitFrequency
       ? parseInt(String(pv.visitFrequency), 10)
       : pv.frequency
       ? parseInt(String(pv.frequency), 10)
       : 1;
-    return done < freq || freq === 0;
+    if (done >= freq && freq > 0) return false;
+
+    // 3. If date range is gone, visit disappears from pending visits
+    if (isVisitDateRangeExpired(pv)) {
+      return false;
+    }
+
+    return true;
   });
 
   const getStatusInfo = (pv: PlannedVisit) => {
@@ -907,6 +920,27 @@ export default function VisitsScreen() {
         {/* PENDING TAB */}
         {activeTab === 'pending' && (
           <>
+            {!isOfficerActive && (
+              <TouchableOpacity
+                activeOpacity={0.88}
+                style={styles.inactiveWarningCard}
+                onPress={() => router.push('/mark-attendance')}
+              >
+                <View style={styles.inactiveWarningIconBox}>
+                  <ShieldAlert color="#EF4444" size={24} />
+                </View>
+                <View style={styles.inactiveWarningTextBox}>
+                  <Text style={styles.inactiveWarningTitle}>First Activate Yourself</Text>
+                  <Text style={styles.inactiveWarningDesc}>
+                    You are currently inactive. Site check-in is disabled until you activate your session.
+                  </Text>
+                </View>
+                <View style={styles.inactiveWarningActionBtn}>
+                  <Text style={styles.inactiveWarningActionText}>Activate</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             {pendingVisits.length === 0 ? (
               <View style={styles.emptyBox}>
                 <CheckCircle2 color="#10B981" size={48} style={{ marginBottom: 12 }} />
@@ -1096,6 +1130,33 @@ export default function VisitsScreen() {
                             <Text style={{ fontSize: 10, fontWeight: '600', color: '#60A5FA' }}>Refresh Location</Text>
                           </TouchableOpacity>
                         </View>
+                      ) : !isOfficerActive ? (
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          style={[
+                            styles.startBtn,
+                            {
+                              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                              borderWidth: 1,
+                              borderColor: 'rgba(239, 68, 68, 0.45)',
+                            },
+                          ]}
+                          onPress={() => {
+                            Alert.alert(
+                              'First Activate Yourself',
+                              'You are currently INACTIVE. You must first activate yourself before checking in to this site.',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                { text: 'Activate Now', onPress: () => router.push('/mark-attendance') },
+                              ]
+                            );
+                          }}
+                        >
+                          <AlertCircle color="#EF4444" size={13} style={{ marginRight: 4 }} />
+                          <Text style={[styles.startBtnText, { color: '#EF4444', fontWeight: '800' }]}>
+                            Activate First
+                          </Text>
+                        </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
                           activeOpacity={0.85}
@@ -1336,7 +1397,7 @@ export default function VisitsScreen() {
                     </View>
                   )}
 
-                  {/* 3. Guards Present on Duty */}
+                  {/* 3. Guards Present on Site */}
                   {selectedReport?.visitType !== 'General Audit' && (() => {
                     let guardsList: any[] = [];
                     const rawG = selectedReport?.rawReport?.guards;
@@ -1347,7 +1408,7 @@ export default function VisitsScreen() {
                     return (
                       <View style={styles.detailSectionCard}>
                         <View style={styles.navySectionTitleBox}>
-                          <Text style={styles.navySectionTitle}>GUARDS PRESENT ON DUTY ({guardsList.length})</Text>
+                          <Text style={styles.navySectionTitle}>GUARDS PRESENT ON SITE ({guardsList.length})</Text>
                         </View>
                         {guardsList.length > 0 ? (
                           <View style={styles.tableWrap}>
@@ -2240,5 +2301,47 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary,
+  },
+  // Inactive Warning Card Styles
+  inactiveWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+  },
+  inactiveWarningIconBox: {
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inactiveWarningTextBox: {
+    flex: 1,
+  },
+  inactiveWarningTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#EF4444',
+    marginBottom: 2,
+  },
+  inactiveWarningDesc: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 15,
+  },
+  inactiveWarningActionBtn: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  inactiveWarningActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

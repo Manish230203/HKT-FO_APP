@@ -59,7 +59,7 @@ export const generateAndShareVisitPdf = async (
     let guardsHtml = '';
     if (guardsList.length > 0) {
       guardsHtml = `
-        <div class="section-title">GUARDS PRESENT ON DUTY (${guardsList.length})</div>
+        <div class="section-title">GUARDS PRESENT ON SITE (${guardsList.length})</div>
         <table class="report-table">
           <thead>
             <tr>
@@ -368,7 +368,7 @@ export const generateAndShareVisitPdf = async (
               <span class="field-value">${officerName}</span>
             </div>
             <div class="grid-item">
-              <span class="field-label">Duty Shift</span>
+              <span class="field-label">Shift</span>
               <span class="field-value">${shift}</span>
             </div>
             <div class="grid-item">

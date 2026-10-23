@@ -4423,3 +4423,764 @@
 {"_e":"metro:client_log","_t":1792408256559,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
 {"_e":"metro:client_log","_t":1792408259900,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
 {"_e":"metro:client_log","_t":1792408259901,"level":"log","data":["Heartbeat trigger: Stationary for > 3 minutes, sending location."]}
+{"_e":"root:init","_t":1792645558600,"format":"v0-jsonl","version":"57.0.31"}
+{"_e":"env:mode","_t":1792645558678,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1792645558751,"mode":"development","files":["../..\\..\\.env"],"env":{"EXPO_PUBLIC_API_URL":"https://tarot-carrot-celery.ngrok-free.dev/api","EXPO_PUBLIC_USE_RN_FETCH":"1"}}
+{"_e":"devserver:start","_t":1792645585185,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1792645607356,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1792645616689,"plugins":[]}
+{"_e":"metro:instantiate","_t":1792645646935,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1792645759409,"id":"2","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792645759410,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792645759421,"id":"2","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792645759522,"id":"2","progress":0.140625,"total":24,"current":9}
+{"_e":"metro:bundling:progress","_t":1792645759629,"id":"2","progress":0.140625,"total":60,"current":19}
+{"_e":"metro:bundling:progress","_t":1792645759730,"id":"2","progress":0.140625,"total":167,"current":22}
+{"_e":"metro:bundling:progress","_t":1792645759831,"id":"2","progress":0.140625,"total":243,"current":49}
+{"_e":"metro:bundling:progress","_t":1792645759933,"id":"2","progress":0.140625,"total":305,"current":74}
+{"_e":"metro:bundling:progress","_t":1792645760034,"id":"2","progress":0.140625,"total":348,"current":103}
+{"_e":"metro:bundling:progress","_t":1792645760133,"id":"2","progress":0.14401051939513476,"total":390,"current":148}
+{"_e":"metro:bundling:progress","_t":1792645760236,"id":"2","progress":0.1654037224422518,"total":418,"current":170}
+{"_e":"metro:bundling:progress","_t":1792645760336,"id":"2","progress":0.18367346938775508,"total":455,"current":195}
+{"_e":"metro:bundling:progress","_t":1792645760446,"id":"2","progress":0.22188100952579717,"total":518,"current":244}
+{"_e":"metro:bundling:progress","_t":1792645760546,"id":"2","progress":0.2628075154486434,"total":593,"current":304}
+{"_e":"metro:bundling:progress","_t":1792645760646,"id":"2","progress":0.2950769699740893,"total":648,"current":352}
+{"_e":"metro:bundling:progress","_t":1792645760747,"id":"2","progress":0.31730705025606576,"total":703,"current":396}
+{"_e":"metro:bundling:progress","_t":1792645760849,"id":"2","progress":0.32130537070201753,"total":778,"current":441}
+{"_e":"metro:bundling:progress","_t":1792645760949,"id":"2","progress":0.3351108854992715,"total":881,"current":510}
+{"_e":"metro:bundling:progress","_t":1792645761050,"id":"2","progress":0.35690656643195395,"total":929,"current":555}
+{"_e":"metro:bundling:progress","_t":1792645761150,"id":"2","progress":0.3662121373153363,"total":970,"current":587}
+{"_e":"metro:bundling:progress","_t":1792645761250,"id":"2","progress":0.3859422251316259,"total":998,"current":620}
+{"_e":"metro:bundling:progress","_t":1792645761350,"id":"2","progress":0.43526060026161284,"total":1011,"current":667}
+{"_e":"metro:bundling:progress","_t":1792645761452,"id":"2","progress":0.47375540105328395,"total":1017,"current":700}
+{"_e":"metro:bundling:progress","_t":1792645761552,"id":"2","progress":0.48011835582490664,"total":1029,"current":713}
+{"_e":"metro:bundling:progress","_t":1792645761652,"id":"2","progress":0.4952924908702365,"total":1114,"current":784}
+{"_e":"metro:bundling:progress","_t":1792645761754,"id":"2","progress":0.53407217104984,"total":1159,"current":847}
+{"_e":"metro:bundling:progress","_t":1792645761853,"id":"2","progress":0.612476370510397,"total":1173,"current":918}
+{"_e":"metro:bundling:progress","_t":1792645762090,"id":"2","progress":0.6456547532184075,"total":1191,"current":957}
+{"_e":"metro:bundling:progress","_t":1792645762273,"id":"2","progress":0.6456547532184075,"total":1192,"current":957}
+{"_e":"metro:bundling:progress","_t":1792645762495,"id":"2","progress":0.6456547532184075,"total":2961,"current":958}
+{"_e":"metro:bundling:progress","_t":1792645762596,"id":"2","progress":0.6456547532184075,"total":2986,"current":1015}
+{"_e":"metro:bundling:progress","_t":1792645763078,"id":"2","progress":0.6456547532184075,"total":2986,"current":1016}
+{"_e":"metro:bundling:progress","_t":1792645763179,"id":"2","progress":0.6456547532184075,"total":3009,"current":1054}
+{"_e":"metro:bundling:progress","_t":1792645763279,"id":"2","progress":0.6456547532184075,"total":3072,"current":1160}
+{"_e":"metro:bundling:progress","_t":1792645763379,"id":"2","progress":0.6456547532184075,"total":3091,"current":1490}
+{"_e":"metro:bundling:progress","_t":1792645763479,"id":"2","progress":0.6456547532184075,"total":3091,"current":2090}
+{"_e":"metro:bundling:progress","_t":1792645763579,"id":"2","progress":0.6456547532184075,"total":3091,"current":2300}
+{"_e":"metro:bundling:progress","_t":1792645763681,"id":"2","progress":0.6484131040315855,"total":3091,"current":2489}
+{"_e":"metro:bundling:progress","_t":1792645763780,"id":"2","progress":0.674725916057943,"total":3091,"current":2539}
+{"_e":"metro:bundling:progress","_t":1792645763880,"id":"2","progress":0.7113511733640657,"total":3091,"current":2607}
+{"_e":"metro:bundling:progress","_t":1792645763981,"id":"2","progress":0.7647052666757447,"total":3091,"current":2703}
+{"_e":"metro:bundling:progress","_t":1792645764080,"id":"2","progress":0.8123893362567001,"total":3091,"current":2786}
+{"_e":"metro:bundling:progress","_t":1792645764180,"id":"2","progress":0.8495459783943973,"total":3091,"current":2849}
+{"_e":"metro:bundling:progress","_t":1792645764282,"id":"2","progress":0.9173478744437541,"total":3103,"current":2972}
+{"_e":"metro:bundling:progress","_t":1792645764411,"id":"2","progress":0.9206874088114162,"total":3113,"current":2987}
+{"_e":"metro:bundling:progress","_t":1792645764512,"id":"2","progress":0.9214289611658674,"total":3143,"current":3017}
+{"_e":"metro:bundling:progress","_t":1792645764613,"id":"2","progress":0.9549213252950677,"total":3158,"current":3086}
+{"_e":"metro:bundling:progress","_t":1792645764717,"id":"2","progress":0.9677440676845793,"total":3198,"current":3146}
+{"_e":"metro:bundling:progress","_t":1792645764819,"id":"2","progress":0.9677440676845793,"total":3244,"current":3173}
+{"_e":"metro:bundling:progress","_t":1792645764922,"id":"2","progress":0.9677440676845793,"total":3292,"current":3203}
+{"_e":"metro:bundling:progress","_t":1792645765021,"id":"2","progress":0.9677440676845793,"total":3356,"current":3235}
+{"_e":"metro:bundling:progress","_t":1792645765123,"id":"2","progress":0.9677440676845793,"total":3438,"current":3249}
+{"_e":"metro:bundling:progress","_t":1792645765223,"id":"2","progress":0.9677440676845793,"total":3452,"current":3287}
+{"_e":"metro:bundling:progress","_t":1792645765330,"id":"2","progress":0.9677440676845793,"total":3481,"current":3309}
+{"_e":"metro:bundling:progress","_t":1792645765430,"id":"2","progress":0.9677440676845793,"total":3543,"current":3438}
+{"_e":"metro:bundling:progress","_t":1792645765533,"id":"2","progress":0.9677440676845793,"total":3615,"current":3543}
+{"_e":"metro:bundling:progress","_t":1792645765633,"id":"2","progress":0.9752164806670663,"total":3689,"current":3643}
+{"_e":"metro:bundling:progress","_t":1792645765733,"id":"2","progress":0.9861960774073275,"total":3754,"current":3728}
+{"_e":"metro:bundling:progress","_t":1792645765931,"id":"2","progress":0.999,"total":3762,"current":3762}
+{"_e":"metro:bundling:done","_t":1792645766933,"id":"2","total":3762,"ms":7523.0119}
+{"_e":"metro:client_log","_t":1792645826462,"level":"log","data":["Using API Base URL:","https://tarot-carrot-celery.ngrok-free.dev/api"]}
+{"_e":"metro:client_log","_t":1792645826464,"level":"warn","data":["expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go with the release of SDK 53. Use a development build instead of Expo Go. Learn more at https://docs.expo.dev/develop/development-builds/introduction/."]}
+{"_e":"metro:client_log","_t":1792645826464,"level":"warn","data":["`expo-notifications` functionality is not fully supported in Expo Go:\nWe recommend you instead use a development build to avoid limitations. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792645826465,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645826605,"level":"log","data":["Officer #10208 is not punched in for duty; skipping tracking resume."]}
+{"_e":"metro:client_log","_t":1792645827046,"level":"warn","data":["Background location is limited in Expo Go:\nOn Android, it is not available at all.\nOn iOS, it works when running in the Simulator.\nYou can use this API, and all others, in a development build. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792645827047,"level":"log","data":["Stopped GPS tracking"]}
+{"_e":"metro:client_log","_t":1792645827048,"level":"log","data":["Officer #10208 is not punched in for duty; skipping tracking resume."]}
+{"_e":"metro:client_log","_t":1792645827048,"level":"log","data":["Stopped GPS tracking"]}
+{"_e":"metro:client_log","_t":1792645827048,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792645827048,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645829744,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792645829744,"level":"log","data":["Officer #10208 is not punched in for duty; skipping tracking resume."]}
+{"_e":"metro:client_log","_t":1792645829745,"level":"log","data":["Stopped GPS tracking"]}
+{"_e":"metro:client_log","_t":1792645829745,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645829745,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645829745,"level":"log","data":["Officer #10208 is not punched in for duty; skipping tracking resume."]}
+{"_e":"metro:client_log","_t":1792645829745,"level":"log","data":["Stopped GPS tracking"]}
+{"_e":"metro:client_log","_t":1792645830819,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645833298,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645835800,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645838320,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645840799,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645843300,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645845802,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645848319,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645850800,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645853308,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645855799,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645858319,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645860094,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645860819,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645863321,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645865930,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645868356,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645870838,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645873340,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645875841,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645878358,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645880858,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645883358,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645885844,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645888330,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645890809,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645893348,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645895861,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645898350,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645900858,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645903359,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645905689,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645905846,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792645905847,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645905847,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792645907634,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792645908194,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645908597,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792645908629,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645908654,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792645910679,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645913298,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645915741,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645918251,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645920692,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645922809,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645923199,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645925707,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645928259,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645930759,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645933292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645935719,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645938259,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645941165,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645941165,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645943292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645945758,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645948308,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645950784,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645953292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645955740,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645958292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645960762,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645963328,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645965770,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645968292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645971617,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645973259,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645975808,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645978292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645980788,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645983303,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645985759,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645988303,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645990861,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645993292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645995871,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792645998339,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646000796,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646003299,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646005812,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646008373,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646010831,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646013391,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646015798,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646018375,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646020866,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646023297,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646025985,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792646028339,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:bundling:started","_t":1792648404235,"id":"6","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792648404235,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648404259,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648404359,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648404460,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648404838,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648405732,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648405831,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648405931,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406035,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406135,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406235,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406335,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406438,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406539,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406638,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406738,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406838,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648406938,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648407038,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648407141,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648407241,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648407341,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648407448,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648407679,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648421773,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648421882,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648422036,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648422104,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648422230,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648422330,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648422430,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648422587,"id":"6","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1792648422755,"id":"6","message":"As of SDK 56, expo-router is no longer compatible with react-navigation. For more information, see https://docs.expo.dev/router/migrate/sdk-55-to-56/. You can disable this check by setting the environment variable EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1.","importStack":"\u001b[1mImport stack:\u001b[22m\n\n\u001b[90m \u001b[39mapp\\mark-attendance.tsx\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"@react-navigation/native\"\u001b[39m\n\n\u001b[90m \u001b[39mapp\u001b[2m (require.context)\u001b[22m\n","filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1792648837962,"id":"8","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792648837962,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648837972,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648838071,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648838367,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648839334,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648839434,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648839535,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648839642,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648839744,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648839846,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648839946,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840047,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840147,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840247,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840347,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840447,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840547,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840647,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840747,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840867,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648840974,"id":"8","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:failed","_t":1792648841091,"id":"8","message":"As of SDK 56, expo-router is no longer compatible with react-navigation. For more information, see https://docs.expo.dev/router/migrate/sdk-55-to-56/. You can disable this check by setting the environment variable EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1.","importStack":"\u001b[1mImport stack:\u001b[22m\n\n\u001b[90m \u001b[39mapp\\mark-attendance.tsx\n\u001b[90m |\u001b[39m \u001b[36mimport\u001b[39m \u001b[32m\"@react-navigation/native\"\u001b[39m\n\n\u001b[90m \u001b[39mapp\u001b[2m (require.context)\u001b[22m\n","filename":null,"targetModuleName":null,"originModulePath":null}
+{"_e":"metro:bundling:started","_t":1792648986010,"id":"9","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792648986011,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648986028,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648986128,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648986530,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648987614,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648987714,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648987814,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648987914,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988025,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988124,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988226,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988326,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988427,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988527,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988638,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988738,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988838,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648988938,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648989038,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648989165,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792648989295,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1792648989628,"id":"9","total":1,"ms":3617.4222}
+{"_e":"metro:client_log","_t":1792649034378,"level":"warn","data":["No native ExponentConstants module found, are you sure the expo-constants's module is linked properly?"]}
+{"_e":"metro:client_log","_t":1792649034535,"level":"error","data":["[runtime not ready]: Error: Cannot find native module 'ExpoLinking'","\n\n\u001b[1mCode: metroServerLogs.native.ts\u001b[22m\n\u001b[0m \u001b[90m 103 |\u001b[39m }\n \u001b[90m 104 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 105 |\u001b[39m \u001b[36mclass\u001b[39m \u001b[33mNamelessError\u001b[39m \u001b[36mextends\u001b[39m \u001b[33mError\u001b[39m {\n \u001b[90m     |\u001b[39m \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 106 |\u001b[39m   name \u001b[33m=\u001b[39m \u001b[32m''\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 107 |\u001b[39m }\n \u001b[90m 108 |\u001b[39m \u001b[36mfunction\u001b[39m captureCurrentStack() {\u001b[0m\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  apply (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  NamelessError (node_modules\\@expo\\metro-runtime\\src\\metroServerLogs.native.ts:105)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  captureCurrentStack (node_modules\\@expo\\metro-runtime\\src\\metroServerLogs.native.ts:110:27)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  HMRClient.log (node_modules\\@expo\\metro-runtime\\src\\metroServerLogs.native.ts:42:79)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  console.level (node_modules\\react-native\\Libraries\\Core\\setUpDeveloperTools.js:41:24)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  handleException (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  handleException (node_modules\\react-native\\Libraries\\Core\\ExceptionsManager.js:156:31)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  handleError (node_modules\\react-native\\Libraries\\Core\\setUpErrorHandling.js:26:42)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  ErrorUtils.reportFatalError (node_modules\\@react-native\\js-polyfills\\error-guard.js:53:37)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  guardedLoadModule (node_modules\\expo\\node_modules\\@expo\\cli\\build\\metro-require\\require.js:158:47)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  metroRequire (node_modules\\expo\\node_modules\\@expo\\cli\\build\\metro-require\\require.js:74:92)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  global (http:\\mhmhruw-manish2302-8081.exp.direct\\node_modules\\expo-router\\entry.bundle)\u001b[39m\u001b[22m","\n\n\u001b[1mCode: metroServerLogs.native.ts\u001b[22m\n\u001b[0m \u001b[90m 103 |\u001b[39m }\n \u001b[90m 104 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 105 |\u001b[39m \u001b[36mclass\u001b[39m \u001b[33mNamelessError\u001b[39m \u001b[36mextends\u001b[39m \u001b[33mError\u001b[39m {\n \u001b[90m     |\u001b[39m \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 106 |\u001b[39m   name \u001b[33m=\u001b[39m \u001b[32m''\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 107 |\u001b[39m }\n \u001b[90m 108 |\u001b[39m \u001b[36mfunction\u001b[39m captureCurrentStack() {\u001b[0m\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  apply (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  NamelessError (node_modules\\@expo\\metro-runtime\\src\\metroServerLogs.native.ts:105)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  captureCurrentStack (node_modules\\@expo\\metro-runtime\\src\\metroServerLogs.native.ts:110:27)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  HMRClient.log (node_modules\\@expo\\metro-runtime\\src\\metroServerLogs.native.ts:42:79)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  pendingLogs.forEach$argument_0 (node_modules\\expo\\src\\async-require\\hmr.ts:338:20)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  forEach (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  flushEarlyLogs (node_modules\\expo\\src\\async-require\\hmr.ts:337:24)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  HMRClient.setup (node_modules\\expo\\src\\async-require\\hmr.ts:260:19)\u001b[39m\u001b[22m"]}
+{"_e":"metro:bundling:started","_t":1792649527019,"id":"f","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792649527020,"id":"f","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1792649527694,"id":"f","total":1,"ms":674.0777}
+{"_e":"metro:client_log","_t":1792649578154,"level":"log","data":["Using API Base URL:","https://tarot-carrot-celery.ngrok-free.dev/api"]}
+{"_e":"metro:client_log","_t":1792649578154,"level":"warn","data":["expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go with the release of SDK 53. Use a development build instead of Expo Go. Learn more at https://docs.expo.dev/develop/development-builds/introduction/."]}
+{"_e":"metro:client_log","_t":1792649578154,"level":"warn","data":["`expo-notifications` functionality is not fully supported in Expo Go:\nWe recommend you instead use a development build to avoid limitations. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792649578155,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649578638,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792649578661,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649578693,"level":"warn","data":["Background location is limited in Expo Go:\nOn Android, it is not available at all.\nOn iOS, it works when running in the Simulator.\nYou can use this API, and all others, in a development build. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792649578694,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792649578834,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792649578854,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792649578867,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792649578867,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792649578882,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649578901,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792649578906,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649579053,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792649579066,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649579077,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792649579103,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792649579117,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649579117,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792649579225,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792649579319,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792649579331,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792649579346,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649579356,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649579356,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792649579357,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792649581446,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649583926,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649586484,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649588929,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649591427,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649593960,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649596429,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649598979,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649601435,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649603997,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649606439,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649608941,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649611426,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649614028,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649616441,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649618941,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649621435,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649623934,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649626432,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649628945,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649631444,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649633961,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649636439,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649638932,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649641443,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649643943,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649646470,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649648925,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649651473,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649653938,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649656440,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649658995,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649661513,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649663957,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649666521,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649668959,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649671478,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649673959,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649676485,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649678959,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649681503,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649683982,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649686530,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649688987,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649691504,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649694005,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649696483,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649697156,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649698974,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649701585,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649704066,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649706602,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649708979,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649711515,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649713983,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649716531,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649718888,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792649718993,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:bundling:started","_t":1792650697136,"id":"i","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792650697136,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650697147,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650697246,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650697652,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650698953,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699053,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699153,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699253,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699361,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699461,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699561,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699663,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699778,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699877,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650699977,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700077,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700177,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700277,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700377,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700477,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700577,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700677,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700777,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650700890,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650701126,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650701266,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650701389,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650701613,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650701777,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650701880,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650701942,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650702176,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650702492,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650702608,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792650702710,"id":"i","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1792650703132,"id":"i","total":1,"ms":5996.1741}
+{"_e":"metro:client_log","_t":1792650757880,"level":"log","data":["Using API Base URL:","https://tarot-carrot-celery.ngrok-free.dev/api"]}
+{"_e":"metro:client_log","_t":1792650757881,"level":"warn","data":["expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go with the release of SDK 53. Use a development build instead of Expo Go. Learn more at https://docs.expo.dev/develop/development-builds/introduction/."]}
+{"_e":"metro:client_log","_t":1792650757881,"level":"warn","data":["`expo-notifications` functionality is not fully supported in Expo Go:\nWe recommend you instead use a development build to avoid limitations. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792650758018,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650758214,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792650758216,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650758234,"level":"warn","data":["Background location is limited in Expo Go:\nOn Android, it is not available at all.\nOn iOS, it works when running in the Simulator.\nYou can use this API, and all others, in a development build. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792650758235,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792650758379,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792650758386,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792650758435,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792650758449,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650758449,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650758449,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792650758633,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792650758649,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650758656,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792650758663,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792650758713,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650758713,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792650758807,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792650758846,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792650758868,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792650758878,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650758891,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792650758992,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792650758996,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650759008,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792650760941,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650763443,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650765973,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650768501,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650770980,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650773518,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650775962,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650778453,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650780941,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650783469,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650786014,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650788469,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650791031,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650793487,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650796049,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650798540,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650799396,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650800993,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650803525,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650805958,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650808551,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650811204,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792650811205,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:bundling:started","_t":1792654830516,"id":"l","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792654830517,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654830530,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654830780,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654831614,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654831714,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654831814,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654831914,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832014,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832114,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832214,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832314,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832414,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832515,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832615,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832715,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832910,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654832911,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1792654833109,"id":"l","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1792654833360,"id":"l","total":1,"ms":2843.6974}
+{"_e":"metro:client_log","_t":1792654904090,"level":"log","data":["Using API Base URL:","https://tarot-carrot-celery.ngrok-free.dev/api"]}
+{"_e":"metro:client_log","_t":1792654904090,"level":"warn","data":["expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go with the release of SDK 53. Use a development build instead of Expo Go. Learn more at https://docs.expo.dev/develop/development-builds/introduction/."]}
+{"_e":"metro:client_log","_t":1792654904090,"level":"warn","data":["`expo-notifications` functionality is not fully supported in Expo Go:\nWe recommend you instead use a development build to avoid limitations. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792654904192,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654904494,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792654904534,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792654904705,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654904737,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654904737,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654904750,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654904750,"level":"warn","data":["Background location is limited in Expo Go:\nOn Android, it is not available at all.\nOn iOS, it works when running in the Simulator.\nYou can use this API, and all others, in a development build. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792654904750,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654904750,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654904750,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654904770,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654904770,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:bundling:started","_t":1792654909968,"id":"n","platform":"ios","environment":null,"entry":"node_modules\\expo-router\\entry.js"}
+{"_e":"metro:bundling:progress","_t":1792654909968,"id":"n","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1792654910124,"id":"n","total":1,"ms":155.6061}
+{"_e":"metro:client_log","_t":1792654979780,"level":"log","data":["Using API Base URL:","https://tarot-carrot-celery.ngrok-free.dev/api"]}
+{"_e":"metro:client_log","_t":1792654979780,"level":"warn","data":["expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go with the release of SDK 53. Use a development build instead of Expo Go. Learn more at https://docs.expo.dev/develop/development-builds/introduction/."]}
+{"_e":"metro:client_log","_t":1792654979781,"level":"warn","data":["`expo-notifications` functionality is not fully supported in Expo Go:\nWe recommend you instead use a development build to avoid limitations. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792654979781,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654979781,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654979781,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654979870,"level":"warn","data":["Background location is limited in Expo Go:\nOn Android, it is not available at all.\nOn iOS, it works when running in the Simulator.\nYou can use this API, and all others, in a development build. Learn more: https://expo.fyi/dev-client."]}
+{"_e":"metro:client_log","_t":1792654979963,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654979964,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792654979964,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654979964,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654979964,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654980000,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654982477,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792654982477,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654982477,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792654982477,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654982477,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654982477,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654982537,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792654982538,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654982538,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654982760,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654982761,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654982761,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654982761,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654982925,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792654982925,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654982925,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792654984379,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654986741,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654989204,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654991675,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654994237,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654996683,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792654999190,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655001727,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655004255,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655006759,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655009200,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655011697,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655014202,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655016741,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655019236,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655021773,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655024171,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655026793,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655029252,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655032379,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655034439,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655037159,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076813,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076813,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076813,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076813,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076813,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076814,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076970,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076970,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076970,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076971,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076971,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076971,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076971,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655076971,"level":"warn","data":["Dashboard planned visits fetch warning:","[AxiosError: timeout of 30000ms exceeded]"]}
+{"_e":"metro:client_log","_t":1792655077007,"level":"warn","data":["Dashboard sites fetch warning:","[AxiosError: timeout of 30000ms exceeded]"]}
+{"_e":"metro:client_log","_t":1792655077007,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655077279,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655077280,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655077298,"level":"error","data":["Error loading patrolling tours:","[AxiosError: timeout of 30000ms exceeded]","\n\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  AxiosError#constructor (node_modules\\axios\\dist\\esm\\axios.js:1772:10)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  handleTimeout (node_modules\\axios\\dist\\esm\\axios.js:3528:27)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  invoke (node_modules\\react-native\\src\\private\\webapis\\dom\\events\\EventTarget.js:424:29)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  dispatch (node_modules\\react-native\\src\\private\\webapis\\dom\\events\\EventTarget.js:310:11)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  INTERNAL_DISPATCH_METHOD_KEY (node_modules\\react-native\\src\\private\\webapis\\dom\\events\\EventTarget.js:246:13)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  dispatchTrustedEvent (node_modules\\react-native\\src\\private\\webapis\\dom\\events\\internals\\EventTargetInternals.js:63:51)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  setReadyState (node_modules\\react-native\\Libraries\\Network\\XMLHttpRequest.js:695:31)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  __didCompleteResponse (node_modules\\react-native\\Libraries\\Network\\XMLHttpRequest.js:438:25)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  apply (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  RCTNetworking.addListener$argument_1 (node_modules\\react-native\\Libraries\\Network\\XMLHttpRequest.js:602:35)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  apply (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  emit (node_modules\\react-native\\Libraries\\vendor\\emitter\\EventEmitter.js:137:36)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  apply (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  RCTDeviceEventEmitterImpl#emit (node_modules\\react-native\\Libraries\\EventEmitter\\RCTDeviceEventEmitter.js:34:17)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  Axios#request (node_modules\\axios\\dist\\esm\\axios.js:4902:58)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  throw (<native>)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:9013)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  step (address at (InternalBytecode.js:1:6731)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:7923)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  tryCallOne (address at (InternalBytecode.js:1:1296)\u001b[39m\u001b[22m\n\u001b[2m\u001b[90m  anonymous (address at (InternalBytecode.js:1:4984)\u001b[39m\u001b[22m"]}
+{"_e":"metro:client_log","_t":1792655079292,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655082334,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655085985,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655086839,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655089357,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655091831,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655094259,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655096827,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655099355,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655101811,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655104260,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655106808,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655109261,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655111716,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655114237,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655116776,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655119327,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655121734,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655124728,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655126734,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655129236,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655131728,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655134239,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655136755,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655139301,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655141754,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655144231,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655146745,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655149247,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655151733,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655154213,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655156737,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655159235,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655161731,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655164254,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655166754,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655169200,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655171710,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655174209,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655176702,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655179228,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655181706,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655184252,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655186742,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655189222,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655189569,"level":"log","data":["Heartbeat trigger: Stationary for > 3 minutes, sending location."]}
+{"_e":"metro:client_log","_t":1792655191716,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655194230,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655196722,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655199226,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655201715,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655204221,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655206729,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655209223,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655211719,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655214251,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655216734,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655219245,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655221748,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655224257,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655226736,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655229225,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655231762,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655234218,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655236722,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655239227,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655241721,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278171,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278171,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278171,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278171,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278172,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278172,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278172,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278203,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278203,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278203,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278203,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278204,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278204,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655278204,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655279984,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655281837,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655284307,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655286834,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655289283,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655291802,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655294277,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655296835,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655299309,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655301897,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655304356,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655306808,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655309319,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655311793,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655314294,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655316834,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655319504,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655322056,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655324461,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655326938,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655329418,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655331998,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655334416,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655336992,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655339456,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655341852,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655344333,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655346800,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655349403,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655351838,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655354467,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655356952,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655359391,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655361864,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655364293,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655366801,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655369325,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655369984,"level":"log","data":["Heartbeat trigger: Stationary for > 3 minutes, sending location."]}
+{"_e":"metro:client_log","_t":1792655371844,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655374410,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655376827,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655379354,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655381823,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655384373,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655386830,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655389351,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655391867,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655394354,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655396818,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655399456,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655401862,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655404354,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655406803,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655409394,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655411866,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655414348,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655416906,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655419385,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655421882,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655424529,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655426834,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655429351,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655431870,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655434350,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655436848,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655439411,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655441880,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655444379,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655446893,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655449382,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655451955,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655452745,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792655452965,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792655453163,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655453164,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792655454427,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655457196,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655459460,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655461184,"level":"log","data":["Starting Native Background GPS tracking for Officer #10214. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792655462268,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655462269,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792655462269,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655462269,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792655463588,"level":"log","data":["Resuming GPS tracking for Officer #10208 following app restart / reboot"]}
+{"_e":"metro:client_log","_t":1792655463589,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792655463589,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655463589,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792655464264,"level":"log","data":["Starting Native Background GPS tracking for Officer #10208. Active Visit: false"]}
+{"_e":"metro:client_log","_t":1792655464264,"level":"warn","data":["Background location permission request error:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655464265,"level":"warn","data":["Error updating native background location config:","[Error: FunctionCallException: Calling the 'startLocationUpdatesAsync' function has failed (at ExpoModulesCore/AsyncFunctionDefinition.swift:123)\n→ Caused by: LocationUpdatesUnavailable: Background location has not been configured, make sure to add 'location' to 'UIBackgroundModes' in the Info.plist file (at ExpoLocation/LocationModule.swift:240)]"]}
+{"_e":"metro:client_log","_t":1792655464265,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655466180,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655468290,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655470837,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655473318,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655475786,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655478269,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655480857,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655483386,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655485905,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655488369,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655490912,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655493422,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655495864,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655518969,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655518969,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655518969,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655518969,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655518969,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655518969,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655520403,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655520404,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655520404,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655520907,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655523426,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655526575,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655528409,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655532213,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655533399,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655535935,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655539663,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655542508,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655543856,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655546383,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655549717,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655554417,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655555795,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655580148,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655581884,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655581884,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655581884,"level":"log","data":["Heartbeat trigger: Stationary for > 3 minutes, sending location."]}
+{"_e":"metro:client_log","_t":1792655581884,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655581884,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655581884,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655581885,"level":"warn","data":["Selfie face notice:","Network request failed"]}
+{"_e":"metro:client_log","_t":1792655581885,"level":"warn","data":["Error checking location status:","[Error: ERR_LOCATION_INFO_PLIST: undefined reason (at ExpoModulesCore/Promise.swift:65)]"]}
+{"_e":"metro:client_log","_t":1792655581972,"level":"error","data":["Selfie validation error:","[TypeError: Network request failed]","\n\n\u001b[1mCode: fetch.umd.js\u001b[22m\n\u001b[0m \u001b[90m 565 |\u001b[39m       xhr\u001b[33m.\u001b[39monerror \u001b[33m=\u001b[39m \u001b[36mfunction\u001b[39m() {\n \u001b[90m 566 |\u001b[39m         setTimeout(\u001b[36mfunction\u001b[39m() {\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 567 |\u001b[39m           reject(\u001b[36mnew\u001b[39m \u001b[33mTypeError\u001b[39m(\u001b[32m'Network request failed'\u001b[39m))\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                               \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 568 |\u001b[39m         }\u001b[33m,\u001b[39m \u001b[35m0\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 569 |\u001b[39m       }\u001b[33m;\u001b[39m\n \u001b[90m 570 |\u001b[39m\u001b[0m\n\u001b[1mCall Stack\u001b[22m\n\u001b[2m\u001b[90m  setTimeout$argument_0 (node_modules\\whatwg-fetch\\dist\\fetch.umd.js:567:31)\u001b[39m\u001b[22m"]}

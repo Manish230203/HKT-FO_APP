@@ -19,11 +19,12 @@ import { StepIndicator } from '../../../components/ui/StepIndicator';
 import { CustomAlertModal } from '../../../components/ui/CustomAlertModal';
 import { TimePicker24Modal } from '../../../components/ui/TimePicker24Modal';
 import { StatusBar } from 'react-native';
+import { fuzzyFilter } from '../../../utils/fuzzySearch';
 
 const STEPS = ['General Info', 'Guards', 'Night Checklist', 'Briefing', 'Suggestions', 'Review'];
 
 const DEFAULT_NIGHT_MANDATORY_QUESTIONS = [
-  { id: 'nq1', section: 'Night Guard Alertness', question: 'Are night duty security guards alert, awake, and in proper uniform?' },
+  { id: 'nq1', section: 'Night Guard Alertness', question: 'Are night shift security guards alert, awake, and in proper uniform?' },
   { id: 'nq2', section: 'Perimeter & Gate Security', question: 'Are perimeter fences, main entry gates, and access points locked & secured?' },
   { id: 'nq3', section: 'Patrol & Register Log', question: 'Is patrol tracking / torch light / night patrol register being updated properly?' },
   { id: 'nq4', section: 'Critical Areas Lock & Key', question: 'Are key rooms, server rooms, and high-value storage areas locked & verified?' },
@@ -290,9 +291,9 @@ export default function CreateNightVisitReportScreen() {
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
 
-  const filteredClients = clients.filter((c) =>
-    c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())
-  );
+  const filteredClients = React.useMemo(() => {
+    return fuzzyFilter(clients, clientSearchQuery, (c) => c.name || '');
+  }, [clients, clientSearchQuery]);
 
   const filteredSites = sites.filter((s) => {
     const matchesClient = clientId ? String(s.client_id) === String(clientId) : false;
@@ -491,7 +492,10 @@ export default function CreateNightVisitReportScreen() {
             <TouchableOpacity
               activeOpacity={Boolean(params.siteId || params.plannedId || isCustomVisit) ? 1 : 0.8}
               disabled={Boolean(params.siteId || params.plannedId || isCustomVisit)}
-              onPress={() => setClientModalVisible(true)}
+              onPress={() => {
+                setClientSearchQuery('');
+                setClientModalVisible(true);
+              }}
               style={[styles.pickerButton, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonLocked : null]}
             >
               <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonTextLocked : null]}>
@@ -562,7 +566,7 @@ export default function CreateNightVisitReportScreen() {
         {/* STEP 1: Guards Inspection */}
         {currentStep === 1 && (
           <Card style={styles.stepCard}>
-            <Text style={styles.stepTitle}>Night Duty Guards Check ({guards.length} Deployed)</Text>
+            <Text style={styles.stepTitle}>Night Shift Guards Check ({guards.length} Deployed)</Text>
             {guards.length === 0 ? (
               <Text style={{ fontSize: 13, color: '#94A3B8', marginVertical: 10 }}>
                 No active regular night guards found for this site in DB. You can add temporary guards below.
@@ -602,7 +606,7 @@ export default function CreateNightVisitReportScreen() {
               ))
             )}
 
-            <Text style={[styles.stepTitle, { marginTop: 16 }]}>Add Temporary On-Duty Guard</Text>
+            <Text style={[styles.stepTitle, { marginTop: 16 }]}>Add Temporary Deployed Guard</Text>
             <Input label="Temporary Guard Name" value={newGuardName} onChangeText={setNewGuardName} placeholder="e.g. Suresh Patil" />
             <Input label="Employee Code / ID" value={newGuardCode} onChangeText={setNewGuardCode} placeholder="e.g. EMP9120 or Temp ID" />
             <Button title="Add Temporary Guard to Report" variant="outline" onPress={handleAddGuard} icon={<Plus color={THEME.primary} size={18} />} />
@@ -776,7 +780,7 @@ export default function CreateNightVisitReportScreen() {
         {currentStep === 3 && (
           <Card style={styles.stepCard}>
             <Text style={styles.stepTitle}>Briefing & Random Checking</Text>
-            <Input label="Security Briefing / Lecture Details" value={lectureDetails} onChangeText={setLectureDetails} multiline numberOfLines={3} style={{ height: 80 }} placeholder="Briefing conducted on alert night duty..." />
+            <Input label="Security Briefing / Lecture Details" value={lectureDetails} onChangeText={setLectureDetails} multiline numberOfLines={3} style={{ height: 80 }} placeholder="Briefing conducted on alert night shift..." />
             <Input label="Random Material / Vehicle Checking Details" value={randomChecking} onChangeText={setRandomChecking} multiline numberOfLines={3} style={{ height: 80 }} placeholder="Random checking of vehicle gate logs..." />
           </Card>
         )}
@@ -842,8 +846,12 @@ export default function CreateNightVisitReportScreen() {
               style={{ flex: 1 }}
               contentContainerStyle={{ paddingBottom: 16 }}
               ListEmptyComponent={
-                <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No clients found.</Text>
+                <View style={{ padding: 24, alignItems: 'center' }}>
+                  <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
+                    {!clientSearchQuery.trim()
+                      ? 'Type client name to search...'
+                      : `No clients found matching "${clientSearchQuery}".`}
+                  </Text>
                 </View>
               }
               renderItem={({ item }) => (

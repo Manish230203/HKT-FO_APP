@@ -19,6 +19,7 @@ import { StepIndicator } from '../../../components/ui/StepIndicator';
 import { CustomAlertModal } from '../../../components/ui/CustomAlertModal';
 import { TimePicker24Modal } from '../../../components/ui/TimePicker24Modal';
 import { StatusBar } from 'react-native';
+import { fuzzyFilter } from '../../../utils/fuzzySearch';
 
 const STEPS = ['General Info', 'Guards', 'Checklist', 'Feedback', 'Suggestions', 'Review'];
 
@@ -308,9 +309,9 @@ export default function CreateDayVisitReportScreen() {
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
 
-  const filteredClients = clients.filter((c) =>
-    c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())
-  );
+  const filteredClients = React.useMemo(() => {
+    return fuzzyFilter(clients, clientSearchQuery, (c) => c.name || '');
+  }, [clients, clientSearchQuery]);
 
   const filteredSites = sites.filter((s) => {
     const matchesClient = clientId ? String(s.client_id) === String(clientId) : false;
@@ -498,7 +499,10 @@ export default function CreateDayVisitReportScreen() {
             <TouchableOpacity
               activeOpacity={Boolean(params.siteId || params.plannedId || isCustomVisit) ? 1 : 0.8}
               disabled={Boolean(params.siteId || params.plannedId || isCustomVisit)}
-              onPress={() => setClientModalVisible(true)}
+              onPress={() => {
+                setClientSearchQuery('');
+                setClientModalVisible(true);
+              }}
               style={[styles.pickerButton, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonLocked : null]}
             >
               <Text style={[styles.pickerButtonText, Boolean(params.siteId || params.plannedId || isCustomVisit) ? styles.pickerButtonTextLocked : null]}>
@@ -592,7 +596,7 @@ export default function CreateDayVisitReportScreen() {
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.guardMeta}>Duty: {g.dutyType} | Rating: {g.rating}</Text>
+                    <Text style={styles.guardMeta}>Role: {g.dutyType} | Rating: {g.rating}</Text>
                   </View>
                   <TouchableOpacity onPress={() => handleRemoveGuard(idx)}>
                     <Trash2 color={THEME.danger} size={18} />
@@ -843,8 +847,12 @@ export default function CreateDayVisitReportScreen() {
               style={{ flex: 1 }}
               contentContainerStyle={{ paddingBottom: 16 }}
               ListEmptyComponent={
-                <View style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No clients found.</Text>
+                <View style={{ padding: 24, alignItems: 'center' }}>
+                  <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>
+                    {!clientSearchQuery.trim()
+                      ? 'Type client name to search...'
+                      : `No clients found matching "${clientSearchQuery}".`}
+                  </Text>
                 </View>
               }
               renderItem={({ item }) => (

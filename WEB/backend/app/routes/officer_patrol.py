@@ -596,6 +596,22 @@ def get_planned_visits(empOid: Optional[str] = Query(None), authorization: Optio
 
             date_str = str(ws) if ws else (str(vdate) if vdate else period_str)
 
+            # Determine if date range is expired
+            is_expired = False
+            if we:
+                is_expired = (str(we) < today_str)
+            elif pm and py:
+                try:
+                    last_day = calendar.monthrange(int(py), int(pm))[1]
+                    last_day_str = f"{int(py):04d}-{int(pm):02d}-{last_day:02d}"
+                    is_expired = (last_day_str < today_str)
+                except Exception:
+                    is_expired = False
+            elif vdate:
+                is_expired = (str(vdate) < today_str)
+            elif ws:
+                is_expired = (str(ws) < today_str)
+
             raw_status = (r.get("planStatus") or "PUBLISHED").upper()
             if raw_status == "COMPLETED" or done_cnt >= freq:
                 status = "Completed"
@@ -603,11 +619,10 @@ def get_planned_visits(empOid: Optional[str] = Query(None), authorization: Optio
                 status = "In Progress"
             elif raw_status == "DRAFT":
                 status = "Pending"
+            elif is_expired:
+                status = "Overdue"
             else:
-                if r.get("weekEndDate") and str(r["weekEndDate"]) < today_str:
-                    status = "Overdue"
-                else:
-                    status = "Pending"
+                status = "Pending"
 
             pt_raw = (r.get("planningType") or "WEEKLY").upper()
             if pt_raw == "WEEKLY":
@@ -647,6 +662,12 @@ def get_planned_visits(empOid: Optional[str] = Query(None), authorization: Optio
                 "radius": r.get("radius", 100),
                 "officerId": r.get("officerId"),
                 "officerName": r.get("officerName") or "Officer",
+                "weekStartDate": str(ws) if ws else None,
+                "weekEndDate": str(we) if we else None,
+                "visitDate": str(vdate) if vdate else None,
+                "planningMonth": pm,
+                "planningYear": py,
+                "isExpired": is_expired,
                 "date": date_str,
                 "plannedPeriod": period_str,
                 "shift": shift_text,

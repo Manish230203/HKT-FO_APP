@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,10 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import {
   ArrowLeft,
   User,
@@ -53,6 +54,11 @@ export default function MarkAttendanceScreen() {
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [isVerifyingPhoto, setIsVerifyingPhoto] = useState(false);
 
+  // Live Camera Hooks & Refs
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isFocused, setIsFocused] = useState(true);
+  const cameraRef = useRef<any>(null);
+
   // Active Punch & Buffer states
   const [activePunchRecord, setActivePunchRecord] = useState<any | null>(null);
   const [bufferError, setBufferError] = useState<string | null>(null);
@@ -75,7 +81,76 @@ export default function MarkAttendanceScreen() {
 
   // Determine current active status strictly from server record and local active session
   const isServerActive = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
-  const isOfficerActive = isServerActive || !!activePunchRecord;
+  const hasServerExplicitInactive = !!(
+    (todayRecord && (todayRecord as any).no_active_session) ||
+    (todayRecord && todayRecord.check_out)
+  );
+  const isOfficerActive = isServerActive || (!hasServerExplicitInactive && !!activePunchRecord);
+
+  const checkActivePunchSession = React.useCallback(async () => {
+    try {
+      const isServerActiveNow = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+      const hasServerExplicitInactiveNow = !!(
+        (todayRecord && (todayRecord as any).no_active_session) ||
+        (todayRecord && todayRecord.check_out)
+      );
+
+      if (hasServerExplicitInactiveNow) {
+        setActivePunchRecord(null);
+        setBufferError(null);
+        return;
+      }
+
+      const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
+      const records = await getPunchRecords(empId);
+      const nowMs = Date.now();
+      const todayStr = new Date().toISOString().split('T')[0];
+      const active = records.find((r) => {
+        const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+        const punchMs = r.timestamp || 0;
+        const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
+        const isToday = !r.date || r.date === todayStr;
+        return isPunchedIn && isWithin16Hours && isToday;
+      });
+
+      if (active || isServerActiveNow) {
+        setActivePunchRecord(active || { timestamp: todayRecord?.check_in ? new Date(todayRecord.check_in).getTime() : Date.now() });
+        const punchInTimeMs = active?.timestamp || (todayRecord?.check_in ? new Date(todayRecord.check_in).getTime() : Date.now());
+        const diffMins = Math.floor((Date.now() - punchInTimeMs) / 60000);
+        if (diffMins < 10) {
+          const remaining = 10 - diffMins;
+          setBufferError(
+            `10-Minute Buffer Required: Activated (${diffMins} mins ago). Please wait ${remaining} more mins to deactivate.`
+          );
+        } else {
+          setBufferError(null);
+        }
+      } else {
+        setActivePunchRecord(null);
+        setBufferError(null);
+      }
+    } catch (e) {
+      console.error('Check active punch error', e);
+    }
+  }, [user, todayRecord]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      refreshStatus();
+      checkActivePunchSession();
+      return () => {
+        setIsFocused(false);
+      };
+    }, [refreshStatus, checkActivePunchSession])
+  );
+
+  // Auto-request camera permissions on mount
+  useEffect(() => {
+    if (!permission?.granted) {
+      requestPermission();
+    }
+  }, []);
 
   // Digital Live Clock
   useEffect(() => {
@@ -91,41 +166,11 @@ export default function MarkAttendanceScreen() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  // Check active punch session & 10-minute buffer without capturing any photo
+  // Check active punch session on mount and when todayRecord updates
   useEffect(() => {
-    (async () => {
-      try {
-        const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
-        const records = await getPunchRecords(empId);
-        const nowMs = Date.now();
-        const active = records.find((r) => {
-          const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
-          const punchMs = r.timestamp || 0;
-          const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
-          return isPunchedIn && isWithin16Hours;
-        });
+    checkActivePunchSession();
+  }, [checkActivePunchSession]);
 
-        if (active) {
-          setActivePunchRecord(active);
-          const punchInTimeMs = active.timestamp || Date.now() - 3 * 60 * 1000;
-          const diffMins = Math.floor((Date.now() - punchInTimeMs) / 60000);
-          if (diffMins < 10) {
-            const remaining = 10 - diffMins;
-            setBufferError(
-              `10-Minute Buffer Required: Activated at ${active.punchInTime || 'recently'} (${diffMins} mins ago). Please wait ${remaining} more mins to deactivate.`
-            );
-          } else {
-            setBufferError(null);
-          }
-        } else {
-          setActivePunchRecord(null);
-          setBufferError(null);
-        }
-      } catch (e) {
-        console.error('Check active punch error', e);
-      }
-    })();
-  }, [user]);
 
   // Fetch Location gracefully
   useEffect(() => {
@@ -153,67 +198,23 @@ export default function MarkAttendanceScreen() {
     })();
   }, []);
 
-  // MANUAL image capture triggered ONLY upon explicit tap on avatar/photo container
-  const handleManualImageTap = async () => {
-    if (isSubmitting) return;
+  // Unified One-Step: Capture Photo -> Face Verification -> Immediately Activate / Deactivate
+  const handleCaptureAndToggleSession = async () => {
+    if (isSubmitting || isVerifyingPhoto) return;
 
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert(
-          'Camera Permission Required',
-          'Camera access is required to capture your verification photo for activation.'
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-        cameraType: ImagePicker.CameraType.front,
+    // 1. Mandatory Profile Photo Check (when activating)
+    if (!isOfficerActive && !hasProfilePhoto) {
+      setAlertInfo({
+        visible: true,
+        title: 'Profile Photo Required',
+        message: 'You have not uploaded a profile photo yet. Please upload your profile photo first in Settings before activating.',
+        type: 'error',
       });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const photoUri = result.assets[0].uri;
-        setCapturedPhotoUri(photoUri);
-
-        // Optional server-side face validation feedback
-        setIsVerifyingPhoto(true);
-        try {
-          const vRes = await validateSelfie(photoUri);
-          if (vRes && !vRes.success) {
-            Alert.alert(
-              'Face Verification Notice',
-              vRes.message || 'Face unclear in photo. Please ensure good lighting and clear positioning.'
-            );
-          }
-        } catch (valErr) {
-          console.warn('Selfie validation error:', valErr);
-        } finally {
-          setIsVerifyingPhoto(false);
-        }
-      }
-    } catch (err) {
-      console.error('Manual camera capture error:', err);
-      Alert.alert('Capture Error', 'Could not open camera. Please try again.');
+      return;
     }
-  };
 
-  // Explicit Activation or Deactivation handler
-  const handleToggleDutyStatus = async () => {
-    if (isSubmitting) return;
-
-    // Check location
-    const lat = location?.latitude || 18.605555;
-    const long = location?.longitude || 73.827115;
-    const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
-    const todayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
+    // 2. Buffer & Active Visit checks (when deactivating)
     if (isOfficerActive) {
-      // --- DEACTIVATION WORKFLOW ---
-      // Check buffer
       if (bufferError) {
         setAlertInfo({
           visible: true,
@@ -224,7 +225,6 @@ export default function MarkAttendanceScreen() {
         return;
       }
 
-      // Check active site visit session
       const empOid = user?.id || (user as any)?.oid || user?.employee_id || 7558;
       let activeSiteSession = await getActiveSiteVisitSession(empOid);
       if (!activeSiteSession) {
@@ -253,15 +253,90 @@ export default function MarkAttendanceScreen() {
         });
         return;
       }
+    }
 
-      setIsSubmitting(true);
+    // 3. Capture Photo from Live Camera (or fallback to ImagePicker)
+    let photoUri: string | null = null;
+    try {
+      if (cameraRef.current && permission?.granted) {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.8,
+          base64: true,
+        });
+        if (photo && photo.uri) {
+          photoUri = photo.uri;
+        }
+      }
+    } catch (camErr) {
+      console.warn('CameraView takePicture error, falling back to ImagePicker:', camErr);
+    }
+
+    if (!photoUri) {
       try {
-        const res = await markAttendance(lat, long);
-        if (res && res.success) {
-          // Update local DB cache
+        const permRes = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permRes.granted) {
+          Alert.alert('Camera Permission Required', 'Camera access is required for verification.');
+          return;
+        }
+        const pickerRes = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+          cameraType: ImagePicker.CameraType.front,
+        });
+        if (!pickerRes.canceled && pickerRes.assets && pickerRes.assets.length > 0) {
+          photoUri = pickerRes.assets[0].uri;
+        }
+      } catch (pickerErr) {
+        console.error('ImagePicker fallback error:', pickerErr);
+      }
+    }
+
+    if (!photoUri) {
+      return; // User cancelled
+    }
+
+    setCapturedPhotoUri(photoUri);
+    setIsSubmitting(true);
+    setIsVerifyingPhoto(true);
+
+    try {
+      // 4. Face Verification
+      try {
+        const vRes = await validateSelfie(photoUri);
+        if (vRes && !vRes.success) {
+          console.warn('Selfie face notice:', vRes.message);
+        }
+      } catch (valErr) {
+        console.warn('validateSelfie non-fatal error:', valErr);
+      }
+
+      // 5. GPS Location
+      let lat = location?.latitude;
+      let long = location?.longitude;
+      if (!lat || !long) {
+        try {
+          const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          lat = freshLoc.coords.latitude;
+          long = freshLoc.coords.longitude;
+        } catch {
+          lat = 18.605555;
+          long = 73.827115;
+        }
+      }
+
+      const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
+      const todayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // 6. Submit Attendance to Server
+      const res = await markAttendance(lat, long);
+      if (res && res.success) {
+        if (isOfficerActive) {
+          // Deactivation
           const allRecords = await getPunchRecords();
           const updated = allRecords.map((r) => {
-            if (activePunchRecord && r.id === activePunchRecord.id) {
+            if ((activePunchRecord && r.id === activePunchRecord.id) || r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--') {
               return {
                 ...r,
                 punchOutTime: nowTime,
@@ -275,61 +350,15 @@ export default function MarkAttendanceScreen() {
           await updatePunchRecordsList(updated);
           setActivePunchRecord(null);
 
+
           setAlertInfo({
             visible: true,
-            title: 'Duty Deactivated',
-            message: `Officer status is now INACTIVE. Duty session completed at ${nowTime}.`,
+            title: 'Session Deactivated',
+            message: `Officer status is now INACTIVE. Session completed at ${nowTime}.`,
             type: 'success',
           });
-          await refreshStatus();
         } else {
-          setAlertInfo({
-            visible: true,
-            title: 'Deactivation Failed',
-            message: res?.message || 'Could not deactivate duty on server. Please try again.',
-            type: 'error',
-          });
-        }
-      } catch (err) {
-        console.error('Deactivation error:', err);
-        setAlertInfo({
-          visible: true,
-          title: 'Error',
-          message: 'Network or system error occurred while deactivating duty.',
-          type: 'error',
-        });
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else {
-      // --- ACTIVATION WORKFLOW ---
-      // 1. Mandatory Profile Photo Check: Officer MUST have an uploaded profile photo in the system!
-      if (!hasProfilePhoto) {
-        setAlertInfo({
-          visible: true,
-          title: 'Profile Photo Required',
-          message: 'You have not uploaded a profile photo yet. Please upload your profile photo first in Settings before activating duty.',
-          type: 'error',
-        });
-        return;
-      }
-
-      // 2. Mandatory Verification Photo: Must capture selfie to activate duty
-      if (!capturedPhotoUri) {
-        setAlertInfo({
-          visible: true,
-          title: 'Verification Photo Required',
-          message: 'Please tap the camera box above to take your verification photo before activating duty.',
-          type: 'error',
-        });
-        return;
-      }
-
-      setIsSubmitting(true);
-      try {
-        const res = await markAttendance(lat, long);
-        if (res && res.success) {
-          // Save active record locally
+          // Activation
           await savePunchRecord(
             {
               id: `punch_${Date.now()}`,
@@ -351,31 +380,36 @@ export default function MarkAttendanceScreen() {
 
           setAlertInfo({
             visible: true,
-            title: 'Duty Activated',
-            message: `Officer status is now ACTIVE. Duty session started at ${nowTime}.`,
+            title: 'Session Activated',
+            message: `Officer status is now ACTIVE. Session started at ${nowTime}.`,
             type: 'success',
           });
-          await refreshStatus();
-        } else {
-          setAlertInfo({
-            visible: true,
-            title: 'Activation Failed',
-            message: res?.message || 'Could not activate duty on server. Please check connection and retry.',
-            type: 'error',
-          });
         }
-      } catch (err) {
-        console.error('Activation error:', err);
+        await refreshStatus();
+      } else {
         setAlertInfo({
           visible: true,
-          title: 'Error',
-          message: 'Network or system error occurred while activating duty.',
+          title: isOfficerActive ? 'Deactivation Failed' : 'Activation Failed',
+          message: res?.message || 'Could not update status on server. Please try again.',
           type: 'error',
         });
-      } finally {
-        setIsSubmitting(false);
       }
+    } catch (err: any) {
+      console.error('Status update error:', err);
+      setAlertInfo({
+        visible: true,
+        title: 'Error',
+        message: err?.message || 'Network or system error occurred while updating status.',
+        type: 'error',
+      });
+    } finally {
+      setIsSubmitting(false);
+      setIsVerifyingPhoto(false);
     }
+  };
+
+  const handleRetakePhoto = () => {
+    setCapturedPhotoUri(null);
   };
 
   const displayImageUri = capturedPhotoUri || profileImage;
@@ -393,12 +427,9 @@ export default function MarkAttendanceScreen() {
             </TouchableOpacity>
 
             <View style={styles.headerTitleCol}>
-              <Text style={[styles.mainTitleText, { color: colors.text }]}>Officer Duty Status</Text>
+              <Text style={[styles.mainTitleText, { color: colors.text }]}>Officer Status</Text>
               <Text style={styles.userSubText}>
                 Officer: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
-              </Text>
-              <Text style={styles.sessionIdText}>
-                ID: {user?.employee_id || 'EMP002'}
               </Text>
             </View>
 
@@ -436,59 +467,126 @@ export default function MarkAttendanceScreen() {
             </View>
             <Text style={[styles.statusSubText, { color: colors.textVariant }]}>
               {isOfficerActive
-                ? 'Your duty session is active. Background location tracking and visit logging are enabled.'
-                : 'Your duty session is currently inactive. Tap your photo below to verify, then tap Activate to start duty.'}
+                ? 'Your session is active. Background location tracking and visit logging are enabled.'
+                : 'Your session is currently inactive. Tap your photo below to verify, then tap Activate.'}
             </Text>
           </View>
 
-          {/* Manual Photo Capture Box */}
+          {/* Live Camera Viewfinder & One-Step Capture Box */}
           <View style={[styles.photoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.photoCardHeader}>
-              <View style={[styles.headerDot, { backgroundColor: '#EF4444' }]} />
+              <View style={[styles.headerDot, { backgroundColor: isOfficerActive ? '#EF4444' : '#10B981' }]} />
               <Text style={[styles.photoCardTitle, { color: colors.text }]}>
-                VERIFY FACE IDENTITY ({isOfficerActive ? 'DEACTIVATE DUTY' : 'ACTIVATE DUTY'})
+                VERIFY FACE IDENTITY ({isOfficerActive ? 'DEACTIVATE' : 'ACTIVATE'})
               </Text>
             </View>
 
-            {/* Square Viewfinder Container with Orange Corner Brackets */}
-            <TouchableOpacity
-              activeOpacity={0.9}
+            {/* Live Camera Viewfinder Container with Orange Corner Brackets */}
+            <View
               style={[
                 styles.viewfinderContainer,
-                { backgroundColor: isDark ? '#0A1128' : '#F1F5F9' },
+                { backgroundColor: isDark ? '#000000' : '#0F172A' },
               ]}
-              onPress={handleManualImageTap}
-              disabled={isSubmitting || isVerifyingPhoto}
             >
-              {displayImageUri ? (
-                <Image source={{ uri: displayImageUri }} style={styles.viewfinderImage} resizeMode="cover" />
+              {capturedPhotoUri ? (
+                <Image source={{ uri: capturedPhotoUri }} style={styles.viewfinderImage} resizeMode="cover" />
+              ) : isFocused && permission?.granted ? (
+                <CameraView
+                  ref={cameraRef}
+                  style={StyleSheet.absoluteFill}
+                  facing="front"
+                  mirror={true}
+                />
               ) : (
                 <View style={styles.placeholderBox}>
-                  <User color="#64748B" size={72} />
+                  <Camera color="#64748B" size={52} />
                   <Text style={[styles.placeholderPrompt, { color: colors.textVariant }]}>
-                    POSITION FACE INSIDE FRAME
+                    {permission?.granted === false
+                      ? 'CAMERA PERMISSION NEEDED'
+                      : 'STARTING CAMERA PREVIEW...'}
                   </Text>
+                  {!permission?.granted && (
+                    <TouchableOpacity
+                      style={styles.enableCamBtn}
+                      onPress={requestPermission}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.enableCamBtnText}>Grant Camera Permission</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
 
               {/* 4 Viewfinder Orange Corner Brackets */}
-              <View style={[styles.cornerBracket, styles.cornerTL]} />
-              <View style={[styles.cornerBracket, styles.cornerTR]} />
-              <View style={[styles.cornerBracket, styles.cornerBL]} />
-              <View style={[styles.cornerBracket, styles.cornerBR]} />
-            </TouchableOpacity>
+              <View style={[styles.cornerBracket, styles.cornerTL]} pointerEvents="none" />
+              <View style={[styles.cornerBracket, styles.cornerTR]} pointerEvents="none" />
+              <View style={[styles.cornerBracket, styles.cornerBL]} pointerEvents="none" />
+              <View style={[styles.cornerBracket, styles.cornerBR]} pointerEvents="none" />
 
-            {/* Blue Capture Photo Button */}
+              {/* Live camera indicator badge */}
+              {!capturedPhotoUri && permission?.granted && (
+                <View style={styles.liveBadge} pointerEvents="none">
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveBadgeText}>LIVE CAMERA</Text>
+                </View>
+              )}
+
+              {/* Center Face Reticle Overlay */}
+              {!capturedPhotoUri && (
+                <View style={styles.faceOvalReticle} pointerEvents="none" />
+              )}
+
+              {/* Loading overlay while verifying & activating */}
+              {(isSubmitting || isVerifyingPhoto) && (
+                <View style={styles.verifyingOverlay}>
+                  <ActivityIndicator size="large" color="#FFFFFF" />
+                  <Text style={styles.verifyingOverlayText}>
+                    {isVerifyingPhoto ? 'Verifying Face Identity...' : isOfficerActive ? 'Deactivating...' : 'Activating...'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Retake Button (when photo is captured) */}
+            {capturedPhotoUri && !isSubmitting && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.retakeButton}
+                onPress={handleRetakePhoto}
+              >
+                <RefreshCw color="#3B82F6" size={16} style={{ marginRight: 6 }} />
+                <Text style={styles.retakeBtnText}>Back to Live Camera</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Single-Step Primary Action Button: Takes Photo + Verifies + Activates */}
             <TouchableOpacity
               activeOpacity={0.85}
-              style={styles.capturePhotoButton}
-              onPress={handleManualImageTap}
+              style={[
+                styles.capturePhotoButton,
+                {
+                  backgroundColor: isOfficerActive ? '#DC2626' : '#10B981',
+                  opacity: isSubmitting || isVerifyingPhoto ? 0.75 : 1,
+                },
+              ]}
+              onPress={handleCaptureAndToggleSession}
               disabled={isSubmitting || isVerifyingPhoto}
             >
-              <Camera color="#FFFFFF" size={20} style={{ marginRight: 8 }} />
-              <Text style={styles.capturePhotoBtnText}>
-                {capturedPhotoUri ? 'Retake Photo' : 'Capture Photo'}
-              </Text>
+              {isSubmitting || isVerifyingPhoto ? (
+                <View style={styles.btnLoadingRow}>
+                  <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 10 }} />
+                  <Text style={styles.capturePhotoBtnText}>
+                    {isVerifyingPhoto ? 'VERIFYING FACE...' : isOfficerActive ? 'DEACTIVATING...' : 'ACTIVATING...'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.btnRow}>
+                  <Camera color="#FFFFFF" size={20} style={{ marginRight: 8 }} />
+                  <Text style={styles.capturePhotoBtnText}>
+                    {isOfficerActive ? 'CAPTURE PHOTO & DEACTIVATE' : 'CAPTURE PHOTO & ACTIVATE'}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
 
             {/* Helper Description Box */}
@@ -502,52 +600,11 @@ export default function MarkAttendanceScreen() {
               ]}
             >
               <Text style={[styles.readyHelperText, { color: colors.textVariant }]}>
-                <Text style={styles.readyHelperTitle}>Ready to Capture: </Text>
-                Position your face clearly within the frame and tap "Capture Photo" to {isOfficerActive ? 'deactivate duty' : 'activate duty'}.
+                <Text style={styles.readyHelperTitle}>One-Step Face Verification: </Text>
+                Position your face inside the frame and tap the button. Your photo will be verified and status {isOfficerActive ? 'deactivated' : 'activated'} instantly in one step.
               </Text>
             </View>
-
-            {isVerifyingPhoto ? (
-              <View style={styles.verifyingRow}>
-                <ActivityIndicator size="small" color="#3B82F6" style={{ marginRight: 8 }} />
-                <Text style={styles.verifyingText}>Verifying face quality...</Text>
-              </View>
-            ) : capturedPhotoUri ? (
-              <Text style={styles.photoCapturedSuccessText}>
-                ✓ Verification photo ready. Tap button below to proceed.
-              </Text>
-            ) : null}
           </View>
-
-          {/* Main Action Button */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={[
-              styles.actionButton,
-              {
-                backgroundColor: isOfficerActive ? '#DC2626' : '#10B981',
-                opacity: isSubmitting ? 0.7 : 1,
-              },
-            ]}
-            onPress={handleToggleDutyStatus}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <View style={styles.btnLoadingRow}>
-                <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 10 }} />
-                <Text style={styles.actionBtnText}>
-                  {isOfficerActive ? 'DEACTIVATING...' : 'ACTIVATING...'}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.btnRow}>
-                <Power color="#FFFFFF" size={20} style={{ marginRight: 10 }} />
-                <Text style={styles.actionBtnText}>
-                  {isOfficerActive ? 'DEACTIVATE DUTY' : 'ACTIVATE DUTY'}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
 
           <Text style={styles.copyrightText}>© 2026 HUMANKIND TECHNOLOGY</Text>
         </ScrollView>
@@ -834,6 +891,78 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 1,
+  },
+  liveBadge: {
+    position: 'absolute',
+    top: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22C55E',
+    marginRight: 6,
+  },
+  liveBadgeText: {
+    color: '#22C55E',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  faceOvalReticle: {
+    width: 170,
+    height: 220,
+    borderRadius: 85,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  enableCamBtn: {
+    marginTop: 12,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  enableCamBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  verifyingOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  verifyingOverlayText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 14,
+    textAlign: 'center',
+  },
+  retakeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+  retakeBtnText: {
+    color: '#3B82F6',
+    fontSize: 13,
+    fontWeight: '700',
   },
   copyrightText: {
     textAlign: 'center',

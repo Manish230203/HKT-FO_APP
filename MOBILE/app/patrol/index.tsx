@@ -103,7 +103,7 @@ export default function PatrolTourSelectionScreen() {
     if (!hasProfilePhoto) {
       Alert.alert(
         'Profile Photo Required',
-        'Please upload your profile photo first in Settings before starting a patrolling tour.',
+        'Please upload your profile photo first in Settings before starting a checklist tour.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Upload Photo', onPress: () => router.push('/settings') }
@@ -114,11 +114,11 @@ export default function PatrolTourSelectionScreen() {
 
     if (!isOnDuty) {
       Alert.alert(
-        'Active Duty Required',
-        'You are currently INACTIVE. You must activate your duty status before starting a patrolling tour.',
+        'Active Status Required',
+        'You are currently INACTIVE. You must activate your session before starting a checklist tour.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Activate Duty', onPress: () => router.push('/mark-attendance') }
+          { text: 'Activate', onPress: () => router.push('/mark-attendance') }
         ]
       );
       return;
@@ -198,7 +198,7 @@ export default function PatrolTourSelectionScreen() {
         >
           <ArrowLeft color={isDark ? '#FFFFFF' : '#0F172A'} size={22} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: '#3B82F6' }]}>Patrolling</Text>
+        <Text style={[styles.headerTitle, { color: '#3B82F6' }]}>Checklist</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -223,17 +223,17 @@ export default function PatrolTourSelectionScreen() {
                 {officerName}
               </Text>
               <Text style={[styles.officerMetaText, { color: subTextColor }]}>
-                {empCode} • {designation}
+                {designation}
               </Text>
               <Text style={[styles.officerSiteText, { color: '#3B82F6' }]} numberOfLines={1}>
                 <MapPin size={12} color="#3B82F6" /> {siteName}
               </Text>
             </View>
 
-            {/* Duty Status Badge */}
+            {/* Status Badge */}
             <View
               style={[
-                styles.dutyBadge,
+                styles.statusBadge,
                 {
                   backgroundColor: isOnDuty ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
                   borderColor: isOnDuty ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)',
@@ -242,17 +242,17 @@ export default function PatrolTourSelectionScreen() {
             >
               <View
                 style={[
-                  styles.dutyDot,
+                  styles.statusDot,
                   { backgroundColor: isOnDuty ? '#22C55E' : '#EF4444' },
                 ]}
               />
               <Text
                 style={[
-                  styles.dutyBadgeText,
+                  styles.statusBadgeText,
                   { color: isOnDuty ? '#22C55E' : '#EF4444' },
                 ]}
               >
-                {isOnDuty ? 'ON DUTY' : 'OFF DUTY'}
+                {isOnDuty ? 'ACTIVE' : 'INACTIVE'}
               </Text>
             </View>
           </View>
@@ -332,7 +332,7 @@ export default function PatrolTourSelectionScreen() {
 
         {/* Section Heading */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionHeadingTitle, { color: textColor }]}>Select Patrolling Tour</Text>
+          <Text style={[styles.sectionHeadingTitle, { color: textColor }]}>Select Checklist Tour</Text>
           <Text style={[styles.sectionHeadingCount, { color: '#3B82F6' }]}>
             {tours.length} Available
           </Text>
@@ -342,14 +342,14 @@ export default function PatrolTourSelectionScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text style={[styles.loadingText, { color: subTextColor }]}>Loading Patrolling Tours...</Text>
+            <Text style={[styles.loadingText, { color: subTextColor }]}>Loading Checklist Tours...</Text>
           </View>
         ) : tours.length === 0 ? (
           <View style={[styles.emptyContainer, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <Shield color="#64748B" size={44} />
-            <Text style={[styles.emptyTitle, { color: textColor }]}>No Patrolling Tours Found</Text>
+            <Text style={[styles.emptyTitle, { color: textColor }]}>No Checklist Tours Found</Text>
             <Text style={[styles.emptySubtitle, { color: subTextColor }]}>
-              There are no tours configured for {siteName}. Please check with your supervisor or administrator.
+              There are no checklist tours configured for {siteName}. Please check with your supervisor or administrator.
             </Text>
           </View>
         ) : (
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  dutyBadge: {
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -520,13 +520,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
-  dutyDot: {
+  statusDot: {
     width: 7,
     height: 7,
     borderRadius: 4,
     marginRight: 6,
   },
-  dutyBadgeText: {
+  statusBadgeText: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { Alert } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Config } from '../constants/Config';
-import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns } from '../services/db';
+import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns, reconcilePunchRecordsWithServer } from '../services/db';
 import { gpsTracker } from '../services/gpsService';
 import { violationService } from '../services/violationService';
 import { getActiveSiteVisitSession } from '../services/siteService';
@@ -109,11 +109,14 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
       ]);
 
       if (todayData?.success) {
+        const isServerActive = !!(todayData.record && todayData.record.check_in && !todayData.record.check_out);
         setTodayRecord(todayData.record || ({ no_active_session: true } as any));
-        if (todayData.record?.check_in && !todayData.record?.check_out) {
+        if (isServerActive) {
           const pId = todayData.record.oid || todayData.record.id || todayData.record.punch_in_id;
           if (pId) violationService.setPunchInId(pId).catch(() => {});
         }
+        const todayStr = new Date().toISOString().split('T')[0];
+        await reconcilePunchRecordsWithServer(isServerActive, todayStr);
       }
 
       if (logsData?.success) {
@@ -121,6 +124,8 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         // Also map to local SQLite format so local fallback is populated
         try {
           const empIdStr = String(empOid);
+          const todayDateStr = new Date().toISOString().split('T')[0];
+          const isTodayServerActive = !!(todayData?.success && todayData.record && todayData.record.check_in && !todayData.record.check_out);
           const mappedForLocal = (logsData.logs || []).map((l: any, index: number) => {
             let titleDate = l.date || 'Today';
             if (l.date) {
@@ -131,6 +136,8 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
                 titleDate = l.date;
               }
             }
+            // Only today's log when server is confirmed active can have PUNCHED-IN
+            const isThisLogActive = isTodayServerActive && l.date === todayDateStr && l.check_in && !l.check_out;
             return {
               id: `remote_${index}_${l.date}`,
               employee_id: empIdStr,
@@ -139,14 +146,14 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
               date: l.date,
               dayTitle: titleDate,
               punchInTime: l.check_in ? new Date(l.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
-              punchOutTime: l.check_out ? new Date(l.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
+              punchOutTime: l.check_out ? new Date(l.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (isThisLogActive ? '--:--' : 'Completed'),
               check_in_lat: l.check_in_lat,
               check_in_long: l.check_in_long,
               check_out_lat: l.check_out_lat,
               check_out_long: l.check_out_long,
               siteName: l.site_name || null,
               clientName: 'Client',
-              status: l.check_out ? 'PRESENT' : l.check_in ? 'PUNCHED-IN' : 'MISSED',
+              status: isThisLogActive ? 'PUNCHED-IN' : (l.check_out ? 'PRESENT' : 'COMPLETED'),
               officerName: user?.name || 'Officer',
             };
           });
@@ -155,6 +162,7 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
           console.warn('Sync to local db error:', e);
         }
       }
+
 
       if (statsData?.success) {
         setMonthlyStats(statsData.stats);
@@ -208,7 +216,7 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         if (activeSiteSession) {
           return {
             success: false,
-            message: `Site Check-Out Required: You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before punching out for duty.`,
+            message: `Site Check-Out Required: You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before deactivating.`,
           };
         }
       } catch (e) {

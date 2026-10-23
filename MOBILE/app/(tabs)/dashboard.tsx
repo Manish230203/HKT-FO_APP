@@ -48,10 +48,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
-import { getPlannedVisits, createPlannedVisit, getSites, getClients, Site, Client, PlannedVisit } from '../../services/siteService';
+import { getPlannedVisits, createPlannedVisit, getSites, getClients, Site, Client, PlannedVisit, isVisitDateRangeExpired } from '../../services/siteService';
 import { getPunchRecords } from '../../services/db';
 import { getDayVisitReports, getNightVisitReports, getGeneralVisits } from '../../services/visitService';
 import { getConsentSetting } from '../../services/db';
+import { fuzzyFilter } from '../../utils/fuzzySearch';
 
 export default function DashboardScreen() {
   const { user, profileImage } = useAuth();
@@ -63,6 +64,7 @@ export default function DashboardScreen() {
 
   const [greeting, setGreeting] = useState('Good Afternoon');
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Check if officer has a registered profile photo
@@ -87,11 +89,11 @@ export default function DashboardScreen() {
 
     if (!isCheckedIn) {
       Alert.alert(
-        'Active Duty Required',
-        `You are currently INACTIVE. Please activate your duty before ${actionName}.`,
+        'Active Status Required',
+        `You are currently INACTIVE. Please activate your session before ${actionName}.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Activate Duty', onPress: () => router.push('/mark-attendance') }
+          { text: 'Activate', onPress: () => router.push('/mark-attendance') }
         ]
       );
       return false;
@@ -105,7 +107,7 @@ export default function DashboardScreen() {
       if (!hasProfilePhoto) {
         Alert.alert(
           'Profile Photo Required',
-          'Please upload your profile photo first in Settings before activating duty.',
+          'Please upload your profile photo first in Settings before activating.',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Upload Photo', onPress: () => router.push('/settings') }
@@ -284,9 +286,9 @@ export default function DashboardScreen() {
   const [modalClientSearch, setModalClientSearch] = useState('');
   const [modalSiteSearch, setModalSiteSearch] = useState('');
 
-  const filteredModalClients = clients.filter((c) =>
-    (c.name || '').toLowerCase().includes(modalClientSearch.toLowerCase())
-  );
+  const filteredModalClients = useMemo(() => {
+    return fuzzyFilter(clients, modalClientSearch, (c) => c.name || '');
+  }, [clients, modalClientSearch]);
 
   const filteredModalSites = modalSites.filter((s) => {
     const matchesClient = newClientId ? String(s.client_id) === String(newClientId) : false;
@@ -433,22 +435,31 @@ export default function DashboardScreen() {
 
   const syncAttendanceStatus = async () => {
     const isServerActive = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+    const hasServerExplicitInactive = !!(
+      (todayRecord && (todayRecord as any).no_active_session) ||
+      (todayRecord && todayRecord.check_out)
+    );
+
     let activePunch: any = null;
-    try {
-      const empId = user?.employee_id || (user?.id ? String(user.id) : '');
-      const punchLogs = await getPunchRecords(empId);
-      const nowMs = Date.now();
-      activePunch = punchLogs.find((r) => {
-        const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
-        const punchMs = r.timestamp || 0;
-        const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
-        return isPunchedIn && isWithin16Hours;
-      });
-    } catch (e) {
-      console.warn('Error reading punch records in dashboard sync:', e);
+    if (!hasServerExplicitInactive) {
+      try {
+        const empId = user?.employee_id || (user?.id ? String(user.id) : '');
+        const punchLogs = await getPunchRecords(empId);
+        const nowMs = Date.now();
+        const todayStr = new Date().toISOString().split('T')[0];
+        activePunch = punchLogs.find((r) => {
+          const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+          const punchMs = r.timestamp || 0;
+          const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
+          const isToday = !r.date || r.date === todayStr;
+          return isPunchedIn && isWithin16Hours && isToday;
+        });
+      } catch (e) {
+        console.warn('Error reading punch records in dashboard sync:', e);
+      }
     }
 
-    const isOfficerActive = isServerActive || !!activePunch;
+    const isOfficerActive = isServerActive || (!hasServerExplicitInactive && !!activePunch);
     setIsCheckedIn(isOfficerActive);
     if (isOfficerActive) {
       if (isServerActive && todayRecord?.check_in) {
@@ -467,15 +478,16 @@ export default function DashboardScreen() {
       updateGreeting();
       refreshStatus();
       syncAttendanceStatus();
-      fetchDashboardData();
+      fetchDashboardData(false);
     }, [])
   );
 
   // Synchronize Active Session state whenever server todayRecord or logs update
   useEffect(() => {
     syncAttendanceStatus();
-    fetchDashboardData();
+    fetchDashboardData(false);
   }, [todayRecord, attendanceLogs]);
+
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -500,7 +512,8 @@ export default function DashboardScreen() {
     else setGreeting(t('good_evening'));
   };
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (isPull: boolean = false) => {
+    if (isPull) setIsRefreshing(true);
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -642,6 +655,7 @@ export default function DashboardScreen() {
       console.warn('Dashboard global data error handled:', e);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -650,6 +664,7 @@ export default function DashboardScreen() {
     const done = pv.completedVisits || 0;
     const freq = pv.visitFrequency ? parseInt(String(pv.visitFrequency), 10) : (pv.frequency ? parseInt(String(pv.frequency), 10) : 1);
     if (done >= freq && freq > 0) return false;
+    if (isVisitDateRangeExpired(pv)) return false;
     return true;
   });
 
@@ -659,8 +674,18 @@ export default function DashboardScreen() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchDashboardData} tintColor="#3B82F6" />}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={async () => {
+              await refreshStatus();
+              await fetchDashboardData(true);
+            }}
+            tintColor="#3B82F6"
+          />
+        }
       >
+
         {/* 1. HEADER PROFILE CARD (CENTER ALIGNED) */}
         <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.headerProfileCardContent}>
@@ -673,11 +698,10 @@ export default function DashboardScreen() {
                 )}
               </View>
               <View style={styles.userTextCol}>
-                <Text style={[styles.greetingText, { color: colors.textSecondary }]} numberOfLines={1}>{greeting},</Text>
+                <Text style={[styles.greetingText, { color: colors.textSecondary }]} numberOfLines={1}>{greeting.replace(/,+$/, '')},</Text>
                 <Text style={[styles.userNameText, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">
                   {user?.name ? (user.name.trim().length > 16 ? `${user.name.trim().substring(0, 16)}...` : user.name.trim()) : 'Officer'}
                 </Text>
-                <Text style={[styles.empIdText, { color: colors.primary }]} numberOfLines={1}>EMP ID: {user?.employee_id || 'EMP001'}</Text>
               </View>
             </View>
 
@@ -815,7 +839,7 @@ export default function DashboardScreen() {
               <View style={styles.activateDutyButton}>
                 <Power color="#FFFFFF" size={14} strokeWidth={2.5} style={{ marginRight: 5 }} />
                 <Text style={styles.activateDutyButtonText}>
-                  ACTIVATE DUTY
+                  ACTIVATE
                 </Text>
               </View>
             )}
@@ -833,6 +857,7 @@ export default function DashboardScreen() {
               onPress={() => {
                 if (!checkDutyAccess('planning or starting client visits')) return;
                 setActiveVisitTab(0);
+                setModalClientSearch('');
                 loadClientsForModal();
                 setPlanVisitModalVisible(true);
               }}
@@ -860,11 +885,11 @@ export default function DashboardScreen() {
               <Text style={[styles.gridItemLabel, { color: colors.text }]}>New Client</Text>
             </TouchableOpacity>
 
-            {/* Patrolling Tours */}
+            {/* Patrolling / Checklist Tours */}
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => {
-                if (!checkDutyAccess('starting patrolling tours')) return;
+                if (!checkDutyAccess('starting checklist')) return;
                 router.push('/patrol');
               }}
               style={styles.gridItem}
@@ -872,7 +897,7 @@ export default function DashboardScreen() {
               <View style={[styles.gridIconCircle, { backgroundColor: colors.gridIconBg, borderColor: colors.gridIconBorder }]}>
                 <Shield color="#3B82F6" size={28} />
               </View>
-              <Text style={[styles.gridItemLabel, { color: colors.text }]}>Patrolling</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('patrolling') || 'Checklist'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1030,10 +1055,20 @@ export default function DashboardScreen() {
                   style={{ flexShrink: 1 }}
                   contentContainerStyle={{ paddingBottom: 20 }}
                   ListEmptyComponent={
-                    <View style={{ padding: 20, alignItems: 'center' }}>
-                      <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
-                        {loadingClients ? 'Loading clients...' : 'No clients found.'}
+                    <View style={{ padding: 28, alignItems: 'center', justifyContent: 'center' }}>
+                      <Search color={colors.textSecondary} size={28} style={{ marginBottom: 10, opacity: 0.5 }} />
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', fontWeight: '500' }}>
+                        {loadingClients
+                          ? 'Loading clients...'
+                          : !modalClientSearch.trim()
+                          ? 'Type client name to search...'
+                          : `No clients found matching "${modalClientSearch}".`}
                       </Text>
+                      {!modalClientSearch.trim() && !loadingClients && (
+                        <Text style={{ color: colors.placeholder, fontSize: 11, textAlign: 'center', marginTop: 4 }}>
+                          Names remain hidden until you search.
+                        </Text>
+                      )}
                     </View>
                   }
                   renderItem={({ item }) => (
@@ -1141,6 +1176,7 @@ export default function DashboardScreen() {
                           if (clients.length === 0) {
                             loadClientsForModal();
                           }
+                          setModalClientSearch('');
                           setPickerClientVisible(true);
                         }}
                       >

@@ -419,7 +419,6 @@ export default function AttendanceScreen() {
                     <Text style={styles.versionText}>v3.0.4</Text>
                   </View>
                 </View>
-                <Text style={styles.empIdText}>EMP ID: {user?.employee_id || 'S48453'}</Text>
               </View>
             </View>
 
@@ -499,7 +498,7 @@ export default function AttendanceScreen() {
                   { color: sessionTime !== '00:00:00' ? '#EF4444' : '#10B981' },
                 ]}
               >
-                {sessionTime !== '00:00:00' ? 'DEACTIVATE DUTY' : 'ACTIVATE DUTY'}
+                {sessionTime !== '00:00:00' ? 'DEACTIVATE' : 'ACTIVATE'}
               </Text>
             </TouchableOpacity>
 

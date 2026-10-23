@@ -166,9 +166,6 @@ export default function SettingsScreen() {
             <Text style={styles.userRole}>{user?.role || 'S/G'}</Text>
 
             <View style={styles.pillsRow}>
-              <View style={styles.pillBadge}>
-                <Text style={styles.pillText}>ID: {user?.employee_id || 'EMP002'}</Text>
-              </View>
               <View style={[styles.pillBadge, { backgroundColor: '#1E3A8A' }]}>
                 <Text style={[styles.pillText, { color: '#60A5FA' }]}>PUNE</Text>
               </View>
@@ -375,10 +372,6 @@ export default function SettingsScreen() {
                 <Text style={styles.execRole}>{user?.role || 'S/G'}</Text>
 
                 <View style={styles.execBadgeRow}>
-                  <View style={styles.execBadge}>
-                    <ShieldCheck color="#3B82F6" size={14} style={{ marginRight: 6 }} />
-                    <Text style={styles.execBadgeText}>{user?.employee_id || 'EMP002'}</Text>
-                  </View>
                   <View style={[styles.execBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
                     <ShieldCheck color="#10B981" size={14} style={{ marginRight: 6 }} />
                     <Text style={[styles.execBadgeText, { color: '#10B981' }]}>ACTIVE ENGAGEMENT</Text>

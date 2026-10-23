@@ -182,7 +182,7 @@ export const updatePunchRecordsList = async (updatedRecords: any[]) => {
   }
 };
 
-const getRawPunchRecords = async (): Promise<any[]> => {
+export const getRawPunchRecords = async (): Promise<any[]> => {
   try {
     const payload = await getStorageItem('fo_punch_records');
     return payload ? JSON.parse(payload) : [];
@@ -191,6 +191,42 @@ const getRawPunchRecords = async (): Promise<any[]> => {
     return [];
   }
 };
+
+export const reconcilePunchRecordsWithServer = async (isServerActive: boolean, todayDateStr?: string) => {
+  try {
+    const all = await getRawPunchRecords();
+    let modified = false;
+    const updated = all.map((r) => {
+      if (!isServerActive) {
+        if (r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--') {
+          modified = true;
+          return {
+            ...r,
+            status: 'COMPLETED',
+            punchOutTime: r.punchInTime || 'Completed',
+          };
+        }
+      } else if (todayDateStr && r.date && r.date !== todayDateStr) {
+        if (r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--') {
+          modified = true;
+          return {
+            ...r,
+            status: 'COMPLETED',
+            punchOutTime: r.punchInTime || 'Completed',
+          };
+        }
+      }
+      return r;
+    });
+
+    if (modified) {
+      await updatePunchRecordsList(updated);
+    }
+  } catch (e) {
+    console.error("Reconcile punch records failed", e);
+  }
+};
+
 
 export const getPunchRecords = async (empId?: string): Promise<any[]> => {
   try {

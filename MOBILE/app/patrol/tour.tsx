@@ -52,7 +52,7 @@ export default function PatrolTourProgressScreen() {
     siteName?: string;
   }>();
 
-  const tourName = params.tourName ? decodeURIComponent(params.tourName) : 'Patrolling Tour';
+  const tourName = params.tourName ? decodeURIComponent(params.tourName) : 'Checklist Tour';
   const siteId = params.siteId ? parseInt(params.siteId, 10) : 1;
   const siteName = params.siteName ? decodeURIComponent(params.siteName) : 'Site';
   const empOid = user?.id || 113;
@@ -497,7 +497,7 @@ export default function PatrolTourProgressScreen() {
                       <View style={styles.guardItemInfo}>
                         <Text style={[styles.guardName, { color: textColor }]}>{g.name}</Text>
                         <Text style={[styles.guardMeta, { color: subTextColor }]}>
-                          Code: {g.emp_code} • {g.role}
+                          {g.role}
                         </Text>
                       </View>
                       {isSelected ? (

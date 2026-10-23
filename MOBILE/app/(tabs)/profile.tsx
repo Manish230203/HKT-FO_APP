@@ -97,11 +97,6 @@ export default function ProfileScreen() {
             <Text style={styles.execRole}>{(user?.role || t('field_officer')).toUpperCase()}</Text>
 
             <View style={styles.pillsRow}>
-              <View style={styles.empBadge}>
-                <ShieldCheck color="#3B82F6" size={14} style={{ marginRight: 4 }} />
-                <Text style={styles.empBadgeText}>{user?.employee_id || 'EMP003'}</Text>
-              </View>
-
               <View style={styles.activeBadge}>
                 <ShieldCheck color="#10B981" size={14} style={{ marginRight: 4 }} />
                 <Text style={styles.activeBadgeText}>{t('active_engagement')}</Text>
