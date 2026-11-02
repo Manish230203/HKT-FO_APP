@@ -1,8 +1,8 @@
-import * as React from 'react';
-import { State } from '../State';
-import { TouchEventType } from '../TouchEventType';
-import { ValueOf } from '../typeUtils';
-import { PointerType } from '../PointerType';
+import type * as React from 'react';
+import type { PointerType } from '../PointerType';
+import type { State } from '../State';
+import type { TouchEventType } from '../TouchEventType';
+import type { ValueOf } from '../typeUtils';
 export declare const baseGestureHandlerProps: readonly ["id", "enabled", "shouldCancelWhenOutside", "hitSlop", "cancelsTouchesInView", "userSelect", "activeCursor", "mouseButton", "enableContextMenu", "touchAction", "waitFor", "simultaneousHandlers", "blocksHandlers", "onBegan", "onFailed", "onCancelled", "onActivated", "onEnded", "onGestureEvent", "onHandlerStateChange"];
 export declare const baseGestureHandlerWithDetectorProps: string[];
 export interface GestureEventPayload {
@@ -48,6 +48,13 @@ export type GestureTouchEvent = {
     changedTouches: TouchData[];
     pointerType: PointerType;
 };
+export interface StylusData {
+    tiltX: number;
+    tiltY: number;
+    azimuthAngle: number;
+    altitudeAngle: number;
+    pressure: number;
+}
 export type GestureUpdateEvent<GestureEventPayloadT = Record<string, unknown>> = GestureEventPayload & GestureEventPayloadT;
 export type GestureStateChangeEvent<GestureStateChangeEventPayloadT = Record<string, unknown>> = HandlerStateChangeEventPayload & GestureStateChangeEventPayloadT;
 export type CommonGestureConfig = {

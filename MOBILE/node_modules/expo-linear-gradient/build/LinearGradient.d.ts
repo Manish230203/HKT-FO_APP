@@ -64,7 +64,6 @@ export type LinearGradientProps = ViewProps & {
  * Renders a native view that transitions between multiple colors in a linear direction.
  */
 export declare class LinearGradient extends Component<LinearGradientProps> {
-    render(): import("react/jsx-runtime").JSX.Element;
+    render(): import("react").JSX.Element;
 }
 export type { NativeLinearGradientPoint } from './NativeLinearGradient.types';
-//# sourceMappingURL=LinearGradient.d.ts.map

@@ -51,13 +51,20 @@ export default class RotationGestureDetector {
     }
     this.onRotationEnd(this);
   }
-  setKeyPointers(tracker) {
+  setKeyPointers(tracker, excludeId) {
     if (this.keyPointers[0] && this.keyPointers[1]) {
       return;
     }
-    const pointerIDs = tracker.trackedPointers.keys();
-    this.keyPointers[0] = pointerIDs.next().value;
-    this.keyPointers[1] = pointerIDs.next().value;
+    let assigned = 0;
+    for (const id of tracker.trackedPointers.keys()) {
+      if (id === excludeId) {
+        continue;
+      }
+      this.keyPointers[assigned++] = id;
+      if (assigned === 2) {
+        break;
+      }
+    }
   }
   onTouchEvent(event, tracker) {
     switch (event.eventType) {
@@ -87,7 +94,13 @@ export default class RotationGestureDetector {
           break;
         }
         if (this.keyPointers.indexOf(event.pointerId) >= 0) {
-          this.finish();
+          if (tracker.trackedPointersCount <= 2) {
+            this.reset();
+          } else {
+            this.keyPointers = [NaN, NaN];
+            this.setKeyPointers(tracker, event.pointerId);
+            this.previousAngle = NaN;
+          }
         }
         break;
       case EventTypes.UP:
@@ -110,7 +123,7 @@ export default class RotationGestureDetector {
     return this._rotation;
   }
   get timeDelta() {
-    return this.currentTime + this.previousTime;
+    return this.currentTime - this.previousTime;
   }
 }
 //# sourceMappingURL=RotationGestureDetector.js.map

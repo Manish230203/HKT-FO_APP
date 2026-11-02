@@ -26,6 +26,11 @@
 
 - (void)interactionsBegan:(NSSet *)touches withEvent:(UIEvent *)event
 {
+  if (self.state == UIGestureRecognizerStatePossible && ![self.delegate gestureRecognizerShouldBegin:self]) {
+    self.state = UIGestureRecognizerStateFailed;
+    return;
+  }
+
   [_gestureHandler.pointerTracker touchesBegan:touches withEvent:event];
 
   if (_shouldSendBeginEvent) {
@@ -128,6 +133,11 @@
   }
 
   return self;
+}
+
+- (BOOL)isContinuous
+{
+  return YES;
 }
 
 @end

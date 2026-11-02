@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { getLanguageSetting, getConsentSetting } from '../services/db';
+import { getConsentSetting } from '../services/db';
 import { useTheme } from '../context/ThemeContext';
 
 export default function IndexScreen() {
@@ -18,17 +18,15 @@ export default function IndexScreen() {
     if (isLoading) return;
 
     try {
-      const savedLang = await getLanguageSetting();
-      const consentAccepted = await getConsentSetting();
+            const consentAccepted = await getConsentSetting();
 
-      if (!savedLang) {
-        router.replace('/lang/lang-selection');
-      } else if (!consentAccepted) {
+      if (!consentAccepted) {
         router.replace('/consent');
       } else if (user) {
         router.replace('/(tabs)/dashboard');
       } else {
-        router.replace('/login');
+        // First time login or relogin: present language selection page first
+        router.replace('/lang/lang-selection');
       }
     } catch (e) {
       console.error('Error during initial navigation check', e);
@@ -39,7 +37,7 @@ export default function IndexScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={[styles.text, { color: colors.textSecondary }]}>Initializing VIGILO-OFFICER...</Text>
+      <Text style={[styles.text, { color: colors.textSecondary }]}>Initializing VIGILO-O...</Text>
     </View>
   );
 }

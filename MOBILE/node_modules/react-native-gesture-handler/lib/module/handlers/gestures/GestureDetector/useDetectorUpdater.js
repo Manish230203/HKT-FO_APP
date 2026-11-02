@@ -1,11 +1,12 @@
 "use strict";
 
 import { useCallback } from 'react';
-import { attachHandlers } from './attachHandlers';
-import { updateHandlers } from './updateHandlers';
-import { needsToReattach } from './needsToReattach';
-import { dropHandlers } from './dropHandlers';
 import findNodeHandle from '../../../findNodeHandle';
+import { resolveHostInstance } from '../../../hostInstance';
+import { attachHandlers } from './attachHandlers';
+import { dropHandlers } from './dropHandlers';
+import { needsToReattach } from './needsToReattach';
+import { updateHandlers } from './updateHandlers';
 import { useForceRender } from './utils';
 
 // Returns a function that's responsible for updating the attached gestures
@@ -17,7 +18,7 @@ export function useDetectorUpdater(state, preparedGesture, gesturesToAttach, ges
   // skipConfigUpdate is used to prevent unnecessary updates when only checking if the view has changed
   skipConfigUpdate => {
     // If the underlying view has changed we need to reattach handlers to the new view
-    const viewTag = findNodeHandle(state.viewRef);
+    const viewTag = findNodeHandle(resolveHostInstance(state.viewRef));
     const didUnderlyingViewChange = viewTag !== state.previousViewTag;
     if (didUnderlyingViewChange || needsToReattach(preparedGesture, gesturesToAttach)) {
       dropHandlers(preparedGesture);

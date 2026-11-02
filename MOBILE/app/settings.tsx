@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Shield,
   Lock,
@@ -41,14 +41,24 @@ import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 
 export default function SettingsScreen() {
   const { user, logout, profileImage, updateProfileImage } = useAuth();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const { theme, isDark, toggleTheme, colors } = useTheme();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const router = useRouter();
+  const params = useLocalSearchParams<{ autoUpload?: string }>();
 
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showFullProfileModal, setShowFullProfileModal] = useState(false);
+
+  React.useEffect(() => {
+    if (params?.autoUpload === 'true') {
+      const timer = setTimeout(() => {
+        handleSelectProfileImageOption();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [params?.autoUpload]);
 
   const getLanguageText = () => {
     switch (language) {
@@ -62,7 +72,7 @@ export default function SettingsScreen() {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Gallery permission is required to select profile photo.');
+        Alert.alert(t('perm_required_title'), t('gallery_perm_checkpoint_msg'));
         return;
       }
 
@@ -77,9 +87,19 @@ export default function SettingsScreen() {
         const selectedUri = result.assets[0].uri;
         const uploadRes = await updateProfileImage(selectedUri);
         if (uploadRes && uploadRes.success) {
-          Alert.alert('Profile Registered', 'Profile photo updated and face embedding registered successfully!');
+          Alert.alert(
+            t('success'),
+            uploadRes?.message || t('profile_photo_title'),
+            [
+              {
+                text: t('activate_duty_now'),
+                onPress: () => router.replace('/mark-attendance'),
+              },
+              { text: 'OK', style: 'cancel' }
+            ]
+          );
         } else {
-          Alert.alert('Photo Saved', uploadRes?.message || 'Profile photo saved locally.');
+          Alert.alert(t('notice'), uploadRes?.message || t('profile_photo_title'));
         }
       }
     } catch (e) {
@@ -91,7 +111,7 @@ export default function SettingsScreen() {
     try {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert('Camera Permission Required', 'Camera permission is required to capture profile photo.');
+        Alert.alert(t('camera_perm_required'), t('camera_perm_msg'));
         return;
       }
 
@@ -106,9 +126,19 @@ export default function SettingsScreen() {
         const capturedUri = result.assets[0].uri;
         const uploadRes = await updateProfileImage(capturedUri);
         if (uploadRes && uploadRes.success) {
-          Alert.alert('Profile Registered', 'Profile photo updated and face embedding registered successfully!');
+          Alert.alert(
+            t('success'),
+            uploadRes?.message || t('profile_photo_title'),
+            [
+              {
+                text: t('activate_duty_now'),
+                onPress: () => router.replace('/mark-attendance'),
+              },
+              { text: 'OK', style: 'cancel' }
+            ]
+          );
         } else {
-          Alert.alert('Photo Saved', uploadRes?.message || 'Profile photo saved locally.');
+          Alert.alert(t('notice'), uploadRes?.message || t('profile_photo_title'));
         }
       }
     } catch (e) {
@@ -118,12 +148,12 @@ export default function SettingsScreen() {
 
   const handleSelectProfileImageOption = () => {
     Alert.alert(
-      'Profile Photo',
-      'Select an option to update your profile image:',
+      t('profile_photo_title'),
+      t('select_photo_option'),
       [
-        { text: 'Upload from Gallery', onPress: handleUploadImageFromLibrary },
-        { text: 'Take Photo with Camera', onPress: handleOpenCamera },
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('upload_from_gallery'), onPress: handleUploadImageFromLibrary },
+        { text: t('take_photo_camera'), onPress: handleOpenCamera },
+        { text: t('cancel'), style: 'cancel' },
       ],
       { cancelable: true }
     );
@@ -144,8 +174,23 @@ export default function SettingsScreen() {
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
               <ArrowLeft color={colors.text} size={22} />
             </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Profile & Preferences</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>{t('profile_preferences')}</Text>
           </View>
+
+          {/* Warning Banner when profile photo is required */}
+          {(!profileImage || params?.autoUpload === 'true') && (
+            <View style={[styles.warningBanner, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderColor: '#EF4444' }]}>
+              <AlertTriangle color="#EF4444" size={22} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.warningBannerTitle, { color: '#EF4444' }]}>
+                  {t('profile_photo_required_title') || 'Profile Photo Required'}
+                </Text>
+                <Text style={[styles.warningBannerDesc, { color: isDark ? '#FCA5A5' : '#B91C1C' }]}>
+                  {t('profile_photo_required_desc') || 'Please upload your profile photo to activate your duty session and enable face verification.'}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* 1. Header Profile Card */}
           <View style={[styles.profileHeaderCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -163,7 +208,6 @@ export default function SettingsScreen() {
             </TouchableOpacity>
 
             <Text style={styles.userName}>{user?.name || 'PAPPU KUMAR'}</Text>
-            <Text style={styles.userRole}>{user?.role || 'S/G'}</Text>
 
             <View style={styles.pillsRow}>
               <View style={[styles.pillBadge, { backgroundColor: '#1E3A8A' }]}>
@@ -178,7 +222,7 @@ export default function SettingsScreen() {
             >
               <Upload color="#60A5FA" size={16} style={{ marginRight: 8 }} />
               <Text style={styles.uploadProfileText}>
-                {profileImage ? 'CHANGE PROFILE IMAGE' : 'UPLOAD PROFILE IMAGE'}
+                {profileImage ? t('change_profile_image') : t('upload_profile_image')}
               </Text>
             </TouchableOpacity>
 
@@ -187,7 +231,7 @@ export default function SettingsScreen() {
               onPress={() => setShowFullProfileModal(true)}
               style={styles.viewFullProfileBtn}
             >
-              <Text style={styles.viewFullProfileText}>VIEW FULL PROFILE</Text>
+              <Text style={styles.viewFullProfileText}>{t('view_full_profile')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -269,7 +313,7 @@ export default function SettingsScreen() {
               <View style={styles.iconCircleBlue}>
                 <SettingsIcon color="#3B82F6" size={18} />
               </View>
-              <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>System Preferences</Text>
+              <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>{t('system_preferences')}</Text>
             </View>
 
             <TouchableOpacity
@@ -278,7 +322,7 @@ export default function SettingsScreen() {
             >
               <Languages color="#94A3B8" size={20} />
               <View style={styles.itemTextCol}>
-                <Text style={[styles.itemMainText, { color: colors.text }]}>Interface Language</Text>
+                <Text style={[styles.itemMainText, { color: colors.text }]}>{t('interface_language')}</Text>
                 <Text style={styles.itemSubText}>{getLanguageText()}</Text>
               </View>
               <ChevronRight color="#64748B" size={18} />
@@ -293,16 +337,17 @@ export default function SettingsScreen() {
                 <Sun color="#F59E0B" size={20} />
               )}
               <View style={styles.itemTextCol}>
-                <Text style={[styles.itemMainText, { color: colors.text }]}>Theme Mode</Text>
+                <Text style={[styles.itemMainText, { color: colors.text }]}>{t('theme_mode')}</Text>
                 <Text style={[styles.itemSubText, { color: isDark ? '#3B82F6' : '#F59E0B' }]}>
-                  {isDark ? 'DARK MODE (ACTIVE)' : 'LIGHT MODE (ACTIVE)'}
+                  {isDark ? t('dark_mode_active') : t('light_mode_active')}
                 </Text>
               </View>
               <Switch
                 value={isDark}
                 onValueChange={toggleTheme}
-                trackColor={{ false: '#94A3B8', true: '#3B82F6' }}
+                trackColor={{ false: isDark ? '#334155' : '#CBD5E1', true: colors.primary }}
                 thumbColor="#FFFFFF"
+                ios_backgroundColor={isDark ? '#334155' : '#CBD5E1'}
               />
             </View>
           </View>
@@ -369,7 +414,6 @@ export default function SettingsScreen() {
 
                 <Text style={styles.execLabel}>EXECUTIVE PROFILE</Text>
                 <Text style={styles.execName}>{user?.name || 'PAPPU KUMAR'}</Text>
-                <Text style={styles.execRole}>{user?.role || 'S/G'}</Text>
 
                 <View style={styles.execBadgeRow}>
                   <View style={[styles.execBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
@@ -379,10 +423,10 @@ export default function SettingsScreen() {
                 </View>
 
                 <View style={styles.execAvatarBox}>
-                  {profileImage ? (
+                  {profileImage && profileImage.trim().length > 0 ? (
                     <Image source={{ uri: profileImage }} style={styles.avatarImage} />
                   ) : (
-                    <User color="#FFFFFF" size={40} />
+                    <User color={colors.primary} size={36} />
                   )}
                 </View>
               </View>
@@ -444,12 +488,12 @@ export default function SettingsScreen() {
 
         <CustomAlertModal
           visible={showSignOutConfirm}
-          title="Sign Out"
-          message="Terminating your account session will erase sync logs. Are you sure you want to sign out?"
+          title={t('logout')}
+          message={t('confirm_logout')}
           type="error"
           onClose={() => setShowSignOutConfirm(false)}
           onConfirm={handleSignOut}
-          confirmText="SIGN OUT"
+          confirmText={t('logout').toUpperCase()}
         />
       </SafeAreaView>
     </SwipeableBackWrapper>
@@ -565,7 +609,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     marginBottom: 8,
   },
   uploadProfileText: {
-    color: '#60A5FA',
+    color: isDark ? '#60A5FA' : '#2563EB',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -640,10 +684,12 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
 
   departureCard: {
-    backgroundColor: '#FFF1F2',
+    backgroundColor: isDark ? 'rgba(225, 29, 72, 0.12)' : '#FFF1F2',
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(225, 29, 72, 0.25)' : 'rgba(225, 29, 72, 0.1)',
   },
   departureTitleRow: {
     flexDirection: 'row',
@@ -658,7 +704,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   departureSubText: {
     fontSize: 12,
-    color: '#9F1239',
+    color: isDark ? '#FCA5A5' : '#9F1239',
     lineHeight: 18,
     marginBottom: 16,
   },
@@ -690,12 +736,12 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   appInfoLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: colors.textSecondary,
   },
   appInfoVal: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.text,
   },
   stableBadge: {
     backgroundColor: 'rgba(59, 130, 246, 0.15)',
@@ -838,5 +884,23 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.text,
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  warningBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  warningBannerDesc: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
   },
 });

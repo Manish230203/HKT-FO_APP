@@ -45,6 +45,13 @@
 
 - (void)handleGesture:(UIGestureRecognizer *)recognizer
 {
+  [self handleGesture:recognizer fromReset:NO fromManualStateChange:NO];
+}
+
+- (void)handleGesture:(UIGestureRecognizer *)recognizer
+                fromReset:(BOOL)fromReset
+    fromManualStateChange:(BOOL)fromManualStateChange
+{
   if (self.state == UIGestureRecognizerStateBegan) {
 #if TARGET_OS_OSX
     self.magnification = 1;
@@ -52,12 +59,16 @@
     self.scale = 1;
 #endif
   }
-
-  [_gestureHandler handleGesture:recognizer fromReset:NO];
+  [_gestureHandler handleGesture:recognizer fromReset:fromReset fromManualStateChange:fromManualStateChange];
 }
 
 - (void)interactionsBegan:(NSSet *)touches withEvent:(UIEvent *)event
 {
+  if (self.state == UIGestureRecognizerStatePossible && ![self.delegate gestureRecognizerShouldBegin:self]) {
+    self.state = UIGestureRecognizerStateFailed;
+    return;
+  }
+
   [_gestureHandler.pointerTracker touchesBegan:touches withEvent:event];
 }
 
@@ -150,13 +161,18 @@
   return self;
 }
 
+- (BOOL)isContinuous
+{
+  return YES;
+}
+
 #if !TARGET_OS_TV
 
 #if TARGET_OS_OSX
 - (RNGestureHandlerEventExtraData *)eventExtraData:(NSMagnificationGestureRecognizer *)recognizer
 {
   return [RNGestureHandlerEventExtraData forPinch:recognizer.magnification
-                                   withFocalPoint:[recognizer locationInView:recognizer.view]
+                                   withFocalPoint:[recognizer locationInView:self.coordinateView]
                                      withVelocity:((RNBetterPinchRecognizer *)recognizer).velocity
                               withNumberOfTouches:2
                                   withPointerType:RNGestureHandlerMouse];
@@ -166,12 +182,13 @@
 {
   CGPoint focalPoint;
   NSUInteger numberOfTouches = recognizer.numberOfTouches;
+  RNGHUIView *coordinateView = self.coordinateView;
 
   if (numberOfTouches > 0) {
     CGPoint accumulatedPoint = CGPointZero;
 
     for (int i = 0; i < numberOfTouches; i++) {
-      CGPoint location = [recognizer locationOfTouch:i inView:recognizer.view];
+      CGPoint location = [recognizer locationOfTouch:i inView:coordinateView];
       accumulatedPoint.x += location.x;
       accumulatedPoint.y += location.y;
     }
@@ -179,7 +196,7 @@
     focalPoint = CGPointMake(accumulatedPoint.x / numberOfTouches, accumulatedPoint.y / numberOfTouches);
   } else {
     // Trackpad pinch gestures may report 0 touches - use the recognizer's location instead
-    focalPoint = [recognizer locationInView:recognizer.view];
+    focalPoint = [recognizer locationInView:coordinateView];
   }
 
   return [RNGestureHandlerEventExtraData forPinch:recognizer.scale

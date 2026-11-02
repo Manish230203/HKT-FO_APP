@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,10 +16,12 @@ import {
   Easing,
   KeyboardAvoidingView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import {
   Search,
   Fingerprint,
@@ -42,15 +44,17 @@ import {
   ChevronRight,
   Shield,
   Power,
+  MapPin,
+  Navigation,
+  AlertTriangle,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
-import { getPlannedVisits, createPlannedVisit, getSites, getClients, Site, Client, PlannedVisit, isVisitDateRangeExpired } from '../../services/siteService';
+import { getPlannedVisits, createPlannedVisit, checkExistingClientSite, getSites, getClients, Site, Client, PlannedVisit, isVisitDateRangeExpired } from '../../services/siteService';
 import { getPunchRecords } from '../../services/db';
-import { getDayVisitReports, getNightVisitReports, getGeneralVisits } from '../../services/visitService';
 import { getConsentSetting } from '../../services/db';
 import { fuzzyFilter } from '../../utils/fuzzySearch';
 
@@ -69,21 +73,28 @@ export default function DashboardScreen() {
 
   // Check if officer has a registered profile photo
   const hasProfilePhoto = Boolean(
-    profileImage ||
-    (profileData && profileData.profile_photo) ||
-    (user && (user as any).profile_photo)
+    (profileImage && profileImage.trim().length > 0) ||
+    (profileData && profileData.profile_photo && String(profileData.profile_photo).trim().length > 0 && String(profileData.profile_photo) !== 'null')
   );
+
+  const showProfilePhotoRequiredWarning = (actionDesc: string = 'activating duty session') => {
+    Alert.alert(
+      t('profile_photo_required_title') || 'Profile Photo Required',
+      t('profile_photo_required_desc') || `Profile photo is not uploaded. You must upload your profile photo first before ${actionDesc}.`,
+      [
+        { text: t('cancel') || 'Cancel', style: 'cancel' },
+        {
+          text: t('upload_photo') || 'Upload Photo',
+          onPress: () => router.push({ pathname: '/settings', params: { autoUpload: 'true' } }),
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const checkDutyAccess = (actionName: string = 'access this feature'): boolean => {
     if (!hasProfilePhoto) {
-      Alert.alert(
-        'Profile Photo Required',
-        `Please upload your profile photo first in Settings before ${actionName}.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Upload Photo', onPress: () => router.push('/settings') }
-        ]
-      );
+      showProfilePhotoRequiredWarning(actionName);
       return false;
     }
 
@@ -93,7 +104,7 @@ export default function DashboardScreen() {
         `You are currently INACTIVE. Please activate your session before ${actionName}.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Activate', onPress: () => router.push('/mark-attendance') }
+          { text: 'Activate', onPress: () => handleDutyCardPress() }
         ]
       );
       return false;
@@ -105,14 +116,7 @@ export default function DashboardScreen() {
   const handleDutyCardPress = () => {
     if (!isCheckedIn) {
       if (!hasProfilePhoto) {
-        Alert.alert(
-          'Profile Photo Required',
-          'Please upload your profile photo first in Settings before activating.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Upload Photo', onPress: () => router.push('/settings') }
-          ]
-        );
+        showProfilePhotoRequiredWarning('activating your session');
         return;
       }
       router.push('/mark-attendance');
@@ -224,6 +228,10 @@ export default function DashboardScreen() {
   const [newSiteId, setNewSiteId] = useState('');
   const [customClientName, setCustomClientName] = useState('');
   const [customSiteName, setCustomSiteName] = useState('');
+  const [customAddress, setCustomAddress] = useState('');
+  const [customLatitude, setCustomLatitude] = useState('');
+  const [customLongitude, setCustomLongitude] = useState('');
+  const [existingWarning, setExistingWarning] = useState<string | null>(null);
   const [newPlanningType, setNewPlanningType] = useState('SINGLE');
   const [newVisitFrequency, setNewVisitFrequency] = useState('1');
   const [newVisitDate, setNewVisitDate] = useState(new Date().toISOString().split('T')[0]);
@@ -234,6 +242,35 @@ export default function DashboardScreen() {
     return d.toISOString().split('T')[0];
   });
   const [creatingVisit, setCreatingVisit] = useState(false);
+
+  // Debounced check for existing client and site
+  useEffect(() => {
+    if (activeVisitTab !== 1 || !customClientName.trim() || !customSiteName.trim()) {
+      setExistingWarning(null);
+      return;
+    }
+
+    if (customClientName.trim().length < 2 || customSiteName.trim().length < 2) {
+      setExistingWarning(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const empOidVal = user?.empOid || user?.id || user?.employee_id || 7558;
+        const res = await checkExistingClientSite(customClientName, customSiteName, empOidVal);
+        if (res && res.exists) {
+          setExistingWarning(res.message || t('existing_client_site_notice'));
+        } else {
+          setExistingWarning(null);
+        }
+      } catch {
+        setExistingWarning(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [customClientName, customSiteName, activeVisitTab, user, t]);
 
   // Date Picker State
   const [activeDatePicker, setActiveDatePicker] = useState<'visit' | 'start' | 'end' | null>(null);
@@ -287,15 +324,24 @@ export default function DashboardScreen() {
   const [modalSiteSearch, setModalSiteSearch] = useState('');
 
   const filteredModalClients = useMemo(() => {
-    return fuzzyFilter(clients, modalClientSearch, (c) => c.name || '');
-  }, [clients, modalClientSearch]);
+    const officerBranch = (user?.branch_name || '').trim().toLowerCase();
+    const branchClients = officerBranch
+      ? clients.filter((c) => !c.branch_name || c.branch_name.trim().toLowerCase() === officerBranch)
+      : clients;
 
-  const filteredModalSites = modalSites.filter((s) => {
-    const matchesClient = newClientId ? String(s.client_id) === String(newClientId) : false;
-    const matchesSearch = (s.name || '').toLowerCase().includes(modalSiteSearch.toLowerCase()) ||
-                          (s.client_name && s.client_name.toLowerCase().includes(modalSiteSearch.toLowerCase()));
-    return matchesClient && matchesSearch;
-  });
+    return fuzzyFilter(branchClients, modalClientSearch, (c) => [c.name, c.code].filter(Boolean) as string[]);
+  }, [clients, modalClientSearch, user?.branch_name]);
+
+  const filteredModalSites = useMemo(() => {
+    const officerBranch = (user?.branch_name || '').trim().toLowerCase();
+    return modalSites.filter((s) => {
+      const matchesClient = newClientId ? String(s.client_id) === String(newClientId) : false;
+      const matchesBranch = !officerBranch || !s.branch_name || s.branch_name.trim().toLowerCase() === officerBranch;
+      const matchesSearch = (s.name || '').toLowerCase().includes(modalSiteSearch.toLowerCase()) ||
+                            (s.client_name && s.client_name.toLowerCase().includes(modalSiteSearch.toLowerCase()));
+      return matchesClient && matchesBranch && matchesSearch;
+    });
+  }, [modalSites, newClientId, modalSiteSearch, user?.branch_name]);
 
   const handleTypeChange = (type: string) => {
     setNewPlanningType(type);
@@ -323,46 +369,51 @@ export default function DashboardScreen() {
 
   // Visits Data
   const [plannedVisits, setPlannedVisits] = useState<PlannedVisit[]>([]);
-  const [completedVisits, setCompletedVisits] = useState<Array<any>>([]);
   const [loadingClients, setLoadingClients] = useState(false);
+  const lastFetchRef = useRef<number>(0);
 
   const loadClientsForModal = async () => {
     try {
       setLoadingClients(true);
-      const empOidVal = user?.id || user?.empOid || user?.employee_id || 7558;
-      const [cList, sList] = await Promise.all([getClients(empOidVal), getSites(empOidVal)]);
-      setClients(cList || []);
-      setModalSites(sList || []);
+      const empOidVal = user?.id || (user as any)?.empOid || user?.employee_id || 7558;
+      const branchNameVal = user?.branch_name || undefined;
+      const [cResult, sResult] = await Promise.allSettled([
+        getClients(empOidVal, branchNameVal),
+        getSites(empOidVal, undefined, branchNameVal)
+      ]);
+      if (cResult.status === 'fulfilled' && cResult.value && cResult.value.length > 0) {
+        setClients(cResult.value);
+      }
+      if (sResult.status === 'fulfilled' && sResult.value && sResult.value.length > 0) {
+        setModalSites(sResult.value);
+      }
     } catch (err) {
-      console.error('Failed to load clients & sites', err);
+      console.warn('Failed to load clients & sites:', err);
     } finally {
       setLoadingClients(false);
     }
   };
 
-  useEffect(() => {
-    loadClientsForModal();
-  }, []);
 
   const handleCreateNewVisit = async () => {
     const isOtherClient = activeVisitTab === 1;
 
     if (isOtherClient) {
       if (!customClientName.trim()) {
-        Alert.alert('Required', 'Please enter Client Name.');
+        Alert.alert(t('required'), t('enter_client_name'));
         return;
       }
       if (!customSiteName.trim()) {
-        Alert.alert('Required', 'Please enter Site Name.');
+        Alert.alert(t('required'), t('enter_site_name'));
         return;
       }
     } else {
       if (!newClientId) {
-        Alert.alert('Required', 'Please select a Client first.');
+        Alert.alert(t('required'), t('select_client_first'));
         return;
       }
       if (!newSiteId) {
-        Alert.alert('Required', t('select_site_alert') || 'Please select a site to assign visit.');
+        Alert.alert(t('required'), t('select_site_alert'));
         return;
       }
     }
@@ -373,6 +424,9 @@ export default function DashboardScreen() {
       const payload: any = {
         planningType: newPlanningType,
         officerId: empOidVal,
+        createdBy: empOidVal,
+        created_by: empOidVal,
+        employee_oid: empOidVal,
         visitFrequency: parseInt(newVisitFrequency, 10) || 1,
       };
 
@@ -383,6 +437,10 @@ export default function DashboardScreen() {
         payload.siteName = customSiteName.trim();
         payload.customClientName = customClientName.trim();
         payload.customSiteName = customSiteName.trim();
+        payload.address = customAddress.trim() || undefined;
+        payload.latitude = customLatitude.trim() ? parseFloat(customLatitude.trim()) : undefined;
+        payload.longitude = customLongitude.trim() ? parseFloat(customLongitude.trim()) : undefined;
+        payload.branchId = user?.branch_id || (user as any)?.branch_oid || 1;
       } else {
         payload.siteId = parseInt(newSiteId, 10);
       }
@@ -407,10 +465,14 @@ export default function DashboardScreen() {
       const res = await createPlannedVisit(payload);
 
       if (res && res.success) {
-        Alert.alert('Success', 'Visit planned successfully!');
+        Alert.alert(t('all_clear'), t('visit_planned_success'));
         if (isOtherClient) {
           setCustomClientName('');
           setCustomSiteName('');
+          setCustomAddress('');
+          setCustomLatitude('');
+          setCustomLongitude('');
+          setExistingWarning(null);
         } else {
           setNewClientId('');
           setNewSiteId('');
@@ -418,15 +480,16 @@ export default function DashboardScreen() {
         setPlanVisitModalVisible(false);
         fetchDashboardData();
       } else {
-        Alert.alert('Notice', res?.message || t('failed_assign_visit') || 'Failed to assign visit.');
+        Alert.alert(t('existing_client_site_title'), res?.message || t('failed_assign_visit'));
       }
     } catch (e: any) {
       console.error('Create visit error:', e);
       const isTimeout = e?.code === 'ECONNABORTED' || (e?.message && e.message.toLowerCase().includes('timeout'));
       if (isTimeout) {
-        Alert.alert('Network Timeout', 'Network request timed out. Please check your connection and try again.');
+        Alert.alert(t('network_timeout'), t('network_timeout'));
       } else {
-        Alert.alert('Error', t('failed_assign_visit_db') || 'Failed to assign visit to DB.');
+        const errorMsg = e?.response?.data?.message || e?.response?.data?.detail || t('failed_assign_visit_db') || 'Failed to assign visit to DB.';
+        Alert.alert(t('existing_client_site_title'), errorMsg);
       }
     } finally {
       setCreatingVisit(false);
@@ -447,12 +510,15 @@ export default function DashboardScreen() {
         const punchLogs = await getPunchRecords(empId);
         const nowMs = Date.now();
         const todayStr = new Date().toISOString().split('T')[0];
+        const currentEmpId = String(user?.employee_id || user?.id || '').toLowerCase();
         activePunch = punchLogs.find((r) => {
           const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
           const punchMs = r.timestamp || 0;
           const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
           const isToday = !r.date || r.date === todayStr;
-          return isPunchedIn && isWithin16Hours && isToday;
+          const recordEmpId = String(r.employee_id || r.employeeId || '').toLowerCase();
+          const matchesEmp = !currentEmpId || recordEmpId === currentEmpId;
+          return isPunchedIn && isWithin16Hours && isToday && matchesEmp;
         });
       } catch (e) {
         console.warn('Error reading punch records in dashboard sync:', e);
@@ -476,21 +542,24 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       updateGreeting();
-      refreshStatus();
-      syncAttendanceStatus();
-      fetchDashboardData(false);
+      (async () => {
+        try {
+          await refreshStatus();
+        } catch (e) {}
+        await syncAttendanceStatus();
+        fetchDashboardData(false);
+      })();
     }, [])
   );
 
   // Synchronize Active Session state whenever server todayRecord or logs update
   useEffect(() => {
     syncAttendanceStatus();
-    fetchDashboardData(false);
   }, [todayRecord, attendanceLogs]);
 
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (isCheckedIn && sessionStart) {
       timer = setInterval(() => {
         const diff = Math.floor((new Date().getTime() - sessionStart.getTime()) / 1000);
@@ -513,144 +582,37 @@ export default function DashboardScreen() {
   };
 
   const fetchDashboardData = async (isPull: boolean = false) => {
+    const now = Date.now();
+    if (!isPull && now - lastFetchRef.current < 20000) {
+      return;
+    }
+    lastFetchRef.current = now;
+
     if (isPull) setIsRefreshing(true);
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
       const empOidVal = user?.id || user?.empOid || user?.employee_id || 7558;
 
-      // 1. Fetch Sites safely
-      try {
-        const siteList = await getSites(empOidVal);
-        setSites(siteList || []);
-        if (siteList && siteList.length > 0) {
-          setBaseSiteName(siteList[0].name || 'Main Base HQ');
-        }
-      } catch (err) {
-        console.warn('Dashboard sites fetch warning:', err);
-      }
-
-      // 2. Attendance & Punch Record Session state
+      // 1. Sync Attendance & Punch Record Session state
       await syncAttendanceStatus();
 
-      // 3. Fetch Planned Visits safely
-      try {
-        const planned = await getPlannedVisits(empOidVal);
-        setPlannedVisits(planned || []);
-      } catch (err) {
-        console.warn('Dashboard planned visits fetch warning:', err);
+      // 2. Fetch Sites and Planned Visits in parallel to minimize latency
+      const [sitesRes, plannedRes] = await Promise.allSettled([
+        getSites(empOidVal),
+        getPlannedVisits(empOidVal),
+      ]);
+
+      if (sitesRes.status === 'fulfilled' && sitesRes.value) {
+        const siteList = sitesRes.value;
+        setSites(siteList);
+        if (siteList.length > 0) {
+          setBaseSiteName(siteList[0].name || 'Main Base HQ');
+        }
       }
 
-      // 4. Fetch Completed Visit Reports safely
-      const compiled: any[] = [];
-      const seenIds = new Set<string>();
-
-      try {
-        const dayReps = await getDayVisitReports(empOidVal);
-        (dayReps || []).forEach((r: any, idx: number) => {
-          const rawOid = String(r.id || r.oid || idx);
-          const itemKey = rawOid.startsWith('day_') ? rawOid : `day_${rawOid}`;
-          if (!seenIds.has(itemKey)) {
-            seenIds.add(itemKey);
-            compiled.push({
-              id: itemKey,
-              reportNo: r.reportNo || r.report_id || `DVR-${rawOid}`,
-              clientName: r.client_name || r.clientName || r.company || 'Client',
-              siteName: r.site_name || r.unit || 'Site',
-              visitType: 'Day Visit',
-              date: r.visitDate || r.visit_date || r.createdOn || today,
-              officer: r.officer || user?.name || 'FO Officer',
-              status: 'Completed',
-              rawReport: r,
-            });
-          }
-        });
-      } catch (err) {
-        console.warn('Day visit reports fetch warning:', err);
+      if (plannedRes.status === 'fulfilled' && plannedRes.value) {
+        setPlannedVisits(plannedRes.value);
       }
-
-      try {
-        const nightReps = await getNightVisitReports(empOidVal);
-        (nightReps || []).forEach((r: any, idx: number) => {
-          const rawOid = String(r.id || r.oid || idx);
-          const itemKey = rawOid.startsWith('night_') ? rawOid : `night_${rawOid}`;
-          if (!seenIds.has(itemKey)) {
-            seenIds.add(itemKey);
-            compiled.push({
-              id: itemKey,
-              reportNo: r.reportNo || r.report_id || `NVR-${rawOid}`,
-              clientName: r.client_name || r.clientName || r.company || 'Client',
-              siteName: r.site_name || r.unit || 'Site',
-              visitType: 'Night Round',
-              date: r.visitDate || r.visit_date || r.createdOn || today,
-              officer: r.officer || user?.name || 'FO Officer',
-              status: 'Completed',
-              rawReport: r,
-            });
-          }
-        });
-      } catch (err) {
-        console.warn('Night visit reports fetch warning:', err);
-      }
-
-      try {
-        const genReps = await getGeneralVisits(empOidVal);
-        (genReps || []).forEach((r: any, idx: number) => {
-          const rawOid = String(r.id || r.oid || idx);
-          const itemKey = rawOid.startsWith('gen_') ? rawOid : `gen_${rawOid}`;
-          if (!seenIds.has(itemKey)) {
-            seenIds.add(itemKey);
-            compiled.push({
-              id: itemKey,
-              reportNo: r.report_id || r.report_no || r.reportNo || `GVR-${rawOid}`,
-              clientName: r.client_name || r.clientName || 'Client',
-              siteName: r.site_name || r.siteName || 'Site',
-              visitType: 'General Audit',
-              date: r.visit_date || r.visitDate || today,
-              officer: r.officer || user?.name || 'FO Officer',
-              status: 'Completed',
-              rawReport: r,
-            });
-          }
-        });
-      } catch (err) {
-        console.warn('General visit reports fetch warning:', err);
-      }
-
-      compiled.sort((a: any, b: any) => {
-        const getTimestamp = (item: any) => {
-          const r = item.rawReport || {};
-          const created = r.created_on || r.createdOn || item.date;
-          const checkOut = r.check_out_time || r.checkOutTime || r['check-out_time'];
-          const checkIn = r.check_in_time || r.checkInTime || r['check-in_time'];
-
-          let timeMs = 0;
-          if (created) {
-            const normCreated = typeof created === 'string' ? created.replace(' ', 'T') : created;
-            const dt = new Date(normCreated);
-            if (!isNaN(dt.getTime())) timeMs = dt.getTime();
-          }
-
-          if (timeMs === 0) {
-            const datePart = (item.date || (typeof created === 'string' ? created : '') || '').slice(0, 10);
-            const timePart = checkOut || checkIn || '00:00';
-            const combined = new Date(`${datePart}T${timePart}:00`);
-            if (!isNaN(combined.getTime())) timeMs = combined.getTime();
-          }
-
-          return timeMs;
-        };
-
-        const tA = getTimestamp(a);
-        const tB = getTimestamp(b);
-        if (tA !== tB) return tB - tA;
-
-        const oidA = parseInt(String(a.rawReport?.oid || a.id || '0').replace(/\D/g, ''), 10) || 0;
-        const oidB = parseInt(String(b.rawReport?.oid || b.id || '0').replace(/\D/g, ''), 10) || 0;
-        return oidB - oidA;
-      });
-
-      setCompletedVisits(compiled);
     } catch (e) {
       console.warn('Dashboard global data error handled:', e);
     } finally {
@@ -670,7 +632,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={[styles.safeContainer, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -689,12 +651,16 @@ export default function DashboardScreen() {
         {/* 1. HEADER PROFILE CARD (CENTER ALIGNED) */}
         <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.headerProfileCardContent}>
-            <View style={styles.userProfileSection}>
-              <View style={[styles.avatarWrapper, { backgroundColor: isDark ? '#000000' : colors.surfaceSecondary }]}>
-                {profileImage ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push(hasProfilePhoto ? '/profile' : { pathname: '/settings', params: { autoUpload: 'true' } })}
+              style={styles.userProfileSection}
+            >
+              <View style={[styles.avatarWrapper, { backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}>
+                {hasProfilePhoto && profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.avatarImage} />
                 ) : (
-                  <User color={colors.text} size={26} />
+                  <User color={colors.primary} size={26} />
                 )}
               </View>
               <View style={styles.userTextCol}>
@@ -703,7 +669,7 @@ export default function DashboardScreen() {
                   {user?.name ? (user.name.trim().length > 16 ? `${user.name.trim().substring(0, 16)}...` : user.name.trim()) : 'Officer'}
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
 
             <View style={styles.companyLogoContainer}>
               <Image source={getCompanyLogo()} style={styles.companyLogoImage} resizeMode="contain" />
@@ -836,12 +802,16 @@ export default function DashboardScreen() {
                 </Text>
               </View>
             ) : (
-              <View style={styles.activateDutyButton}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleDutyCardPress}
+                style={styles.activateDutyButton}
+              >
                 <Power color="#FFFFFF" size={14} strokeWidth={2.5} style={{ marginRight: 5 }} />
                 <Text style={styles.activateDutyButtonText}>
-                  ACTIVATE
+                  {t('activate_caps') || 'ACTIVATE'}
                 </Text>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
         </TouchableOpacity>
@@ -866,7 +836,7 @@ export default function DashboardScreen() {
               <View style={[styles.gridIconCircle, { backgroundColor: colors.gridIconBg, borderColor: colors.gridIconBorder }]}>
                 <Building2 color="#3B82F6" size={28} />
               </View>
-              <Text style={[styles.gridItemLabel, { color: colors.text }]}>Existing Client</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('existing_client')}</Text>
             </TouchableOpacity>
 
             {/* New Client Visit */}
@@ -882,23 +852,9 @@ export default function DashboardScreen() {
               <View style={[styles.gridIconCircle, { backgroundColor: colors.gridIconBg, borderColor: colors.gridIconBorder }]}>
                 <UserPlus color="#10B981" size={28} />
               </View>
-              <Text style={[styles.gridItemLabel, { color: colors.text }]}>New Client</Text>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('new_client')}</Text>
             </TouchableOpacity>
 
-            {/* Patrolling / Checklist Tours */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => {
-                if (!checkDutyAccess('starting checklist')) return;
-                router.push('/patrol');
-              }}
-              style={styles.gridItem}
-            >
-              <View style={[styles.gridIconCircle, { backgroundColor: colors.gridIconBg, borderColor: colors.gridIconBorder }]}>
-                <Shield color="#3B82F6" size={28} />
-              </View>
-              <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('patrolling') || 'Checklist'}</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -941,6 +897,28 @@ export default function DashboardScreen() {
                 </View>
               </View>
               <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('completed_visits')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 6. GUARD ATTENDANCE SECTION */}
+        <View style={[styles.standardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>GUARD ATTENDANCE</Text>
+
+          <View style={styles.gridItemsRow}>
+            {/* Guard Attendance Card */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                if (!checkDutyAccess('viewing guard attendance')) return;
+                router.push('/guard-attendance');
+              }}
+              style={styles.gridItem}
+            >
+              <View style={[styles.gridIconCircle, { backgroundColor: colors.gridIconBg, borderColor: colors.gridIconBorder }]}>
+                <Shield color="#06B6D4" size={28} />
+              </View>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>Guard Attendance</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1085,9 +1063,19 @@ export default function DashboardScreen() {
                       }}
                     >
                       <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
-                      <Text style={[styles.modalItemRowText, { color: colors.text }, String(item.id) === String(newClientId) && { color: '#3B82F6', fontWeight: '700' }]}>
-                        {item.name}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.modalItemRowText, { color: colors.text }, String(item.id) === String(newClientId) && { color: '#3B82F6', fontWeight: '700' }]}>
+                          {item.name}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, flexWrap: 'wrap', gap: 6 }}>
+                          {item.code ? (
+                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                              Code: {item.code}
+                            </Text>
+                          ) : null}
+
+                        </View>
+                      </View>
                     </TouchableOpacity>
                   )}
                 />
@@ -1147,9 +1135,12 @@ export default function DashboardScreen() {
                         <Text style={[styles.modalItemRowText, { color: colors.text }, String(item.id) === String(newSiteId) && { color: '#10B981', fontWeight: '700' }]}>
                           {item.name}
                         </Text>
-                        {item.client_name ? (
-                          <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{item.client_name}</Text>
-                        ) : null}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, flexWrap: 'wrap', gap: 6 }}>
+                          {item.client_name ? (
+                            <Text style={{ fontSize: 10, color: colors.textSecondary }}>{item.client_name}</Text>
+                          ) : null}
+
+                        </View>
                       </View>
                     </TouchableOpacity>
                   )}
@@ -1159,7 +1150,7 @@ export default function DashboardScreen() {
               <>
                 <View style={styles.modalHeader}>
                   <Text style={[styles.modalTitle, { color: colors.text }]}>
-                    {activeVisitTab === 0 ? 'PLAN VISIT - REGISTERED CLIENT' : 'PLAN VISIT - NEW CLIENT'}
+                    {activeVisitTab === 0 ? (t('existing_client_visit') || 'Existing Client Visit').toUpperCase() : (t('new_client_visit') || 'New Client Visit').toUpperCase()}
                   </Text>
                   <TouchableOpacity onPress={() => setPlanVisitModalVisible(false)}>
                     <X color={colors.textSecondary} size={24} />
@@ -1188,7 +1179,7 @@ export default function DashboardScreen() {
                           ]}
                           numberOfLines={1}
                         >
-                          {clients.find((c) => String(c.id) === String(newClientId))?.name || 'Choose registered client...'}
+                          {clients.find((c) => String(c.id) === String(newClientId))?.name || t('choose_assigned_site')}
                         </Text>
                         <ChevronDown color={colors.textSecondary} size={18} />
                       </TouchableOpacity>
@@ -1198,7 +1189,7 @@ export default function DashboardScreen() {
                         style={[styles.tabPickerBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
                         onPress={() => {
                           if (!newClientId) {
-                            Alert.alert('Notice', 'Please select a Client first.');
+                            Alert.alert(t('required'), t('select_client_first'));
                             return;
                           }
                           if (modalSites.length === 0) {
@@ -1215,30 +1206,113 @@ export default function DashboardScreen() {
                           ]}
                           numberOfLines={1}
                         >
-                          {modalSites.find((s) => String(s.id) === String(newSiteId))?.name || (newClientId ? 'Choose assigned site...' : 'Select client first')}
+                          {modalSites.find((s) => String(s.id) === String(newSiteId))?.name || (newClientId ? t('choose_assigned_site') : t('select_client_first'))}
                         </Text>
                         <ChevronDown color={colors.textSecondary} size={18} />
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
-                      <Text style={[styles.tabFieldLabel, { color: colors.textSecondary }]}>NEW CLIENT NAME</Text>
+                      <Text style={[styles.tabFieldLabel, { color: colors.textSecondary }]}>
+                        {t('new_client_name_label')} <Text style={{ color: '#EF4444' }}>*</Text>
+                      </Text>
                       <TextInput
                         style={[styles.tabTextInput, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, color: colors.text }]}
                         value={customClientName}
                         onChangeText={setCustomClientName}
-                        placeholder="Enter client or company name"
+                        placeholder={t('client_placeholder')}
                         placeholderTextColor={colors.placeholder}
                       />
 
-                      <Text style={[styles.tabFieldLabel, { color: colors.textSecondary }]}>NEW SITE / BRANCH NAME</Text>
+                      <Text style={[styles.tabFieldLabel, { color: colors.textSecondary }]}>
+                        {t('new_site_name_label')} <Text style={{ color: '#EF4444' }}>*</Text>
+                      </Text>
                       <TextInput
-                        style={[styles.tabTextInput, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, color: colors.text }]}
+                        style={[styles.tabTextInput, { backgroundColor: colors.surfaceSecondary, borderColor: existingWarning ? '#F59E0B' : colors.border, color: colors.text }]}
                         value={customSiteName}
                         onChangeText={setCustomSiteName}
-                        placeholder="Enter site, premise or unit name"
+                        placeholder={t('site_placeholder')}
                         placeholderTextColor={colors.placeholder}
                       />
+
+                      {existingWarning && (
+                        <View
+                          style={{
+                            marginTop: 6,
+                            marginBottom: 8,
+                            paddingVertical: 7,
+                            paddingHorizontal: 10,
+                            borderRadius: 6,
+                            backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7',
+                            borderWidth: 1,
+                            borderColor: '#F59E0B',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <AlertTriangle size={14} color="#D97706" style={{ marginRight: 6 }} />
+                          <Text style={{ color: isDark ? '#FDE68A' : '#92400E', fontSize: 12, fontWeight: '500', flex: 1 }}>
+                            {existingWarning}
+                          </Text>
+                        </View>
+                      )}
+
+                      <Text style={[styles.tabFieldLabel, { color: colors.textSecondary }]}>
+                        {t('address_optional')}
+                      </Text>
+                      <TextInput
+                        style={[
+                          styles.tabTextInput,
+                          {
+                            backgroundColor: colors.surfaceSecondary,
+                            borderColor: colors.border,
+                            color: colors.text,
+                            height: 60,
+                            paddingTop: 10,
+                            paddingBottom: 10,
+                            textAlignVertical: 'top',
+                          },
+                        ]}
+                        value={customAddress}
+                        onChangeText={setCustomAddress}
+                        placeholder={t('address_placeholder')}
+                        placeholderTextColor={colors.placeholder}
+                        multiline
+                        numberOfLines={2}
+                      />
+
+                      <Text style={[styles.tabFieldLabel, { color: colors.textSecondary }]}>
+                        {t('gps_coordinates_optional')}
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <TextInput
+                            style={[styles.tabTextInput, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, color: colors.text }]}
+                            value={customLatitude}
+                            onChangeText={setCustomLatitude}
+                            placeholder={t('latitude_placeholder')}
+                            placeholderTextColor={colors.placeholder}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <TextInput
+                            style={[styles.tabTextInput, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, color: colors.text }]}
+                            value={customLongitude}
+                            onChangeText={setCustomLongitude}
+                            placeholder={t('longitude_placeholder')}
+                            placeholderTextColor={colors.placeholder}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </View>
+
+                      <Text style={{ fontSize: 10, color: colors.placeholder, marginTop: -2, marginBottom: 8 }}>
+                        {customLatitude && customLongitude
+                          ? '✓ Geofence enabled: Officers must be within 100m to check in.'
+                          : 'Leave coordinates blank to allow checking in without distance restrictions.'}
+                      </Text>
                     </>
                   )}
 
@@ -1311,10 +1385,10 @@ export default function DashboardScreen() {
                   >
                     <Text style={styles.tabSubmitBtnText}>
                       {creatingVisit
-                        ? 'CREATING...'
+                        ? (t('authenticating') || 'CREATING...')
                         : activeVisitTab === 0
-                        ? 'ASSIGN VISIT PLAN'
-                        : 'CREATE NEW CLIENT VISIT'}
+                        ? t('assign_visit_plan')
+                        : t('create_new_client_visit_btn')}
                     </Text>
                   </TouchableOpacity>
                 </ScrollView>

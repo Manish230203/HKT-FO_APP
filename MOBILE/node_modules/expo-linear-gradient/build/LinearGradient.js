@@ -6,8 +6,7 @@ import { Platform, processColor } from 'react-native';
 import NativeLinearGradient from './NativeLinearGradient';
 /**
  * Renders a native view that transitions between multiple colors in a linear direction.
- */
-export class LinearGradient extends Component {
+ */ export class LinearGradient extends Component {
     render() {
         const { colors, locations, start, end, dither, ...props } = this.props;
         let resolvedLocations = locations;
@@ -15,10 +14,19 @@ export class LinearGradient extends Component {
             console.warn('LinearGradient colors and locations props should be arrays of the same length');
             resolvedLocations = locations.slice(0, colors.length);
         }
-        return (_jsx(NativeLinearGradient, { ...props, colors: Platform.select({
+        return /*#__PURE__*/ _jsx(NativeLinearGradient, {
+            ...props,
+            colors: Platform.select({
                 web: colors,
-                default: colors.map(processColor),
-            }), dither: Platform.select({ android: dither }), locations: resolvedLocations, startPoint: _normalizePoint(start), endPoint: _normalizePoint(end) }));
+                default: colors.map(processColor)
+            }),
+            dither: Platform.select({
+                android: dither
+            }),
+            locations: resolvedLocations,
+            startPoint: _normalizePoint(start),
+            endPoint: _normalizePoint(end)
+        });
     }
 }
 function _normalizePoint(point) {
@@ -29,6 +37,10 @@ function _normalizePoint(point) {
         console.warn('start and end props for LinearGradient must be of the format [x,y] or {x, y}');
         return undefined;
     }
-    return Array.isArray(point) ? point : [point.x, point.y];
+    return Array.isArray(point) ? point : [
+        point.x,
+        point.y
+    ];
 }
+
 //# sourceMappingURL=LinearGradient.js.map

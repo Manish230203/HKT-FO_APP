@@ -1,6 +1,10 @@
-import { BaseGesture, BaseGestureConfig } from './gesture';
-import { FlingGestureConfig } from '../FlingGestureHandler';
+import type { FlingGestureConfig } from '../FlingGestureHandler';
 import type { FlingGestureHandlerEventPayload } from '../GestureHandlerEventPayload';
+import type { BaseGestureConfig } from './gesture';
+import { BaseGesture } from './gesture';
+/**
+ * @deprecated `FlingGesture` is deprecated and will be removed in the future. Please use `useFlingGesture` instead.
+ */
 export declare class FlingGesture extends BaseGesture<FlingGestureHandlerEventPayload> {
     config: BaseGestureConfig & FlingGestureConfig;
     constructor();
@@ -18,5 +22,8 @@ export declare class FlingGesture extends BaseGesture<FlingGestureHandlerEventPa
      */
     direction(direction: number): this;
 }
+/**
+ * @deprecated `FlingGestureType` is deprecated and will be removed in the future. Please use `FlingGesture` instead.
+ */
 export type FlingGestureType = InstanceType<typeof FlingGesture>;
 //# sourceMappingURL=flingGesture.d.ts.map

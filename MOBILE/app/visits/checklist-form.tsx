@@ -32,6 +32,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getSiteChecklist, submitSiteChecklist } from '../../services/visitService';
 import { clearActiveCheckIn } from '../../services/db';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { StatusBar } from 'react-native';
 
 interface QuestionItem {
@@ -54,6 +55,7 @@ interface AnswerState {
 
 export default function ChecklistFormScreen() {
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
   const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const router = useRouter();
   const { user } = useAuth();
@@ -105,7 +107,7 @@ export default function ChecklistFormScreen() {
         }
       } catch (e) {
         console.error('Error loading checklist:', e);
-        Alert.alert('Notice', 'Loaded standard field checklist questions.');
+        Alert.alert(t('notice'), t('loaded_standard_checklist'));
       } finally {
         setLoading(false);
       }
@@ -138,15 +140,15 @@ export default function ChecklistFormScreen() {
   const handlePickPhoto = async (qId: string) => {
     try {
       Alert.alert(
-        'Question Photo',
-        'Capture a photo for this checklist question:',
+        t('question_photo'),
+        t('attach_photo_desc'),
         [
           {
-            text: 'Camera',
+            text: t('camera_option'),
             onPress: async () => {
               const perm = await ImagePicker.requestCameraPermissionsAsync();
               if (!perm.granted) {
-                Alert.alert('Permission Denied', 'Camera permission is required.');
+                Alert.alert(t('permission_denied'), t('camera_permission_required'));
                 return;
               }
               const result = await ImagePicker.launchCameraAsync({
@@ -169,11 +171,11 @@ export default function ChecklistFormScreen() {
             },
           },
           {
-            text: 'Gallery',
+            text: t('gallery_option'),
             onPress: async () => {
               const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
               if (!perm.granted) {
-                Alert.alert('Permission Denied', 'Media library permission is required.');
+                Alert.alert(t('permission_denied'), t('gallery_permission_required'));
                 return;
               }
               const result = await ImagePicker.launchImageLibraryAsync({
@@ -260,17 +262,17 @@ export default function ChecklistFormScreen() {
       }
 
       Alert.alert(
-        'Checklist Submitted! 🎉',
+        t('checklist_submitted_success'),
         res?.message || `Site inspection checklist for ${siteName} has been successfully recorded.`,
         [
           {
-            text: 'View Visits',
+            text: t('field_officer_visits') || 'Visits',
             onPress: () => {
               router.replace('/visits?tab=completed');
             },
           },
           {
-            text: 'Go to Dashboard',
+            text: t('dashboard'),
             onPress: () => {
               router.replace('/(tabs)/dashboard');
             },
@@ -279,7 +281,7 @@ export default function ChecklistFormScreen() {
       );
     } catch (e: any) {
       console.error('Submit checklist error:', e);
-      Alert.alert('Submission Error', e?.message || 'Failed to submit checklist. Please check connection and try again.');
+      Alert.alert(t('failed_assign_visit'), e?.message || 'Failed to submit checklist. Please check connection and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -287,7 +289,7 @@ export default function ChecklistFormScreen() {
 
   return (
     <SafeAreaView style={styles.safeContainer} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -392,7 +394,7 @@ export default function ChecklistFormScreen() {
                             current.answer === 'Yes' && styles.ansBtnTextYesActive,
                           ]}
                         >
-                          YES
+                          {t('yes')}
                         </Text>
                       </TouchableOpacity>
 
@@ -415,17 +417,17 @@ export default function ChecklistFormScreen() {
                             current.answer === 'No' && styles.ansBtnTextNoActive,
                           ]}
                         >
-                          NO
+                          {t('no')}
                         </Text>
                       </TouchableOpacity>
                     </View>
 
                     {/* Question-Specific Remark / Note */}
                     <View style={styles.remarkBox}>
-                      <Text style={styles.inputLabel}>REMARK / OBSERVATION</Text>
+                      <Text style={styles.inputLabel}>{t('add_remark')}</Text>
                       <TextInput
                         style={styles.remarkInput}
-                        placeholder="Add observation or remark for this question..."
+                        placeholder={t('add_remark')}
                         placeholderTextColor="#64748B"
                         value={current.remark}
                         onChangeText={(txt) => handleSetRemark(String(q.id), txt)}
@@ -435,7 +437,7 @@ export default function ChecklistFormScreen() {
                     {/* Question-Specific Photo Attachment */}
                     <View style={styles.photoSection}>
                       <Text style={styles.inputLabel}>
-                        QUESTION PHOTO {q.requires_photo ? '(REQUIRED)' : '(OPTIONAL)'}
+                        {t('take_photo')} {q.requires_photo ? `(${t('required')})` : ''}
                       </Text>
 
                       {current.photoUri ? (
@@ -452,7 +454,7 @@ export default function ChecklistFormScreen() {
                               activeOpacity={0.8}
                             >
                               <Trash2 color="#EF4444" size={14} style={{ marginRight: 4 }} />
-                              <Text style={styles.removePhotoText}>Remove Photo</Text>
+                              <Text style={styles.removePhotoText}>{t('remove_photo')}</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -463,7 +465,7 @@ export default function ChecklistFormScreen() {
                           activeOpacity={0.85}
                         >
                           <Camera color="#3B82F6" size={18} style={{ marginRight: 8 }} />
-                          <Text style={styles.addPhotoBtnText}>Take or Attach Photo</Text>
+                          <Text style={styles.addPhotoBtnText}>{t('take_photo')}</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -473,12 +475,12 @@ export default function ChecklistFormScreen() {
 
               {/* Overall Remarks Card */}
               <View style={styles.overallCard}>
-                <Text style={styles.overallTitle}>OVERALL VISIT REMARKS</Text>
+                <Text style={styles.overallTitle}>{t('remarks')}</Text>
                 <TextInput
                   style={styles.overallInput}
                   multiline
                   numberOfLines={4}
-                  placeholder="Enter any additional inspection notes, guard shift observations, or overall summary..."
+                  placeholder={t('remarks')}
                   placeholderTextColor="#64748B"
                   value={overallRemarks}
                   onChangeText={setOverallRemarks}
@@ -497,7 +499,7 @@ export default function ChecklistFormScreen() {
                 ) : (
                   <>
                     <Send color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
-                    <Text style={styles.submitButtonText}>SUBMIT SITE CHECKLIST</Text>
+                    <Text style={styles.submitButtonText}>{t('submit_checklist')}</Text>
                   </>
                 )}
               </TouchableOpacity>

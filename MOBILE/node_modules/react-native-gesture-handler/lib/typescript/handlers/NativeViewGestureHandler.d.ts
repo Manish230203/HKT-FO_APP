@@ -1,5 +1,5 @@
+import type { BaseGestureHandlerProps } from './gestureHandlerCommon';
 import type { NativeViewGestureHandlerPayload } from './GestureHandlerEventPayload';
-import { BaseGestureHandlerProps } from './gestureHandlerCommon';
 export declare const nativeViewGestureHandlerProps: readonly ["shouldActivateOnStart", "disallowInterruption"];
 export interface NativeViewGestureConfig {
     /**

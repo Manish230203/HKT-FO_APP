@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -8,6 +9,7 @@ from app.routes.attendance import router as attendance_router
 from app.routes.gps import router as gps_router
 from app.routes.patrol_routes import router as patrol_router
 from app.routes.admin_routes import router as admin_router
+from app.routes.tour_routes import router as tour_router
 from app.database import engine, Base
 from app.models import patrol_models
 import uvicorn
@@ -62,9 +64,38 @@ async def lifespan(app: FastAPI):
                 except Exception: pass
     except Exception as e:
         print(f"Report check-in time backfill warning: {e}")
-    yield
+
+    # Initialize Field Officer periodic deactivation scheduler worker
+    import asyncio
+    from app.services.employee_deactivation_service import scheduled_deactivation_worker
+    
+    stop_deactivation_event = asyncio.Event()
+    deactivation_task = asyncio.create_task(scheduled_deactivation_worker(stop_deactivation_event))
+
+    try:
+        yield
+    finally:
+        # Graceful shutdown of deactivation worker
+        stop_deactivation_event.set()
+        try:
+            await asyncio.wait_for(deactivation_task, timeout=5)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            deactivation_task.cancel()
 
 app = FastAPI(title="F.O. Pages API", description="Standalone backend for Field Officer", lifespan=lifespan)
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request, exc: HTTPException):
+    msg = exc.detail if isinstance(exc.detail, str) else (exc.detail.get("message") if isinstance(exc.detail, dict) else str(exc.detail))
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": msg,
+            "detail": exc.detail
+        },
+        headers=exc.headers
+    )
 
 # Ensure uploads directory exists and mount static files
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
@@ -86,6 +117,7 @@ app.include_router(attendance_router, prefix="/api")
 app.include_router(gps_router, prefix="/api")
 app.include_router(patrol_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(tour_router, prefix="/api")
 
 # Support root-level legacy endpoints
 app.include_router(officer_router)
@@ -93,6 +125,7 @@ app.include_router(attendance_router)
 app.include_router(gps_router)
 app.include_router(patrol_router)
 app.include_router(admin_router)
+app.include_router(tour_router)
 
 
 @app.get("/")

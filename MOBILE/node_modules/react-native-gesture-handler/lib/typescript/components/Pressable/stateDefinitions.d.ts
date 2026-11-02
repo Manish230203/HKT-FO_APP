@@ -1,5 +1,5 @@
-import { PressableEvent } from './PressableProps';
-import { StateDefinition } from './StateMachine';
+import type { PressableEvent } from './PressableProps';
+import type { StateDefinition } from './StateMachine';
 export declare enum StateMachineEvent {
     NATIVE_BEGIN = "nativeBegin",
     NATIVE_START = "nativeStart",

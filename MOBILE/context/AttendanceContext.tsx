@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { Alert } from 'react-native';
 import { useAuth } from './AuthContext';
 import { Config } from '../constants/Config';
-import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns, reconcilePunchRecordsWithServer } from '../services/db';
+import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns, clearAllActiveCheckIns, reconcilePunchRecordsWithServer } from '../services/db';
 import { gpsTracker } from '../services/gpsService';
 import { violationService } from '../services/violationService';
 import { getActiveSiteVisitSession } from '../services/siteService';
@@ -45,7 +45,7 @@ interface AttendanceContextType {
   monthlyStats: AttendanceStats | null;
   profileData: ProfileData | null;
   isLoading: boolean;
-  refreshStatus: () => Promise<void>;
+  refreshStatus: (force?: boolean, fetchAll?: boolean) => Promise<void>;
   markAttendance: (latitude: number, longitude: number, siteOid?: number, timestamp?: string) => Promise<{ success: boolean; message: string }>;
   validateSelfie: (uri: string) => Promise<{ success: boolean; message: string }>;
   unifiedPunch: (uri: string, latitude: number, longitude: number) => Promise<{ success: boolean; message: string }>;
@@ -54,25 +54,36 @@ interface AttendanceContextType {
 const AttendanceContext = createContext<AttendanceContextType | undefined>(undefined);
 
 export function AttendanceProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, syncRemoteProfilePhoto } = useAuth();
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>([]);
   const [monthlyStats, setMonthlyStats] = useState<AttendanceStats | null>(null);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const lastRefreshRef = useRef<number>(0);
+  const inFlightRefreshRef = useRef<Promise<void> | null>(null);
 
   const getEmpOid = () => {
     if (!user) return null;
     return user.id || (user as any).oid || user.employee_id || (user as any).username;
   };
 
-  const refreshStatus = async () => {
+  const refreshStatus = async (force: boolean = false, fetchAll: boolean = false) => {
     const empOid = getEmpOid();
     if (!empOid) return;
 
-    setIsLoading(true);
+    const now = Date.now();
+    if (!force && now - lastRefreshRef.current < 6000) {
+      return;
+    }
+    if (inFlightRefreshRef.current) {
+      return inFlightRefreshRef.current;
+    }
 
-    const safeFetch = async (endpoint: string) => {
+    const refreshPromise = (async () => {
+      setIsLoading(true);
+
+      const safeFetch = async (endpoint: string) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 7000);
 
@@ -101,12 +112,21 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
     };
 
     try {
-      const [todayData, logsData, statsData, profileRes] = await Promise.all([
-        safeFetch('/_AIP_getTodayStatus'),
-        safeFetch('/_AIP_getAttendanceLogs'),
-        safeFetch('/_AIP_getMonthlyStats'),
-        safeFetch('/_AIP_getProfile'),
-      ]);
+      const shouldFetchAll = fetchAll || !todayRecord;
+      const promises: Promise<any>[] = [safeFetch('/_AIP_getTodayStatus')];
+      if (shouldFetchAll) {
+        promises.push(
+          safeFetch('/_AIP_getAttendanceLogs'),
+          safeFetch('/_AIP_getMonthlyStats'),
+          safeFetch('/_AIP_getProfile')
+        );
+      }
+
+      const results = await Promise.all(promises);
+      const todayData = results[0];
+      const logsData = shouldFetchAll ? results[1] : null;
+      const statsData = shouldFetchAll ? results[2] : null;
+      const profileRes = shouldFetchAll ? results[3] : null;
 
       if (todayData?.success) {
         const isServerActive = !!(todayData.record && todayData.record.check_in && !todayData.record.check_out);
@@ -170,21 +190,46 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
 
       if (profileRes?.success) {
         setProfileData(profileRes.profile);
+        if (profileRes.profile?.profile_photo) {
+          const rawPhoto = String(profileRes.profile.profile_photo).trim();
+          if (rawPhoto.length > 0 && rawPhoto !== 'null' && rawPhoto !== 'undefined') {
+            const fullUrl = rawPhoto.startsWith('http')
+              ? rawPhoto
+              : `${Config.BASE_URL}${rawPhoto.startsWith('/') ? '' : '/'}${rawPhoto}`;
+            syncRemoteProfilePhoto?.(fullUrl)?.catch(() => {});
+          }
+        }
       }
+
+      lastRefreshRef.current = Date.now();
     } catch (error) {
       console.error('Refresh status unexpected error:', error);
     } finally {
       setIsLoading(false);
+      inFlightRefreshRef.current = null;
     }
-  };
+  })();
+
+  inFlightRefreshRef.current = refreshPromise;
+  return refreshPromise;
+};
 
   useEffect(() => {
-    refreshStatus();
+    // Immediately clear previous user's in-memory attendance state when switching accounts
+    setTodayRecord(null);
+    setAttendanceLogs([]);
+    setMonthlyStats(null);
+    setProfileData(null);
+    lastRefreshRef.current = 0;
+
     const empOid = getEmpOid();
     if (empOid) {
+      refreshStatus(true);
       gpsTracker?.startTracking(Number(empOid))?.catch(() => {});
+      gpsTracker?.checkAndResumeTracking()?.catch(() => {});
+    } else {
+      gpsTracker?.stopTracking()?.catch(() => {});
     }
-    gpsTracker?.checkAndResumeTracking()?.catch(() => {});
   }, [user]);
 
   const markAttendance = async (latitude: number, longitude: number, siteOid?: number, timestamp?: string) => {
@@ -198,7 +243,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         let activeSiteSession = await getActiveSiteVisitSession(empOid);
         if (!activeSiteSession) {
           const localCheckIns = await getActiveCheckIns();
-          const activeKeys = Object.keys(localCheckIns);
+          // Filter out check-ins where report is already submitted or marked checked out
+          const activeKeys = Object.keys(localCheckIns).filter((k) => {
+            const item = localCheckIns[k];
+            return item && !item.reportSubmitted && !item.checkOutTime;
+          });
           if (activeKeys.length > 0) {
             const firstActive = localCheckIns[activeKeys[0]];
             activeSiteSession = {
@@ -210,10 +259,13 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
               status: 'IN_PROGRESS',
               duration_minutes: 0,
             };
+          } else {
+            // Clean up any stale completed check-ins in storage
+            await clearAllActiveCheckIns();
           }
         }
 
-        if (activeSiteSession) {
+        if (activeSiteSession && activeSiteSession.status === 'IN_PROGRESS') {
           return {
             success: false,
             message: `Site Check-Out Required: You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before deactivating.`,
@@ -248,7 +300,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
           errorMsg = errData.message || errorMsg;
         } else {
           const text = await response.text();
-          errorMsg = text.slice(0, 100) || errorMsg;
+          if (text && text.trim().startsWith('<')) {
+            errorMsg = `Server connection issue (HTTP ${response.status}). Please try again in a moment.`;
+          } else {
+            errorMsg = text.slice(0, 100) || errorMsg;
+          }
         }
         return { success: false, message: errorMsg };
       }

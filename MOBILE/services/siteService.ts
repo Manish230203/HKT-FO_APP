@@ -1,10 +1,13 @@
 import api from './api';
 import gpsTracker from './gpsService';
+import { setStorageItem, getStorageItem, getUserSession } from './db';
 
 export interface Client {
   id: number | string;
   name: string;
   code?: string;
+  branch_id?: number | null;
+  branch_name?: string | null;
 }
 
 export interface Site {
@@ -13,8 +16,10 @@ export interface Site {
   client_id?: number;
   client_name?: string;
   branch_name?: string;
+  branch_id?: number | null;
   latitude?: number;
   longitude?: number;
+  radius?: number;
 }
 
 export interface PlannedVisit {
@@ -140,16 +145,94 @@ export interface SiteGuard {
   status?: string;
 }
 
-export const getClients = async (empOid?: number | string): Promise<Client[]> => {
-  const url = empOid ? `/assessments/clients?empOid=${empOid}` : '/assessments/clients';
-  const response = await api.get(url);
-  return response.data || [];
+export const getClients = async (empOid?: number | string, branchName?: string): Promise<Client[]> => {
+  let resolvedEmpOid = empOid;
+  let resolvedBranchName = branchName;
+
+  if (!resolvedEmpOid || !resolvedBranchName) {
+    try {
+      const session = await getUserSession();
+      if (session?.user) {
+        resolvedEmpOid = resolvedEmpOid || session.user.id || (session.user as any).empOid || session.user.employee_id;
+        resolvedBranchName = resolvedBranchName || session.user.branch_name || undefined;
+      }
+    } catch {}
+  }
+
+  const queryParams: string[] = [];
+  if (resolvedEmpOid) queryParams.push(`empOid=${encodeURIComponent(String(resolvedEmpOid))}`);
+  if (resolvedBranchName) queryParams.push(`branch_name=${encodeURIComponent(String(resolvedBranchName))}`);
+  const url = queryParams.length > 0 ? `/assessments/clients?${queryParams.join('&')}` : '/assessments/clients';
+
+  const cacheKey = `cached_clients_list_${resolvedBranchName || resolvedEmpOid || 'all'}`;
+  try {
+    const response = await api.get(url);
+    const data = response.data || [];
+    if (Array.isArray(data) && data.length > 0) {
+      setStorageItem(cacheKey, JSON.stringify(data)).catch(() => {});
+    }
+    return data;
+  } catch (err) {
+    try {
+      const cached = await getStorageItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.warn('Returning cached clients due to network error');
+          return parsed;
+        }
+      }
+    } catch (cacheErr) {}
+    throw err;
+  }
 };
 
-export const getSites = async (empOid?: number | string): Promise<Site[]> => {
-  const url = empOid ? `/assessments/sites?empOid=${empOid}` : '/assessments/sites';
-  const response = await api.get(url);
-  return response.data || [];
+export const getSites = async (
+  empOid?: number | string,
+  clientId?: number | string,
+  branchName?: string
+): Promise<Site[]> => {
+  let resolvedEmpOid = empOid;
+  let resolvedClientId = clientId;
+  let resolvedBranchName = branchName;
+
+  if (!resolvedEmpOid || !resolvedBranchName) {
+    try {
+      const session = await getUserSession();
+      if (session?.user) {
+        resolvedEmpOid = resolvedEmpOid || session.user.id || (session.user as any).empOid || session.user.employee_id;
+        resolvedBranchName = resolvedBranchName || session.user.branch_name || undefined;
+      }
+    } catch {}
+  }
+
+  const queryParams: string[] = [];
+  if (resolvedEmpOid) queryParams.push(`empOid=${encodeURIComponent(String(resolvedEmpOid))}`);
+  if (resolvedClientId) queryParams.push(`client_id=${encodeURIComponent(String(resolvedClientId))}`);
+  if (resolvedBranchName) queryParams.push(`branch_name=${encodeURIComponent(String(resolvedBranchName))}`);
+  const url = queryParams.length > 0 ? `/assessments/sites?${queryParams.join('&')}` : '/assessments/sites';
+
+  const cacheKey = `cached_sites_list_${resolvedClientId || 'all'}_${resolvedBranchName || resolvedEmpOid || 'all'}`;
+  try {
+    const response = await api.get(url);
+    const data = response.data || [];
+    if (Array.isArray(data) && data.length > 0) {
+      setStorageItem(cacheKey, JSON.stringify(data)).catch(() => {});
+    }
+    return data;
+  } catch (err) {
+    try {
+      const cached = await getStorageItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.warn('Returning cached sites due to network error');
+          return parsed;
+        }
+      }
+    } catch (cacheErr) {}
+    throw err;
+  }
 };
 
 export const getSiteGuards = async (siteId?: number | string, shift?: string): Promise<SiteGuard[]> => {
@@ -180,6 +263,30 @@ export const createPlannedVisit = async (payload: {
 }) => {
   const response = await api.post('/planned-visits', payload);
   return response.data;
+};
+
+export const checkExistingClientSite = async (
+  clientName: string,
+  siteName: string,
+  empOid?: number | string
+): Promise<{
+  exists: boolean;
+  message?: string;
+  client_name?: string;
+  site_name?: string;
+  existing_branch?: string;
+  officer_branch?: string;
+  site_id?: number;
+  client_id?: number;
+}> => {
+  try {
+    const res = await api.get(
+      `/visits/check-client-site?client_name=${encodeURIComponent(clientName.trim())}&site_name=${encodeURIComponent(siteName.trim())}&empOid=${empOid || ''}`
+    );
+    return res.data || { exists: false };
+  } catch {
+    return { exists: false };
+  }
 };
 
 export const getActiveSiteVisitSession = async (empOid: number | string): Promise<ActiveSiteSession | null> => {

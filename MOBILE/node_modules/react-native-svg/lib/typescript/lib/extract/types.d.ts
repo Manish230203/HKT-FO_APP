@@ -1,6 +1,5 @@
-import type { ColorValue, GestureResponderEvent, GestureResponderHandlers, Insets, LayoutChangeEvent, TransformsStyle } from 'react-native';
+import type { CodegenTypes, ColorValue, GestureResponderEvent, GestureResponderHandlers, Insets, LayoutChangeEvent, TransformsStyle } from 'react-native';
 import type React from 'react';
-import { DirectEventHandler, Int32 } from 'react-native/Libraries/Types/CodegenTypes';
 export type NumberProp = string | number;
 export type NumberArray = NumberProp[] | NumberProp;
 export type BooleanProp = boolean | 'true' | 'false';
@@ -25,6 +24,7 @@ export type FilterEdgeMode = 'duplicate' | 'wrap' | 'none';
 export type FilterColorMatrixType = 'matrix' | 'saturate' | 'hueRotate' | 'luminanceToAlpha';
 export interface TouchableProps {
     disabled?: boolean;
+    touchSoundDisabled?: boolean;
     onPress?: (event: GestureResponderEvent) => void;
     onPressIn?: (event: GestureResponderEvent) => void;
     onPressOut?: (event: GestureResponderEvent) => void;
@@ -185,10 +185,10 @@ export interface CommonMarkerProps {
 }
 type OnSvgLayoutEvent = Readonly<{
     layout: {
-        x: Int32;
-        y: Int32;
-        width: Int32;
-        height: Int32;
+        x: CodegenTypes.Int32;
+        y: CodegenTypes.Int32;
+        width: CodegenTypes.Int32;
+        height: CodegenTypes.Int32;
     };
 }>;
 export interface NativeProps {
@@ -218,7 +218,7 @@ export type extractedProps = {
     opacity?: number;
     matrix?: number[];
     propList?: string[];
-    onSvgLayout?: DirectEventHandler<OnSvgLayoutEvent>;
+    onSvgLayout?: CodegenTypes.DirectEventHandler<OnSvgLayoutEvent>;
     ref?: (instance: React.Component | null) => void;
     markerStart?: string;
     markerMid?: string;

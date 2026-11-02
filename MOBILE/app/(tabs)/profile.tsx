@@ -31,6 +31,7 @@ export default function ProfileScreen() {
   const { t } = useLanguage();
   const router = useRouter();
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
 
   const handleSignOut = async () => {
     setShowSignOutConfirm(false);
@@ -76,7 +77,7 @@ export default function ProfileScreen() {
   return (
     <SwipeableBackWrapper>
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <ScrollView contentContainerStyle={styles.content}>
           {/* 1. EXECUTIVE PROFILE HEADER CARD */}
           <View style={styles.executiveHeaderCard}>
@@ -84,17 +85,24 @@ export default function ProfileScreen() {
               <ArrowLeft color="#3B82F6" size={22} />
             </TouchableOpacity>
 
-            <View style={styles.avatarBox}>
-              {profileImage ? (
-                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push({ pathname: '/settings', params: { autoUpload: 'true' } })}
+              style={styles.avatarBox}
+            >
+              {profileImage && profileImage.trim().length > 0 && !imageLoadFailed ? (
+                <Image
+                  source={{ uri: profileImage }}
+                  style={styles.avatarImage}
+                  onError={() => setImageLoadFailed(true)}
+                />
               ) : (
-                <User color={colors.text} size={38} />
+                <User color={colors.primary} size={36} />
               )}
-            </View>
+            </TouchableOpacity>
 
             <Text style={styles.execLabel}>{t('exec_profile')}</Text>
             <Text style={styles.execName}>{user?.name || 'Manish Kenjale'}</Text>
-            <Text style={styles.execRole}>{(user?.role || t('field_officer')).toUpperCase()}</Text>
 
             <View style={styles.pillsRow}>
               <View style={styles.activeBadge}>
@@ -202,7 +210,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -242,7 +250,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   empBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 12,
@@ -305,7 +313,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     marginTop: 4,
   },
   subDetailPill: {
-    backgroundColor: colors.surfaceSecondary,
+    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -313,6 +321,8 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   pillLabel: {
     fontSize: 11,

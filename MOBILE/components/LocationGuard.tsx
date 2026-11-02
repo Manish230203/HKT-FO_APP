@@ -11,29 +11,39 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
 import { MapPin, Settings, AlertTriangle, RefreshCw, BatteryCharging, Zap, ShieldCheck, ShieldAlert, CheckCircle2 } from 'lucide-react-native';
 import { requestIgnoreBatteryOptimizations, openAutoStartSettings } from '../services/batteryOptimizer';
 import { useAttendance } from '../context/AttendanceContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Safe dynamic loading of expo-notifications to support Expo Go on Android (SDK 53+)
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+  if (Notifications?.setNotificationHandler) {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  }
+} catch (e) {
+  console.warn('expo-notifications native module not available in Expo Go:', e);
+}
 
 import { violationService } from '../services/violationService';
 
 export default function LocationGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { colors, isDark } = useTheme();
   const attendanceContext = useAttendance();
   const todayRecord = attendanceContext?.todayRecord;
   const isOnDuty = !!(todayRecord && todayRecord.check_in && !todayRecord.check_out);
@@ -49,9 +59,11 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
   useEffect(() => {
     (async () => {
       try {
-        const notifPerm = await Notifications.getPermissionsAsync();
-        if ((notifPerm as any)?.status !== 'granted') {
-          await Notifications.requestPermissionsAsync();
+        if (Notifications?.getPermissionsAsync) {
+          const notifPerm = await Notifications.getPermissionsAsync();
+          if ((notifPerm as any)?.status !== 'granted' && Notifications?.requestPermissionsAsync) {
+            await Notifications.requestPermissionsAsync();
+          }
         }
       } catch (err) {
         console.warn('Notification permission error:', err);
@@ -64,13 +76,15 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
     if (Date.now() - lastNotifTimeRef.current < 12000) return;
     lastNotifTimeRef.current = Date.now();
 
+    if (!Notifications?.scheduleNotificationAsync) return;
+
     try {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '⚠️ WARNING: Location (GPS) Turned OFF!',
           body: 'Location is mandatory for your active shift. Tap here to turn on GPS immediately.',
           sound: true,
-          priority: Notifications.AndroidNotificationPriority.HIGH,
+          priority: Notifications?.AndroidNotificationPriority?.HIGH ?? 4,
         },
         trigger: null,
       });
@@ -81,7 +95,7 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
 
   // Countdown timer for psychological YES button lock
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: any;
     if (isLocationDisabled && isOnDuty) {
       setYesCountdown(30);
       timer = setInterval(() => {
@@ -157,18 +171,34 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
       }
 
       // 3. Check background permission status ('Allow all the time')
-      const bgPerm = await Location.getBackgroundPermissionsAsync();
-      if (bgPerm.status !== 'granted') {
-        const reqBg = await Location.requestBackgroundPermissionsAsync();
-        if (reqBg.status !== 'granted') {
-          setIsLocationDisabled(true);
-          setErrorMessage(t('bg_perm_required'));
-          if (isOnDuty && empOid) {
-            violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
-            fireDutyGpsOffAlert();
+      if (Platform.OS === 'android') {
+        try {
+          const bgPerm = await Location.getBackgroundPermissionsAsync();
+          if (bgPerm.status !== 'granted') {
+            const reqBg = await Location.requestBackgroundPermissionsAsync();
+            if (reqBg.status !== 'granted') {
+              setIsLocationDisabled(true);
+              setErrorMessage(t('bg_perm_required'));
+              if (isOnDuty && empOid) {
+                violationService.handleLocationStateChange(false, true, Number(empOid), punchInId);
+                fireDutyGpsOffAlert();
+              }
+              setChecking(false);
+              return;
+            }
           }
-          setChecking(false);
-          return;
+        } catch (bgErr) {
+          console.warn('Android background location check warning:', bgErr);
+        }
+      } else if (Platform.OS === 'ios') {
+        try {
+          const bgPerm = await Location.getBackgroundPermissionsAsync();
+          if (bgPerm.status !== 'granted') {
+            await Location.requestBackgroundPermissionsAsync();
+          }
+        } catch (iosBgErr) {
+          // In Expo Go client on iOS, background location permissions are restricted to standalone native builds
+          // Foreground permission (already verified above) provides active GPS tracking
         }
       }
 
@@ -254,17 +284,17 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
         hardwareAccelerated
         onRequestClose={() => { }} // Prevent dismissing via hardware back button on Android
       >
-        <View style={styles.container}>
-          <View style={styles.card}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.iconContainer, isOnDuty && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
               {isOnDuty ? <ShieldAlert size={48} color="#EF4444" /> : <AlertTriangle size={44} color="#FF5252" />}
             </View>
 
-            <Text style={styles.title}>
+            <Text style={[styles.title, { color: colors.text }]}>
               {isOnDuty ? t('duty_compliance_warning') : t('location_setup_required')}
             </Text>
 
-            <Text style={styles.message}>
+            <Text style={[styles.message, { color: colors.textSecondary }]}>
               {errorMessage || t('gps_off_error')}
             </Text>
 
@@ -337,17 +367,17 @@ export default function LocationGuard({ children }: { children: React.ReactNode 
             )}
 
             <TouchableOpacity
-              style={styles.secondaryButton}
+              style={[styles.secondaryButton, { borderColor: colors.border }]}
               activeOpacity={0.7}
               onPress={checkLocationStatus}
               disabled={checking}
             >
               {checking ? (
-                <ActivityIndicator size="small" color="#94A3B8" />
+                <ActivityIndicator size="small" color={colors.textSecondary} />
               ) : (
                 <>
-                  <RefreshCw size={18} color="#94A3B8" style={{ marginRight: 6 }} />
-                  <Text style={styles.secondaryButtonText}>{t('recheck_location')}</Text>
+                  <RefreshCw size={18} color={colors.textSecondary} style={{ marginRight: 6 }} />
+                  <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>{t('recheck_location')}</Text>
                 </>
               )}
             </TouchableOpacity>

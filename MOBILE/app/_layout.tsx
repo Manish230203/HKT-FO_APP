@@ -1,8 +1,8 @@
-import React from 'react';
-import { Stack } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AuthProvider } from '../context/AuthContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import { AttendanceProvider } from '../context/AttendanceContext';
 import { LanguageProvider } from '../context/LanguageContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
@@ -10,6 +10,24 @@ import LocationGuard from '../components/LocationGuard';
 
 function ThemedNavigation() {
   const { colors, isDark } = useTheme();
+  const { user, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+    const rootSegment = segments[0] as string | undefined;
+    const isPublicRoute =
+      !rootSegment ||
+      rootSegment === 'login' ||
+      rootSegment === 'consent' ||
+      rootSegment === 'lang';
+
+    if (!user && !isPublicRoute) {
+      console.warn('User is unauthenticated on protected route. Redirecting to login.');
+      router.replace('/login');
+    }
+  }, [user, isLoading, segments]);
 
   return (
     <LocationGuard>

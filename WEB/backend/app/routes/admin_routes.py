@@ -319,6 +319,7 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     try:
         sql = text("""
             SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
+                   e.active, e.app_registered, e.patrol_app_registered, e.date_of_leaving,
                    s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
                    e.BRANCH as branch_id, b.name as branch_name,
                    COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
@@ -331,6 +332,7 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
             LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
             LEFT JOIN USER_ACCOUNT ua ON (ua.user_id = e.emp_code OR ua.user_id = e.mobile)
             WHERE e.mobile = :id OR e.emp_code = :id OR ua.user_id = :id
+            ORDER BY e.active DESC, e.oid DESC
             LIMIT 1
         """)
         user = db.execute(sql, {"id": identifier}).mappings().first()
@@ -349,6 +351,7 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
         try:
             sql = text("""
                 SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
+                       e.active, e.app_registered, e.patrol_app_registered, e.date_of_leaving,
                        s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
                        e.BRANCH as branch_id, b.name as branch_name,
                        COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
@@ -360,6 +363,7 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
                 LEFT JOIN BRANCH b ON e.BRANCH = b.oid
                 LEFT JOIN COMPANY c ON COALESCE(e.COMPANY, b.COMPANY, 1) = c.oid
                 WHERE e.mobile = :id OR e.emp_code = :id
+                ORDER BY e.active DESC, e.oid DESC
                 LIMIT 1
             """)
             user = db.execute(sql, {"id": identifier}).mappings().first()
@@ -374,13 +378,92 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     
     if not user:
         raise HTTPException(status_code=401, detail="NO USER FOUND")
-        
+    
+    # Check Active status and Date of Leaving
+    dol = user.get("date_of_leaving")
+    has_left = False
+    if dol:
+        try:
+            from datetime import date as dt_date, datetime as dt_datetime
+            if isinstance(dol, str):
+                dol_str = dol.split("T")[0].split(" ")[0].strip()
+                if dol_str and not dol_str.startswith("0000") and dol_str > "1970-01-01":
+                    dol_date = dt_datetime.strptime(dol_str, "%Y-%m-%d").date()
+                    if dol_date <= dt_date.today():
+                        has_left = True
+            elif hasattr(dol, "strftime"):
+                if dol <= dt_date.today() and getattr(dol, "year", 2000) > 1970:
+                    has_left = True
+        except Exception as dol_err:
+            print(f"Date of leaving parsing warning in login: {dol_err}")
+
+    if user.get("active") == 0 or user.get("active") is None or str(user.get("active")) == "0" or has_left:
+        if has_left and user.get("active") != 0:
+            try:
+                db.execute(text("UPDATE EMPLOYEE SET active = 0, app_registered = 0, patrol_app_registered = 0 WHERE oid = :oid"), {"oid": user["oid"]})
+                db.commit()
+            except Exception:
+                db.rollback()
+        raise HTTPException(
+            status_code=403,
+            detail="Employee is inactive / deactivated. Please contact administrator."
+        )
+
+    # Validate designation (ensure non-Officer roles like Guards, Drivers, Housekeeping cannot log in)
+    role_name = (user.get("role_name") or "").upper().strip()
+    restricted_roles = [
+        'S/G', 'GUARD', 'SECURITY GUARD', 'SUPER GUARD', 'LS/G', 'L/SG', 'ESM S/G', 'ESCO/G', 'H/G',
+        'BOUNCER', 'GUN MAN', 'HK BOY', 'HK LADY', 'HK/SUP', 'MALI', 'PLUMBER', 'ELECTRICIAN',
+        'CARPENTER', 'HELPER', 'LOADER', 'RECEP', 'RECEPTIONIST', 'FITTER/WELDER', 'DRIVER',
+        'LMV DRIVER', 'HMV DRIVER', 'PEON', 'HOUSEKEEPING', 'ACCOUNTANT', 'OFFI BOY', 'OFFI LADY'
+    ]
+    if any(r == role_name or role_name.startswith(r + " ") or role_name.endswith(" " + r) for r in restricted_roles):
+        raise HTTPException(
+            status_code=403,
+            detail="Access Restricted: Security Guards and non-Officer staff cannot log in. This app is for Officers only."
+        )
+
+    # -------------------------------------------------------------
+    # Single Device Registration Policy
+    # -------------------------------------------------------------
+    # Case B: app_registered = 1
+    # This means the employee has already registered the application previously.
+    app_reg_val = user.get("app_registered")
+    if app_reg_val == 1 or app_reg_val == "1" or app_reg_val is True:
+        # Immediately reject the login request.
+        # Do not generate a JWT. Do not authenticate. Do not update database.
+        raise HTTPException(
+            status_code=403,
+            detail="This account has already been registered on a device. Please contact your administrator."
+        )
+
+    # Case A: app_registered = 0 (or None)
+    # This means the employee is logging into the application for the first time.
+    # 1. Update employee table and permanently set app_registered = 1
+    try:
+        update_sql = text("""
+            UPDATE EMPLOYEE 
+            SET app_registered = 1 
+            WHERE oid = :emp_oid
+        """)
+        db.execute(update_sql, {"emp_oid": user["oid"]})
+        db.commit()
+        print(f"Single Device Registration: Employee {user['oid']} ({user.get('name')}) successfully activated device. app_registered set to 1.")
+    except Exception as reg_err:
+        db.rollback()
+        print(f"Warning: Failed to update app_registered for employee {user['oid']}: {reg_err}")
+        raise HTTPException(
+            status_code=500,
+            detail="Registration failed due to a database transaction error. Please try again."
+        )
+
+    # 2. Generate session token and return successful login response
     user_data = {
         "id": user["oid"],
-        "name": user["name"],
-        "role": user["role_name"] or "Staff",
-        "employee_id": user["emp_code"],
-        "site_id": user["site_id"],
+        "name": user.get("name") or "",
+        "role": user.get("role_name") or "Staff",
+        "employee_id": user.get("emp_code") or "",
+        "site_id": user.get("site_id"),
         "site_name": user.get("site_name") or "UDF KASARWADI PUNE",
         "client_id": user.get("client_id"),
         "client_name": user.get("client_name") or "Unique Delta Force Pvt. Ltd.",
@@ -397,6 +480,7 @@ def admin_login(data: dict, db: Session = Depends(get_patrol_db)):
     token = base64.b64encode(json.dumps(user_data).encode()).decode()
     
     return {
+        "success": True,
         "access_token": token,
         "token_type": "bearer",
         "user": user_data
@@ -414,6 +498,7 @@ def get_current_admin(authorization: Optional[str] = Header(None), db: Session =
             if emp_id:
                 sql = text("""
                     SELECT e.name, d.name as role_name, e.emp_code, e.oid, e.SITE as site_id, e.date_of_joining,
+                           e.active, e.app_registered, e.patrol_app_registered, e.date_of_leaving,
                            s.name as site_name, s.CLIENTT as client_id, cl.name as client_name,
                            e.BRANCH as branch_id, b.name as branch_name,
                            COALESCE(e.COMPANY, b.COMPANY, 1) as company_id,
@@ -429,11 +514,45 @@ def get_current_admin(authorization: Optional[str] = Header(None), db: Session =
                 """)
                 emp = db.execute(sql, {"oid": emp_id}).mappings().first()
                 if emp:
-                    data["id"] = emp["oid"]
-                    data["name"] = emp["name"]
-                    data["role"] = emp["role_name"] or data.get("role") or "Staff"
-                    data["employee_id"] = emp["emp_code"]
-                    data["site_id"] = emp["site_id"]
+                    # Invalidate session if employee has been deactivated or date_of_leaving has arrived
+                    emp_dol = emp.get("date_of_leaving")
+                    emp_has_left = False
+                    if emp_dol:
+                        try:
+                            from datetime import date as dt_date, datetime as dt_datetime
+                            if isinstance(emp_dol, str):
+                                d_str = emp_dol.split("T")[0].split(" ")[0].strip()
+                                if d_str and not d_str.startswith("0000") and d_str > "1970-01-01":
+                                    if dt_datetime.strptime(d_str, "%Y-%m-%d").date() <= dt_date.today():
+                                        emp_has_left = True
+                            elif hasattr(emp_dol, "strftime"):
+                                if emp_dol <= dt_date.today() and getattr(emp_dol, "year", 2000) > 1970:
+                                    emp_has_left = True
+                        except Exception:
+                            pass
+
+                    if emp["active"] == 0 or emp_has_left:
+                        if emp_has_left and emp.get("active") != 0:
+                            try:
+                                db.execute(text("UPDATE EMPLOYEE SET active = 0, app_registered = 0, patrol_app_registered = 0 WHERE oid = :oid"), {"oid": emp["oid"]})
+                                db.commit()
+                            except Exception:
+                                db.rollback()
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Session invalidated: Employee account has been deactivated."
+                        )
+                    # If administrator manually reset app_registered = 0, invalidate existing session
+                    if emp.get("app_registered") == 0:
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Session invalidated: Device registration was reset by administrator."
+                        )
+                    data["id"] = emp.get("oid")
+                    data["name"] = emp.get("name")
+                    data["role"] = emp.get("role_name") or data.get("role") or "Staff"
+                    data["employee_id"] = emp.get("emp_code")
+                    data["site_id"] = emp.get("site_id")
                     data["site_name"] = emp.get("site_name") or "UDF KASARWADI PUNE"
                     data["client_id"] = emp.get("client_id")
                     data["client_name"] = emp.get("client_name") or "Unique Delta Force Pvt. Ltd."
@@ -444,10 +563,55 @@ def get_current_admin(authorization: Optional[str] = Header(None), db: Session =
                     data["company_name"] = emp.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if emp.get("company_id") == 4 else "Unique Delta Force")
                     data["company_short_name"] = emp.get("company_short_name") or ("EISPL" if emp.get("company_id") == 4 else "UDF")
                     return data
+        except HTTPException:
+            raise
         except Exception as err:
             print(f"Error decoding token in /auth/me: {err}")
     
     raise HTTPException(status_code=401, detail="Unauthorized token or missing authentication header")
+
+def require_admin_user(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_patrol_db)
+) -> dict:
+    """Enforces valid bearer authentication and administrator-level role."""
+    user = get_current_admin(authorization=authorization, db=db)
+    role = (user.get("role") or "").lower().strip()
+    allowed_admin_roles = ["admin", "administrator", "super admin", "superadmin", "management"]
+    if role not in allowed_admin_roles:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: Administrator role required. Current role: '{user.get('role')}'"
+        )
+    return user
+
+@router.post("/admin/employees/sync-field-officers")
+@router.post("/admin/employees/sync-left-guards", deprecated=True)
+def sync_field_officers_endpoint(
+    dry_run: bool = Query(True, description="Run in dry-run mode without modifying records"),
+    target_date: Optional[str] = Query(None, description="Optional target date YYYY-MM-DD"),
+    current_admin: dict = Depends(require_admin_user)
+):
+    """
+    Administrative endpoint to synchronize and deactivate left field officers whose date_of_leaving has arrived.
+    Supports dry-run preview and multi-worker advisory locking.
+    """
+    from app.services.employee_deactivation_service import run_sync_with_lock
+    parsed_date = None
+    if target_date:
+        try:
+            parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Expected YYYY-MM-DD.")
+            
+    try:
+        result = run_sync_with_lock(dry_run=dry_run, target_date=parsed_date)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to execute field officer sync: {str(exc)}")
+
+# Backwards compatibility alias
+sync_left_guards_endpoint = sync_field_officers_endpoint
 
 @router.get("/patrol/search")
 def global_search(q: str = "", db: Session = Depends(get_patrol_db)):
@@ -2651,23 +2815,112 @@ def generate_bulk_pdf(
     )
 
 @router.get("/assessments/clients")
-def get_all_clients(db: Session = Depends(get_patrol_db)):
-    sql = text("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name")
-    rows = db.execute(sql).mappings().all()
-    return [{"id": r["id"], "name": r["name"], "code": r["code"] or ""} for r in rows]
+def get_all_clients(
+    emp_oid: Optional[str] = Query(None), 
+    empOid: Optional[str] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    branch_id: Optional[int] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_patrol_db)
+):
+    resolved_branch = branch_name.strip() if branch_name and str(branch_name).strip() else None
+    target_emp = empOid or emp_oid
+    if not resolved_branch and not target_emp and authorization and authorization.startswith("Bearer "):
+        try:
+            token_part = authorization.split(" ")[1]
+            token_data = json.loads(base64.b64decode(token_part.encode()).decode())
+            target_emp = token_data.get("id") or token_data.get("empOid") or token_data.get("employee_id")
+            resolved_branch = token_data.get("branch_name")
+        except Exception:
+            pass
+
+    if target_emp:
+        try:
+            emp = db.execute(text("""
+                SELECT e.BRANCH as branch_id, b.name as branch_name
+                FROM EMPLOYEE e
+                LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+                WHERE e.oid = :eid OR e.emp_code = :eid
+                LIMIT 1
+            """), {"eid": str(target_emp)}).mappings().first()
+            if emp and emp.get("branch_name"):
+                resolved_branch = str(emp["branch_name"]).strip()
+        except Exception:
+            pass
+
+    if resolved_branch:
+        sql = text("""
+            SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code, sb.name as branch_name
+            FROM CLIENTT cl
+            JOIN SITE s ON s.CLIENTT = cl.oid
+            JOIN BRANCH sb ON s.BRANCH = sb.oid
+            WHERE LOWER(TRIM(sb.name)) = LOWER(TRIM(:bname))
+            ORDER BY cl.name ASC
+        """)
+        rows = db.execute(sql, {"bname": resolved_branch}).mappings().all()
+    else:
+        sql = text("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name ASC")
+        rows = db.execute(sql).mappings().all()
+    return [{"id": r["id"], "name": r["name"], "code": r["code"] or "", "branch_name": r.get("branch_name")} for r in rows]
 
 @router.get("/assessments/sites")
-def get_all_sites(client_id: Optional[int] = Query(None), db: Session = Depends(get_patrol_db)):
+def get_all_sites(
+    client_id: Optional[int] = Query(None), 
+    company_id: Optional[int] = Query(None),
+    emp_oid: Optional[str] = Query(None),
+    empOid: Optional[str] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    branch_id: Optional[int] = Query(None),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_patrol_db)
+):
+    resolved_branch = branch_name.strip() if branch_name and str(branch_name).strip() else None
+    target_emp = empOid or emp_oid
+    if not resolved_branch and not target_emp and authorization and authorization.startswith("Bearer "):
+        try:
+            token_part = authorization.split(" ")[1]
+            token_data = json.loads(base64.b64decode(token_part.encode()).decode())
+            target_emp = token_data.get("id") or token_data.get("empOid") or token_data.get("employee_id")
+            resolved_branch = token_data.get("branch_name")
+        except Exception:
+            pass
+
+    if target_emp:
+        try:
+            emp = db.execute(text("""
+                SELECT e.BRANCH as branch_id, b.name as branch_name
+                FROM EMPLOYEE e
+                LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+                WHERE e.oid = :eid OR e.emp_code = :eid
+                LIMIT 1
+            """), {"eid": str(target_emp)}).mappings().first()
+            if emp and emp.get("branch_name"):
+                resolved_branch = str(emp["branch_name"]).strip()
+        except Exception:
+            pass
+
     query = """
         SELECT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name 
         FROM SITE s 
         LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid 
         LEFT JOIN BRANCH b ON s.BRANCH = b.oid
     """
-    if client_id:
-        query += f" WHERE s.CLIENTT = {int(client_id)}"
-    query += " ORDER BY s.name"
-    rows = db.execute(text(query)).mappings().all()
+    where_clauses = []
+    params = {}
+    target_client = client_id or company_id
+    if target_client:
+        where_clauses.append("s.CLIENTT = :client_id")
+        params["client_id"] = int(target_client)
+
+    if resolved_branch:
+        where_clauses.append("LOWER(TRIM(b.name)) = LOWER(TRIM(:bname))")
+        params["bname"] = resolved_branch
+
+    if where_clauses:
+        query += " WHERE " + " AND ".join(where_clauses)
+    query += " ORDER BY s.name ASC"
+
+    rows = db.execute(text(query), params).mappings().all()
     return [{"id": r["id"], "name": r["name"], "client_id": r["client_id"], "client_name": r["client_name"], "branch_name": r["branch_name"]} for r in rows]
 
 @router.get("/assessments/guards")

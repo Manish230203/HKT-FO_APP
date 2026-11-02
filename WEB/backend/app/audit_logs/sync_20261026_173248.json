@@ -1,0 +1,24 @@
+{
+  "sync_id": "sync_20261026_173248",
+  "timestamp": "2026-10-26T17:32:48.765627",
+  "target_date": "2026-10-26",
+  "updated_count": 1,
+  "employees": [
+    {
+      "oid": 99921,
+      "emp_code": "TST_G_IDEM",
+      "date_of_leaving": "2026-10-25",
+      "original_state": {
+        "active": 1,
+        "app_registered": 1,
+        "patrol_app_registered": 1
+      },
+      "new_state": {
+        "active": 0,
+        "app_registered": 0,
+        "patrol_app_registered": 0
+      }
+    }
+  ],
+  "integrity_checksum": "72aeb9d049a0065c975a1d88ea93df88a81c82ab998fe7c4d8e75a143af7ad0b"
+}

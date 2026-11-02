@@ -31,28 +31,35 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useAttendance } from '../context/AttendanceContext';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 import { SwipeableBackWrapper } from '../components/SwipeableBackWrapper';
 import { CustomAlertModal } from '../components/ui/CustomAlertModal';
-import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns } from '../services/db';
-import { getActiveSiteVisitSession } from '../services/siteService';
+import { getPunchRecords, savePunchRecord, updatePunchRecordsList, getActiveCheckIns, clearAllActiveCheckIns } from '../services/db';
+import { getActiveSiteVisitSession, checkOutSiteVisit } from '../services/siteService';
 
 export default function MarkAttendanceScreen() {
   const { user, profileImage } = useAuth();
   const { markAttendance, validateSelfie, todayRecord, refreshStatus, profileData } = useAttendance();
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
 
   // Check if officer has a registered profile photo
   const hasProfilePhoto = Boolean(
-    profileImage ||
-    (profileData && profileData.profile_photo) ||
-    (user && (user as any).profile_photo)
+    (profileImage && profileImage.trim().length > 0) ||
+    (profileData && profileData.profile_photo && String(profileData.profile_photo).trim().length > 0 && String(profileData.profile_photo) !== 'null')
   );
 
   const [localTime, setLocalTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [isVerifyingPhoto, setIsVerifyingPhoto] = useState(false);
+  const [cameraKey, setCameraKey] = useState<number>(0);
+
+  const reloadLiveCamera = () => {
+    setCapturedPhotoUri(null);
+    setCameraKey((prev) => prev + 1);
+  };
 
   // Live Camera Hooks & Refs
   const [permission, requestPermission] = useCameraPermissions();
@@ -72,6 +79,8 @@ export default function MarkAttendanceScreen() {
     title: string;
     message: string;
     type: 'success' | 'error' | 'info';
+    onConfirm?: () => void;
+    confirmText?: string;
   }>({
     visible: false,
     title: '',
@@ -105,12 +114,15 @@ export default function MarkAttendanceScreen() {
       const records = await getPunchRecords(empId);
       const nowMs = Date.now();
       const todayStr = new Date().toISOString().split('T')[0];
+      const currentEmpId = String(user?.employee_id || user?.id || '').toLowerCase();
       const active = records.find((r) => {
         const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
         const punchMs = r.timestamp || 0;
         const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
         const isToday = !r.date || r.date === todayStr;
-        return isPunchedIn && isWithin16Hours && isToday;
+        const recordEmpId = String(r.employee_id || r.employeeId || '').toLowerCase();
+        const matchesEmp = !currentEmpId || recordEmpId === currentEmpId;
+        return isPunchedIn && isWithin16Hours && isToday && matchesEmp;
       });
 
       if (active || isServerActiveNow) {
@@ -139,17 +151,50 @@ export default function MarkAttendanceScreen() {
       setIsFocused(true);
       refreshStatus();
       checkActivePunchSession();
+
+      // Guard: If officer is inactive and has no profile photo uploaded, warn and redirect
+      if (!isOfficerActive && !hasProfilePhoto) {
+        setAlertInfo({
+          visible: true,
+          title: t('profile_photo_required_title') || 'Profile Photo Required',
+          message: t('profile_photo_required_desc') || 'Profile photo is not uploaded. You must upload your profile photo first in Settings before activating your duty session.',
+          type: 'error',
+          confirmText: t('upload_photo') || 'Upload Photo',
+          onConfirm: () => {
+            setAlertInfo((prev) => ({ ...prev, visible: false }));
+            router.replace({ pathname: '/settings', params: { autoUpload: 'true' } });
+          },
+        });
+      }
+
       return () => {
         setIsFocused(false);
       };
-    }, [refreshStatus, checkActivePunchSession])
+    }, [refreshStatus, checkActivePunchSession, isOfficerActive, hasProfilePhoto])
   );
 
-  // Auto-request camera permissions on mount
+  // Auto-request camera permissions and pre-fetch GPS on mount
   useEffect(() => {
     if (!permission?.granted) {
       requestPermission();
     }
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const lastLoc = await Location.getLastKnownPositionAsync();
+          if (lastLoc) {
+            setLocation({ latitude: lastLoc.coords.latitude, longitude: lastLoc.coords.longitude });
+          }
+          const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (freshLoc) {
+            setLocation({ latitude: freshLoc.coords.latitude, longitude: freshLoc.coords.longitude });
+          }
+        }
+      } catch (locErr) {
+        console.warn('GPS pre-fetch non-fatal error:', locErr);
+      }
+    })();
   }, []);
 
   // Digital Live Clock
@@ -206,9 +251,14 @@ export default function MarkAttendanceScreen() {
     if (!isOfficerActive && !hasProfilePhoto) {
       setAlertInfo({
         visible: true,
-        title: 'Profile Photo Required',
-        message: 'You have not uploaded a profile photo yet. Please upload your profile photo first in Settings before activating.',
+        title: t('profile_photo_required_title') || 'Profile Photo Required',
+        message: t('profile_photo_required_desc') || 'Profile photo is not uploaded. You must upload your profile photo first in Settings before activating.',
         type: 'error',
+        confirmText: t('upload_photo') || 'Upload Photo',
+        onConfirm: () => {
+          setAlertInfo((prev) => ({ ...prev, visible: false }));
+          router.replace({ pathname: '/settings', params: { autoUpload: 'true' } });
+        },
       });
       return;
     }
@@ -229,7 +279,11 @@ export default function MarkAttendanceScreen() {
       let activeSiteSession = await getActiveSiteVisitSession(empOid);
       if (!activeSiteSession) {
         const localCheckIns = await getActiveCheckIns();
-        const activeKeys = Object.keys(localCheckIns);
+        // Filter out visits that were already submitted or checked out
+        const activeKeys = Object.keys(localCheckIns).filter((k) => {
+          const item = localCheckIns[k];
+          return item && !item.reportSubmitted && !item.checkOutTime;
+        });
         if (activeKeys.length > 0) {
           const firstActive = localCheckIns[activeKeys[0]];
           activeSiteSession = {
@@ -241,27 +295,51 @@ export default function MarkAttendanceScreen() {
             status: 'IN_PROGRESS',
             duration_minutes: 0,
           };
+        } else {
+          // Clear any stale completed check-ins in local storage
+          await clearAllActiveCheckIns();
         }
       }
 
-      if (activeSiteSession) {
+      if (activeSiteSession && activeSiteSession.status === 'IN_PROGRESS') {
         setAlertInfo({
           visible: true,
-          title: 'Site Check-Out Required',
-          message: `You are currently checked into "${activeSiteSession.site_name || 'Site Visit'}". Please complete and check out from your active site visit before deactivating.`,
+          title: t('site_checkout_required_title') || 'Site Check-Out Required',
+          message: `${t('site_checkout_required_msg', { site: activeSiteSession.site_name || 'Site Visit' })}\n\nDo you want to automatically check out from this site visit and deactivate duty now?`,
           type: 'error',
+          confirmText: 'Check-Out & Deactivate',
+          onConfirm: async () => {
+            setAlertInfo((prev) => ({ ...prev, visible: false }));
+            try {
+              await checkOutSiteVisit({
+                employee_id: empOid,
+                site_id: activeSiteSession.site_id,
+                custom_visit_id: activeSiteSession.custom_visit_id,
+                latitude: location?.latitude,
+                longitude: location?.longitude,
+              });
+            } catch (coErr) {
+              console.warn('Auto checkout before deactivate warning:', coErr);
+            }
+            await clearAllActiveCheckIns();
+            proceedToCaptureAndPunch();
+          },
         });
         return;
       }
     }
 
+    await proceedToCaptureAndPunch();
+  };
+
+  const proceedToCaptureAndPunch = async () => {
     // 3. Capture Photo from Live Camera (or fallback to ImagePicker)
     let photoUri: string | null = null;
     try {
       if (cameraRef.current && permission?.granted) {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.8,
-          base64: true,
+          quality: 0.5,
+          skipProcessing: true,
         });
         if (photo && photo.uri) {
           photoUri = photo.uri;
@@ -275,13 +353,13 @@ export default function MarkAttendanceScreen() {
       try {
         const permRes = await ImagePicker.requestCameraPermissionsAsync();
         if (!permRes.granted) {
-          Alert.alert('Camera Permission Required', 'Camera access is required for verification.');
+          Alert.alert(t('camera_perm_required'), t('camera_perm_msg'));
           return;
         }
         const pickerRes = await ImagePicker.launchCameraAsync({
           allowsEditing: true,
           aspect: [1, 1],
-          quality: 0.8,
+          quality: 0.5,
           cameraType: ImagePicker.CameraType.front,
         });
         if (!pickerRes.canceled && pickerRes.assets && pickerRes.assets.length > 0) {
@@ -301,14 +379,42 @@ export default function MarkAttendanceScreen() {
     setIsVerifyingPhoto(true);
 
     try {
-      // 4. Face Verification
-      try {
-        const vRes = await validateSelfie(photoUri);
-        if (vRes && !vRes.success) {
-          console.warn('Selfie face notice:', vRes.message);
+      // 4. Face Verification (mandatory when activating)
+      if (!isOfficerActive) {
+        try {
+          const vRes = await validateSelfie(photoUri);
+          if (!vRes || !vRes.success) {
+            setIsSubmitting(false);
+            setIsVerifyingPhoto(false);
+            reloadLiveCamera();
+            const msg = vRes?.message || 'Face verification failed.';
+            const isMasterNotReg = msg.includes('MASTER PHOTO NOT REGISTERED') || msg.toLowerCase().includes('profile photo');
+
+            if (isMasterNotReg) {
+              setAlertInfo({
+                visible: true,
+                title: t('profile_photo_required_title') || 'Profile Photo Required',
+                message: 'Master profile photo is not registered. Please upload your profile photo first in Settings before activating.',
+                type: 'error',
+                confirmText: t('upload_photo') || 'Upload Photo',
+                onConfirm: () => {
+                  setAlertInfo((prev) => ({ ...prev, visible: false }));
+                  router.replace({ pathname: '/settings', params: { autoUpload: 'true' } });
+                },
+              });
+            } else {
+              setAlertInfo({
+                visible: true,
+                title: t('selfie_verif_failed') || 'Face Verification Notice',
+                message: msg,
+                type: 'error',
+              });
+            }
+            return; // DO NOT PROCEED TO PUNCH
+          }
+        } catch (valErr) {
+          console.warn('validateSelfie error:', valErr);
         }
-      } catch (valErr) {
-        console.warn('validateSelfie non-fatal error:', valErr);
       }
 
       // 5. GPS Location
@@ -353,8 +459,8 @@ export default function MarkAttendanceScreen() {
 
           setAlertInfo({
             visible: true,
-            title: 'Session Deactivated',
-            message: `Officer status is now INACTIVE. Session completed at ${nowTime}.`,
+            title: t('session_deactivated_success'),
+            message: t('session_deactivated_msg', { duration: nowTime }),
             type: 'success',
           });
         } else {
@@ -380,22 +486,24 @@ export default function MarkAttendanceScreen() {
 
           setAlertInfo({
             visible: true,
-            title: 'Session Activated',
-            message: `Officer status is now ACTIVE. Session started at ${nowTime}.`,
+            title: t('session_activated_success'),
+            message: t('session_activated_msg'),
             type: 'success',
           });
         }
         await refreshStatus();
       } else {
+        reloadLiveCamera();
         setAlertInfo({
           visible: true,
-          title: isOfficerActive ? 'Deactivation Failed' : 'Activation Failed',
-          message: res?.message || 'Could not update status on server. Please try again.',
+          title: t('duty_status') || 'Duty Status Notice',
+          message: res?.message || t('network_error'),
           type: 'error',
         });
       }
     } catch (err: any) {
       console.error('Status update error:', err);
+      reloadLiveCamera();
       setAlertInfo({
         visible: true,
         title: 'Error',
@@ -409,7 +517,7 @@ export default function MarkAttendanceScreen() {
   };
 
   const handleRetakePhoto = () => {
-    setCapturedPhotoUri(null);
+    reloadLiveCamera();
   };
 
   const displayImageUri = capturedPhotoUri || profileImage;
@@ -418,7 +526,7 @@ export default function MarkAttendanceScreen() {
     <SwipeableBackWrapper>
       <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={[styles.safeContainer, { backgroundColor: colors.background }]}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <ScrollView contentContainerStyle={styles.content}>
           {/* Header Bar */}
           <View style={styles.headerBar}>
@@ -427,14 +535,14 @@ export default function MarkAttendanceScreen() {
             </TouchableOpacity>
 
             <View style={styles.headerTitleCol}>
-              <Text style={[styles.mainTitleText, { color: colors.text }]}>Officer Status</Text>
+              <Text style={[styles.mainTitleText, { color: colors.text }]}>{t('duty_status')}</Text>
               <Text style={styles.userSubText}>
-                Officer: <Text style={styles.userNameHighlight}>{user?.name || 'PAPPU KUMAR'}</Text>
+                {t('field_officer')}: <Text style={styles.userNameHighlight}>{user?.name || 'OFFICER'}</Text>
               </Text>
             </View>
 
             <View style={styles.timeCol}>
-              <Text style={styles.localTimeLabel}>LOCAL TIME</Text>
+              <Text style={styles.localTimeLabel}>{t('local_time')}</Text>
               <Text style={[styles.localTimeDigits, { color: colors.text }]}>{localTime || '12:00:00'}</Text>
             </View>
           </View>
@@ -462,13 +570,11 @@ export default function MarkAttendanceScreen() {
                   { color: isOfficerActive ? '#10B981' : '#EF4444' },
                 ]}
               >
-                {isOfficerActive ? 'STATUS: ACTIVE' : 'STATUS: INACTIVE'}
+                {isOfficerActive ? t('officer_active_duty') : t('officer_inactive_duty')}
               </Text>
             </View>
             <Text style={[styles.statusSubText, { color: colors.textVariant }]}>
-              {isOfficerActive
-                ? 'Your session is active. Background location tracking and visit logging are enabled.'
-                : 'Your session is currently inactive. Tap your photo below to verify, then tap Activate.'}
+              {isOfficerActive ? t('officer_active_helper') : t('officer_inactive_helper')}
             </Text>
           </View>
 
@@ -477,7 +583,7 @@ export default function MarkAttendanceScreen() {
             <View style={styles.photoCardHeader}>
               <View style={[styles.headerDot, { backgroundColor: isOfficerActive ? '#EF4444' : '#10B981' }]} />
               <Text style={[styles.photoCardTitle, { color: colors.text }]}>
-                VERIFY FACE IDENTITY ({isOfficerActive ? 'DEACTIVATE' : 'ACTIVATE'})
+                {t('live_photo_verification')} ({isOfficerActive ? t('inactive') : t('active')})
               </Text>
             </View>
 
@@ -492,6 +598,7 @@ export default function MarkAttendanceScreen() {
                 <Image source={{ uri: capturedPhotoUri }} style={styles.viewfinderImage} resizeMode="cover" />
               ) : isFocused && permission?.granted ? (
                 <CameraView
+                  key={`camera_feed_${cameraKey}`}
                   ref={cameraRef}
                   style={StyleSheet.absoluteFill}
                   facing="front"
@@ -576,14 +683,14 @@ export default function MarkAttendanceScreen() {
                 <View style={styles.btnLoadingRow}>
                   <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 10 }} />
                   <Text style={styles.capturePhotoBtnText}>
-                    {isVerifyingPhoto ? 'VERIFYING FACE...' : isOfficerActive ? 'DEACTIVATING...' : 'ACTIVATING...'}
+                    {t('verifying_recording')}
                   </Text>
                 </View>
               ) : (
                 <View style={styles.btnRow}>
                   <Camera color="#FFFFFF" size={20} style={{ marginRight: 8 }} />
                   <Text style={styles.capturePhotoBtnText}>
-                    {isOfficerActive ? 'CAPTURE PHOTO & DEACTIVATE' : 'CAPTURE PHOTO & ACTIVATE'}
+                    {isOfficerActive ? t('capture_photo_deactivate') : t('capture_photo_activate')}
                   </Text>
                 </View>
               )}
@@ -600,8 +707,8 @@ export default function MarkAttendanceScreen() {
               ]}
             >
               <Text style={[styles.readyHelperText, { color: colors.textVariant }]}>
-                <Text style={styles.readyHelperTitle}>One-Step Face Verification: </Text>
-                Position your face inside the frame and tap the button. Your photo will be verified and status {isOfficerActive ? 'deactivated' : 'activated'} instantly in one step.
+                <Text style={styles.readyHelperTitle}>{t('face_verif_helper_title')}</Text>
+                {t('face_verif_helper_desc')}
               </Text>
             </View>
           </View>
@@ -614,11 +721,16 @@ export default function MarkAttendanceScreen() {
           title={alertInfo.title}
           message={alertInfo.message}
           type={alertInfo.type}
+          onConfirm={alertInfo.onConfirm}
+          confirmText={alertInfo.confirmText}
           onClose={() => {
             const isSuccess = alertInfo.type === 'success';
-            setAlertInfo({ ...alertInfo, visible: false });
-            if (isSuccess) {
+            const requiresPhoto = !isOfficerActive && !hasProfilePhoto;
+            setAlertInfo((prev) => ({ ...prev, visible: false }));
+            if (isSuccess || requiresPhoto) {
               router.replace('/(tabs)/dashboard');
+            } else {
+              reloadLiveCamera();
             }
           }}
         />

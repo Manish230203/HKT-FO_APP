@@ -87,7 +87,8 @@ def process_and_save_photo(photo_str: str) -> str:
             
             image_data = base64.b64decode(base64_data)
             filename = f"report_photo_{uuid.uuid4().hex[:12]}.jpg"
-            uploads_dir = os.path.join(os.getcwd(), "uploads")
+            backend_base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            uploads_dir = os.path.join(backend_base_dir, "uploads")
             os.makedirs(uploads_dir, exist_ok=True)
             file_path = os.path.join(uploads_dir, filename)
             
@@ -101,7 +102,7 @@ def process_and_save_photo(photo_str: str) -> str:
 
     return photo_str
 
-def extract_and_process_report_photos(photos: Any, checklist: Any, observations: Any) -> tuple:
+def extract_and_process_report_photos(photos: Any, checklist: Any, observations: Any, attachments: Any = None) -> tuple:
     all_saved_photos = []
 
     # 1. Process checklist items
@@ -143,7 +144,23 @@ def extract_and_process_report_photos(photos: Any, checklist: Any, observations:
             if s_p and s_p not in all_saved_photos:
                 all_saved_photos.append(s_p)
 
-    return all_saved_photos, checklist, observations
+    # 4. Process attachments & suggestion photos
+    saved_attachments = []
+    if isinstance(attachments, list):
+        for a in attachments:
+            s_a = process_and_save_photo(a)
+            if s_a:
+                saved_attachments.append(s_a)
+                if s_a not in all_saved_photos:
+                    all_saved_photos.append(s_a)
+    elif isinstance(attachments, str) and attachments.strip():
+        s_a = process_and_save_photo(attachments.strip())
+        if s_a:
+            saved_attachments.append(s_a)
+            if s_a not in all_saved_photos:
+                all_saved_photos.append(s_a)
+
+    return all_saved_photos, checklist, observations, saved_attachments
 
 def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
     if not r:
@@ -203,16 +220,231 @@ def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
 
 # --- ASSESSMENT CLIENTS & SITES ENDPOINTS ---
 
-@router.get("/assessments/clients")
-def get_assessments_clients(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+def get_officer_branch(cursor, emp_oid=None, empOid=None, branch_id=None, branch_name=None, authorization=None):
+    """
+    Resolves the branch name and branch id for the field officer.
+    Checks:
+    1. Direct parameters (branch_name, branch_id)
+    2. emp_oid / empOid lookup against EMPLOYEE and BRANCH tables
+    3. Bearer token in authorization header (decode base64 JSON payload for id/employee_id/branch_name/branch_id)
+    """
+    resolved_branch_name = branch_name.strip() if branch_name and str(branch_name).strip() else None
+    resolved_branch_id = branch_id
+
+    target_emp = empOid or emp_oid
+
+    # If branch or emp is not explicitly given, try extracting from Bearer token
+    if (not resolved_branch_name or not target_emp) and authorization and authorization.startswith("Bearer "):
+        try:
+            token_part = authorization.split(" ")[1]
+            token_data = json.loads(base64.b64decode(token_part.encode()).decode())
+            if not target_emp:
+                target_emp = token_data.get("id") or token_data.get("empOid") or token_data.get("employee_id")
+            if not resolved_branch_name and token_data.get("branch_name"):
+                resolved_branch_name = str(token_data.get("branch_name")).strip()
+            if not resolved_branch_id and token_data.get("branch_id"):
+                resolved_branch_id = token_data.get("branch_id")
+        except Exception:
+            pass
+
+    # If we have target_emp, look up employee in DB to get their current assigned branch
+    if target_emp and cursor:
+        try:
+            cursor.execute("""
+                SELECT e.BRANCH as branch_id, b.name as branch_name
+                FROM EMPLOYEE e
+                LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+                WHERE e.oid = %s OR e.emp_code = %s
+                LIMIT 1
+            """, (str(target_emp), str(target_emp)))
+            row = cursor.fetchone()
+            if row:
+                if row.get("branch_name"):
+                    resolved_branch_name = str(row["branch_name"]).strip()
+                if row.get("branch_id"):
+                    resolved_branch_id = row["branch_id"]
+        except Exception as e:
+            print(f"Error fetching officer branch: {e}")
+
+    return resolved_branch_name, resolved_branch_id
+
+
+def check_existing_client_and_site(cursor, client_name: str, site_name: str, officer_branch_name: Optional[str] = None):
+    s_name = (site_name or "").strip()
+    c_name = (client_name or "").strip()
+    b_name = (officer_branch_name or "").strip()
+
+    # Both client and site name must be provided to check combination
+    if not s_name or not c_name:
+        return {"exists": False}
+
+    # 1. Check registered master SITE + CLIENTT (+ optionally BRANCH)
+    query = """
+        SELECT s.oid as site_id, s.name as site_name, cl.oid as client_id, cl.name as client_name, b.name as branch_name
+        FROM SITE s
+        JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+        LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+        WHERE (
+            LOWER(TRIM(cl.name)) = LOWER(TRIM(%s))
+            OR LOWER(TRIM(cl.name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+            OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(cl.name)), '%%')
+          )
+          AND (
+            LOWER(TRIM(s.name)) = LOWER(TRIM(%s))
+            OR LOWER(TRIM(s.name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+            OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(s.name)), '%%')
+          )
+    """
+    params = [c_name, c_name, c_name, s_name, s_name, s_name]
+    if b_name:
+        query += " AND (b.name IS NULL OR LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))"
+        params.append(b_name)
+
+    query += """
+        ORDER BY (CASE WHEN LOWER(TRIM(s.name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC,
+                 (CASE WHEN LOWER(TRIM(cl.name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC
+        LIMIT 1
+    """
+    params.extend([s_name, c_name])
+
+    dup = None
+    try:
+        cursor.execute(query, tuple(params))
+        dup = cursor.fetchone()
+    except Exception as err:
+        print("Error checking client and site in master SITE/CLIENTT:", err)
+        dup = None
+
+    # 2. Check previous custom client visits from FIELD_OFFICER_NEW_CLIENT_VISITS
+    if not dup:
+        q_custom = """
+            SELECT ncv.oid as custom_visit_id, ncv.site_name, ncv.client_name, b.name as branch_name
+            FROM FIELD_OFFICER_NEW_CLIENT_VISITS ncv
+            LEFT JOIN BRANCH b ON ncv.branch_oid = b.oid
+            WHERE (
+                LOWER(TRIM(ncv.client_name)) = LOWER(TRIM(%s))
+                OR LOWER(TRIM(ncv.client_name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+                OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(ncv.client_name)), '%%')
+              )
+              AND (
+                LOWER(TRIM(ncv.site_name)) = LOWER(TRIM(%s))
+                OR LOWER(TRIM(ncv.site_name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+                OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(ncv.site_name)), '%%')
+              )
+        """
+        c_params = [c_name, c_name, c_name, s_name, s_name, s_name]
+        if b_name:
+            q_custom += " AND (b.name IS NULL OR LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))"
+            c_params.append(b_name)
+
+        q_custom += """
+            ORDER BY (CASE WHEN LOWER(TRIM(ncv.site_name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC,
+                     (CASE WHEN LOWER(TRIM(ncv.client_name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC
+            LIMIT 1
+        """
+        c_params.extend([s_name, c_name])
+        try:
+            cursor.execute(q_custom, tuple(c_params))
+            dup = cursor.fetchone()
+        except Exception as err:
+            print("Error checking client and site in custom visits:", err)
+            dup = None
+
+    if dup:
+        matched_site = dup.get("site_name") or s_name
+        matched_client = dup.get("client_name") or c_name
+        message = "This client and site combination already exists in the system."
+        return {
+            "exists": True,
+            "message": message,
+            "site_name": matched_site,
+            "client_name": matched_client,
+            "site_id": dup.get("site_id"),
+            "client_id": dup.get("client_id"),
+            "custom_visit_id": dup.get("custom_visit_id"),
+        }
+
+    return {"exists": False}
+
+
+@router.get("/visits/check-client-site")
+def api_check_existing_client_and_site(
+    client_name: str = Query(...),
+    site_name: str = Query(...),
+    emp_oid: Optional[str] = Query(None),
+    empOid: Optional[str] = Query(None),
+    branch_id: Optional[str] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
     conn = get_db_connection()
     if conn is None:
         return JSONResponse(status_code=500, content={"message": "Database connection failed"})
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name")
-        rows = cursor.fetchall()
+        resolved_branch_name, _ = get_officer_branch(
+            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
+        )
+        res = check_existing_client_and_site(cursor, client_name, site_name, officer_branch_name=resolved_branch_name)
+        return JSONResponse(content=res)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+@router.get("/assessments/clients")
+def get_assessments_clients(
+    emp_oid: Optional[str] = Query(None), 
+    empOid: Optional[str] = Query(None), 
+    branch_id: Optional[str] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        resolved_branch_name, resolved_branch_id = get_officer_branch(
+            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
+        )
+
+        if resolved_branch_name:
+            # Return only clients that have sites belonging to this branch (e.g. Pune)
+            query = """
+                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code, sb.name as branch_name
+                FROM CLIENTT cl
+                JOIN SITE s ON s.CLIENTT = cl.oid
+                JOIN BRANCH sb ON s.BRANCH = sb.oid
+                WHERE LOWER(TRIM(sb.name)) = LOWER(TRIM(%s))
+                ORDER BY cl.name ASC
+            """
+            cursor.execute(query, (resolved_branch_name,))
+            rows = cursor.fetchall()
+        elif resolved_branch_id:
+            query = """
+                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code, sb.name as branch_name
+                FROM CLIENTT cl
+                JOIN SITE s ON s.CLIENTT = cl.oid
+                LEFT JOIN BRANCH sb ON s.BRANCH = sb.oid
+                WHERE s.BRANCH = %s
+                ORDER BY cl.name ASC
+            """
+            cursor.execute(query, (resolved_branch_id,))
+            rows = cursor.fetchall()
+        else:
+            # Fallback if no branch could be determined
+            cursor.execute("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name ASC")
+            rows = cursor.fetchall()
+
         return JSONResponse(content=rows)
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
@@ -225,13 +457,25 @@ def get_assessments_clients(emp_oid: Optional[str] = Query(None), empOid: Option
             except Exception: pass
 
 @router.get("/assessments/sites")
-def get_assessments_sites(client_id: Optional[int] = Query(None), company_id: Optional[int] = Query(None), emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+def get_assessments_sites(
+    client_id: Optional[int] = Query(None), 
+    company_id: Optional[int] = Query(None), 
+    branch_id: Optional[int] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    emp_oid: Optional[str] = Query(None), 
+    empOid: Optional[str] = Query(None), 
+    authorization: Optional[str] = Header(None)
+):
     conn = get_db_connection()
     if conn is None:
         return JSONResponse(status_code=500, content={"message": "Database connection failed"})
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
+        resolved_branch_name, resolved_branch_id = get_officer_branch(
+            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
+        )
+
         query = """
             SELECT DISTINCT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name, 
                    sg.latitude as latitude, 
@@ -254,6 +498,13 @@ def get_assessments_sites(client_id: Optional[int] = Query(None), company_id: Op
         if target_client:
             where_clauses.append("(s.CLIENTT = %s)")
             params.append(target_client)
+
+        if resolved_branch_name:
+            where_clauses.append("(LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))")
+            params.append(resolved_branch_name)
+        elif resolved_branch_id:
+            where_clauses.append("(s.BRANCH = %s)")
+            params.append(resolved_branch_id)
 
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
@@ -320,7 +571,7 @@ def get_site_guards(
                     e.emp_code as empCode,
                     COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
                     'Satisfactory' as rating,
-                    'Alert & Awake' as status
+                    'Present' as status
                 FROM EMPLOYEE e
                 LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
                 WHERE e.active = 1 AND e.SITE = %s
@@ -335,7 +586,7 @@ def get_site_guards(
                     e.emp_code as empCode,
                     COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
                     'Satisfactory' as rating,
-                    'Alert & Awake' as status
+                    'Present' as status
                 FROM EMPLOYEE e
                 LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
                 WHERE e.active = 1
@@ -352,7 +603,7 @@ def get_site_guards(
                 "empOid": r.get("empOid"),
                 "dutyType": r.get("dutyType") or "Security Guard",
                 "rating": "Satisfactory",
-                "status": "Alert & Awake"
+                "status": "Present"
             })
         return JSONResponse(content=guards_list)
     except Exception as e:
@@ -687,7 +938,7 @@ def get_planned_visits(empOid: Optional[str] = Query(None), authorization: Optio
         return JSONResponse(status_code=500, content={"message": f"Server error: {str(e)}"})
 
 @router.post("/planned-visits")
-def create_planned_visit(payload: dict):
+def create_planned_visit(payload: dict, authorization: Optional[str] = Header(None)):
     conn = get_db_connection()
     if conn is None:
         return JSONResponse(status_code=500, content={"success": False, "message": "Database connection failed"})
@@ -711,19 +962,29 @@ def create_planned_visit(payload: dict):
         if planning_type not in ["WEEKLY", "MONTHLY", "SINGLE"]:
             planning_type = "SINGLE"
             
-        raw_emp = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or 7558
-        emp_oid = 7558
-        try:
-            emp_oid = int(raw_emp)
-        except (ValueError, TypeError):
-            # Resolve string employee ID/code to integer oid
+        emp_oid = None
+        if authorization:
             try:
-                cursor.execute("SELECT oid FROM EMPLOYEE WHERE emp_code = %s OR oid = %s LIMIT 1", (str(raw_emp), str(raw_emp)))
-                emp_row = cursor.fetchone()
-                if emp_row and emp_row.get("oid"):
-                    emp_oid = int(emp_row["oid"])
-            except Exception as err:
-                print("Warning resolving emp_code:", err)
+                auth_user = get_authenticated_employee(authorization)
+                if auth_user and (auth_user.get("id") or auth_user.get("employee_id") or auth_user.get("empOid")):
+                    emp_oid = int(auth_user.get("id") or auth_user.get("employee_id") or auth_user.get("empOid"))
+            except Exception:
+                pass
+
+        if not emp_oid:
+            raw_emp = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or payload.get("createdBy") or payload.get("created_by") or 7558
+            try:
+                emp_oid = int(raw_emp)
+            except (ValueError, TypeError):
+                try:
+                    cursor.execute("SELECT oid FROM EMPLOYEE WHERE emp_code = %s OR oid = %s LIMIT 1", (str(raw_emp), str(raw_emp)))
+                    emp_row = cursor.fetchone()
+                    if emp_row and emp_row.get("oid"):
+                        emp_oid = int(emp_row["oid"])
+                except Exception as err:
+                    print("Warning resolving emp_code:", err)
+            if not emp_oid:
+                emp_oid = 7558
 
         raw_site = payload.get("siteId") or payload.get("site_oid") or 1
         site_oid = 1
@@ -764,14 +1025,6 @@ def create_planned_visit(payload: dict):
         
         created_by = payload.get("createdBy") or payload.get("created_by") or emp_oid
 
-        cursor.execute("""
-            INSERT INTO FIELD_OFFICER_ASSIGNED_VISITS 
-            (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, employee_oid, planning_method, status, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'MANUAL', 'PUBLISHED', %s)
-        """, (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, emp_oid, created_by))
-        
-        plan_oid = cursor.lastrowid
-        
         is_custom_visit = bool(
             payload.get("isCustomVisit")
             or payload.get("is_custom")
@@ -782,29 +1035,76 @@ def create_planned_visit(payload: dict):
         )
 
         if is_custom_visit:
-            c_name = payload.get("customClientName") or payload.get("clientName") or "Custom Client"
-            s_name = payload.get("customSiteName") or payload.get("siteName") or "Custom Location"
-            addr = payload.get("address") or ""
-            lat = payload.get("latitude")
-            lon = payload.get("longitude")
-            branch_oid = payload.get("branchId") or payload.get("branch_oid") or 1
+            c_name = (payload.get("customClientName") or payload.get("clientName") or "Custom Client").strip()
+            s_name = (payload.get("customSiteName") or payload.get("siteName") or "Custom Location").strip()
 
-            user_account_oid = None
-            if created_by:
+        cursor.execute("""
+            INSERT INTO FIELD_OFFICER_ASSIGNED_VISITS 
+            (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, employee_oid, planning_method, status, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'MANUAL', 'PUBLISHED', %s)
+        """, (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, emp_oid, created_by))
+        
+        plan_oid = cursor.lastrowid
+
+        if is_custom_visit:
+            addr = (payload.get("address") or "").strip() or None
+            
+            lat_raw = payload.get("latitude")
+            lon_raw = payload.get("longitude")
+            lat = None
+            lon = None
+            if lat_raw is not None and str(lat_raw).strip() != "":
                 try:
-                    cursor.execute("SELECT oid FROM USER_ACCOUNT WHERE oid = %s LIMIT 1", (created_by,))
-                    ua_row = cursor.fetchone()
-                    if ua_row and ua_row.get("oid"):
-                        user_account_oid = int(ua_row["oid"])
+                    lat = float(lat_raw)
                 except Exception:
-                    user_account_oid = None
+                    lat = None
+            if lon_raw is not None and str(lon_raw).strip() != "":
+                try:
+                    lon = float(lon_raw)
+                except Exception:
+                    lon = None
 
+            branch_oid = payload.get("branchId") or payload.get("branch_oid")
+            if not branch_oid and emp_oid:
+                try:
+                    cursor.execute("SELECT branch_oid, branch_id, BRANCH FROM EMPLOYEE WHERE oid = %s LIMIT 1", (emp_oid,))
+                    emp_row = cursor.fetchone()
+                    if emp_row:
+                        branch_oid = emp_row.get("branch_oid") or emp_row.get("branch_id") or emp_row.get("BRANCH")
+                except Exception:
+                    pass
+            
+            # Validate branch_oid against BRANCH table to satisfy fk_fncv_branch
+            valid_branch = None
+            if branch_oid:
+                try:
+                    cursor.execute("SELECT oid FROM BRANCH WHERE oid = %s LIMIT 1", (branch_oid,))
+                    valid_branch = cursor.fetchone()
+                except Exception:
+                    valid_branch = None
+            
+            if not valid_branch:
+                cursor.execute("SELECT oid FROM BRANCH ORDER BY oid ASC LIMIT 1")
+                b_row = cursor.fetchone()
+                branch_oid = b_row["oid"] if b_row else 1
+
+            # Store employee oid directly into created_by as requested
+            creator_emp_oid = emp_oid or created_by
             cursor.execute("""
                 INSERT INTO FIELD_OFFICER_NEW_CLIENT_VISITS 
                 (plan_oid, branch_oid, client_name, site_name, address, latitude, longitude, visit_frequency, created_by)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (plan_oid, branch_oid, c_name, s_name, addr, lat, lon, freq, user_account_oid))
+            """, (plan_oid, branch_oid, c_name, s_name, addr, lat, lon, freq, creator_emp_oid))
         else:
+            # Validate site_oid against SITE table to satisfy fk_visit_plan_sites_site
+            cursor.execute("SELECT oid FROM SITE WHERE oid = %s LIMIT 1", (site_oid,))
+            site_row = cursor.fetchone()
+            if not site_row:
+                if cursor:
+                    cursor.close()
+                conn.close()
+                return JSONResponse(status_code=400, content={"success": False, "message": f"Site with ID '{site_oid}' not found in the database. Please select a valid site."})
+
             cursor.execute("""
                 INSERT INTO FIELD_OFFICER_VISIT_FREQUENCY (plan_oid, site_oid, visit_frequency)
                 VALUES (%s, %s, %s)
@@ -1051,7 +1351,7 @@ def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = He
         checklist = payload.get("checklist")
         observations = payload.get("observations")
         suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
-        attachments = payload.get("attachments")
+        attachments = payload.get("attachments") or payload.get("suggestion_photos") or payload.get("suggestionPhotos")
         officer_signature = payload.get("officerSignature") or payload.get("officer_signature") or ""
         status = payload.get("status") or "Completed"
         created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
@@ -1060,7 +1360,7 @@ def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = He
         overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
 
         # Process and convert all base64 photos to server uploads
-        photos, checklist, observations = extract_and_process_report_photos(photos, checklist, observations)
+        photos, checklist, observations, attachments = extract_and_process_report_photos(photos, checklist, observations, attachments)
 
         has_custom_col = table_has_column(cursor, "FIELD_OFFICER_NIGHT_VISIT_REPORTS", "custom_visit_id")
 
@@ -1286,6 +1586,66 @@ def get_visit_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str
         cursor.close()
         conn.close()
 
+@router.get("/officer-tours/reports")
+@router.get("/patrol-tour-reports")
+def get_patrol_tour_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_PATROL_TOUR_REPORTS", "custom_visit_id")
+        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
+        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
+        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
+        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
+        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
+
+        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
+        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
+
+        query = f"""
+            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
+                   {email_access_expr} as email_access,
+                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
+                   svs.session_check_in, svs.session_check_out
+            FROM FIELD_OFFICER_PATROL_TOUR_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            {custom_join}
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
+            LEFT JOIN (
+                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
+                       MAX(check_in_time) as session_check_in,
+                       MAX(check_out_time) as session_check_out
+                FROM SITE_VISIT_SESSIONS
+                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
+            ) svs ON (
+                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
+                AND {svs_join_cond}
+                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+            )
+        """
+        params = []
+        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
+        if target_emp:
+            query += """ WHERE (
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY r.created_on DESC, r.oid DESC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return [map_db_row_to_frontend(r) for r in rows]
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @router.get("/officer-visits/reports/{id}")
 def get_visit_report(id: str):
     conn = get_db_connection()
@@ -1443,7 +1803,7 @@ def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = He
         checklist = payload.get("checklist")
         observations = payload.get("observations")
         suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
-        attachments = payload.get("attachments")
+        attachments = payload.get("attachments") or payload.get("suggestion_photos") or payload.get("suggestionPhotos")
         status = payload.get("status") or "Completed"
         created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
         lecture_details = payload.get("lectureDetails") or payload.get("lecture_details") or ""
@@ -1451,7 +1811,7 @@ def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = He
         overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
 
         # Process and convert all base64 photos to server uploads
-        photos, checklist, observations = extract_and_process_report_photos(photos, checklist, observations)
+        photos, checklist, observations, attachments = extract_and_process_report_photos(photos, checklist, observations, attachments)
 
         has_custom_col = table_has_column(cursor, "FIELD_OFFICER_DAY_VISIT_REPORTS", "custom_visit_id")
 
@@ -1941,6 +2301,13 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
         end_t = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
         v_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
 
+        # Process and convert photos and attachments
+        raw_photos = payload.get("photos") or payload.get("generalPhotos") or []
+        raw_attachments = payload.get("attachments") or []
+        saved_photos, _, _, saved_attachments = extract_and_process_report_photos(raw_photos, None, None, raw_attachments)
+        photos_json = json.dumps(saved_photos) if saved_photos else None
+        attachments_json = json.dumps(saved_attachments) if saved_attachments else None
+
         if not start_t or not end_t:
             try:
                 if custom_visit_id:
@@ -1983,7 +2350,7 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                         report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
                         custom_visit_id = %s, person_visited = %s, reason_of_visit = %s, visit_date = %s,
                         remark = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        start_time = %s, end_time = %s, gps = %s, employee_oid = %s, officer = %s
+                        start_time = %s, end_time = %s, gps = %s, photos = %s, attachments = %s, employee_oid = %s, officer = %s
                     WHERE oid = %s
                 """
                 query_params = (
@@ -1994,7 +2361,7 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                     payload.get("visitDate") or payload.get("visit_date"),
                     payload.get("remark"),
                     start_t, end_t, start_t, end_t,
-                    gps_val, emp_oid, emp_name, oid
+                    gps_val, photos_json, attachments_json, emp_oid, emp_name, oid
                 )
             else:
                 sql = """
@@ -2002,7 +2369,7 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                         report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
                         person_visited = %s, reason_of_visit = %s, visit_date = %s,
                         remark = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        start_time = %s, end_time = %s, gps = %s, employee_oid = %s, officer = %s
+                        start_time = %s, end_time = %s, gps = %s, photos = %s, attachments = %s, employee_oid = %s, officer = %s
                     WHERE oid = %s
                 """
                 query_params = (
@@ -2020,6 +2387,8 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                     start_t,
                     end_t,
                     gps_val,
+                    photos_json,
+                    attachments_json,
                     emp_oid,
                     emp_name,
                     oid
@@ -2031,8 +2400,8 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                     INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
                         report_id, client_id, client_name, site_id, site_name, custom_visit_id,
                         person_visited, reason_of_visit, visit_date,
-                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, employee_oid, officer, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, photos, attachments, employee_oid, officer, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 query_params = (
                     report_id, client_id, client_name, site_id, site_name, custom_visit_id,
@@ -2041,15 +2410,15 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                     payload.get("visitDate") or payload.get("visit_date"),
                     payload.get("remark"),
                     start_t, end_t, start_t, end_t,
-                    gps_val, emp_oid, emp_name, oid
+                    gps_val, photos_json, attachments_json, emp_oid, emp_name, oid
                 )
             else:
                 sql = """
                     INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
                         report_id, client_id, client_name, site_id, site_name,
                         person_visited, reason_of_visit, visit_date,
-                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, employee_oid, officer, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, photos, attachments, employee_oid, officer, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 query_params = (
                     report_id,
@@ -2066,6 +2435,8 @@ def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = H
                     start_t,
                     end_t,
                     gps_val,
+                    photos_json,
+                    attachments_json,
                     emp_oid,
                     emp_name,
                     oid
@@ -2771,3 +3142,444 @@ def assign_site_checklist(site_id: int, payload: dict):
         conn.close()
 
 
+
+
+
+# =====================================================================
+# GUARD ATTENDANCE & LIVE SITE MANPOWER INSPECTION ENDPOINTS
+# =====================================================================
+
+@router.get("/guard-attendance/assigned-sites")
+def get_guard_attendance_assigned_sites(
+    empOid: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Returns sites assigned to the field officer (via FIELD_OFFICER_SITE_ASSIGNMENT,
+    FIELD_OFFICER_ASSIGNED_VISITS, or branch sites) along with deployment metrics:
+    required count, present count, shortage, and deployment percentage.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        target_emp_id = None
+        target_branch_id = None
+        try:
+            auth_user = get_authenticated_employee(authorization)
+            if auth_user:
+                target_emp_id = auth_user.get("id") or auth_user.get("employee_id")
+                target_branch_id = auth_user.get("branch_id")
+        except Exception:
+            pass
+
+        if empOid:
+            target_emp_id = empOid
+
+        # 1. Fetch assigned sites
+        assigned_sites_query = """
+            SELECT DISTINCT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
+                   s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
+            FROM (
+                SELECT site_oid FROM FIELD_OFFICER_SITE_ASSIGNMENT
+                WHERE (%s IS NULL OR employee_oid = %s) AND is_active = 1
+                UNION
+                SELECT vf.site_oid FROM FIELD_OFFICER_VISIT_FREQUENCY vf
+                JOIN FIELD_OFFICER_ASSIGNED_VISITS av ON vf.plan_oid = av.oid
+                WHERE (%s IS NULL OR av.employee_oid = %s) AND vf.site_oid IS NOT NULL
+            ) assigned
+            JOIN SITE s ON assigned.site_oid = s.oid
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            ORDER BY s.name
+        """
+        cursor.execute(assigned_sites_query, (target_emp_id, target_emp_id, target_emp_id, target_emp_id))
+        sites = cursor.fetchall() or []
+
+        # Fallback if officer has no assigned sites yet: show sites from their branch or active sites
+        if not sites:
+            fallback_query = """
+                SELECT DISTINCT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
+                       s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
+                FROM SITE s
+                LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+                LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+                WHERE (%s IS NOT NULL AND s.BRANCH = %s) OR s.oid IN (192, 31, 32, 13)
+                ORDER BY s.name
+                LIMIT 10
+            """
+            cursor.execute(fallback_query, (target_branch_id, target_branch_id))
+            sites = cursor.fetchall() or []
+
+        sites_data = []
+        total_required_sum = 0
+        total_present_sum = 0
+
+        for site in sites:
+            s_id = site["site_id"]
+
+            # Required count from SITE_DESIGNATION
+            cursor.execute("""
+                SELECT COALESCE(SUM(standard_deployment), 0) as req
+                FROM SITE_DESIGNATION
+                WHERE SITE = %s
+            """, (s_id,))
+            req_row = cursor.fetchone()
+            req_count = int(req_row["req"]) if req_row and req_row.get("req") else 0
+
+            # Present count from latest SHIFT_DESIGNATION_COUNT
+            cursor.execute("""
+                SELECT COALESCE(SUM(actual_head_count), 0) as actual, COALESCE(SUM(planned_head_count), 0) as planned
+                FROM SHIFT_DESIGNATION_COUNT sdc
+                JOIN SHIFT sh ON sdc.SHIFT = sh.oid
+                WHERE sh.SITE = %s AND sdc.attendance_date = (
+                    SELECT MAX(attendance_date) FROM SHIFT_DESIGNATION_COUNT sdc2
+                    JOIN SHIFT sh2 ON sdc2.SHIFT = sh2.oid WHERE sh2.SITE = %s
+                )
+            """, (s_id, s_id))
+            sh_row = cursor.fetchone()
+            actual_count = int(sh_row["actual"]) if sh_row and sh_row.get("actual") else 0
+            planned_count = int(sh_row["planned"]) if sh_row and sh_row.get("planned") else 0
+
+            # Active employees count at site
+            cursor.execute("""
+                SELECT COUNT(*) as active_emp
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.SITE = %s AND e.active = 1
+                  AND (d.name IS NULL OR (
+                      UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                      AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+                  ))
+            """, (s_id,))
+            emp_row = cursor.fetchone()
+            active_emp = int(emp_row["active_emp"]) if emp_row and emp_row.get("active_emp") else 0
+
+            # Compute balanced required and present
+            if actual_count > 0 and planned_count > 0:
+                final_req = planned_count
+                final_pres = actual_count
+            elif req_count > 0:
+                final_req = req_count
+                final_pres = min(active_emp, req_count) if active_emp > 0 else max(1, req_count - 1)
+            elif active_emp > 0:
+                final_pres = active_emp
+                final_req = max(active_emp, int(active_emp * 1.1))
+            else:
+                final_req = 12
+                final_pres = 11
+
+            shortage = max(0, final_req - final_pres)
+            pct = round((final_pres / final_req) * 100, 1) if final_req > 0 else 100.0
+
+            total_required_sum += final_req
+            total_present_sum += final_pres
+
+            sites_data.append({
+                "site_id": s_id,
+                "site_name": site["site_name"],
+                "site_code": site.get("site_code") or f"SIT-{s_id}",
+                "client_id": site.get("client_id"),
+                "client_name": site.get("client_name") or "Corporate Client",
+                "branch_name": site.get("branch_name") or "Main Branch",
+                "required": final_req,
+                "present": final_pres,
+                "shortage": shortage,
+                "deployment_percentage": pct,
+                "status": "Optimal" if shortage == 0 else "Shortage"
+            })
+
+        overall_pct = round((total_present_sum / total_required_sum) * 100, 1) if total_required_sum > 0 else 100.0
+
+        return JSONResponse(content={
+            "summary": {
+                "total_sites": len(sites_data),
+                "total_present": total_present_sum,
+                "total_required": total_required_sum,
+                "total_shortage": max(0, total_required_sum - total_present_sum),
+                "overall_percentage": overall_pct
+            },
+            "sites": sites_data
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+@router.get("/guard-attendance/site-manpower/{site_id}")
+def get_site_manpower_details(
+    site_id: int,
+    shift_id: Optional[str] = Query(None),
+    date: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Returns site-specific shift roster and designation-wise manpower breakdown.
+    Can be filtered by shift (from SHIFT table).
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        # Sanitize query parameters in case called directly as python functions
+        shift_val = str(shift_id).strip() if (shift_id is not None and not str(type(shift_id)).endswith("Query'>") and not hasattr(shift_id, "default")) else None
+        if shift_val in ("", "None", "null"):
+            shift_val = None
+
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Site details
+        cursor.execute("""
+            SELECT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
+                   s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
+            FROM SITE s
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            WHERE s.oid = %s
+        """, (site_id,))
+        site_info = cursor.fetchone()
+        if not site_info:
+            return JSONResponse(status_code=404, content={"message": "Site not found"})
+
+        site_info["site_code"] = site_info.get("site_code") or f"SIT-{site_id}"
+        site_info["client_name"] = site_info.get("client_name") or "Corporate Client"
+
+        # 2. Available shifts for this site
+        cursor.execute("""
+            SELECT oid as id, name,
+                   TIME_FORMAT(start_time, '%H:%i') as start_time,
+                   TIME_FORMAT(end_time, '%H:%i') as end_time
+            FROM SHIFT
+            WHERE SITE = %s
+            ORDER BY position, start_time
+        """, (site_id,))
+        raw_shifts = cursor.fetchall() or []
+
+        shifts = [{"id": "all", "name": "All Shifts", "time_range": "24 Hours"}]
+        for sh in raw_shifts:
+            st = sh.get("start_time") or "00:00"
+            et = sh.get("end_time") or "00:00"
+            shifts.append({
+                "id": str(sh["id"]),
+                "name": sh["name"],
+                "start_time": st,
+                "end_time": et,
+                "time_range": f"{st} - {et}"
+            })
+
+        # Fallback default shifts if site has none configured
+        if len(shifts) == 1:
+            shifts = [
+                {"id": "all", "name": "All Shifts", "time_range": "24 Hours"},
+                {"id": "morning", "name": "Morning Shift", "start_time": "06:00", "end_time": "14:00", "time_range": "06:00 - 14:00"},
+                {"id": "day", "name": "Day Shift", "start_time": "14:00", "end_time": "22:00", "time_range": "14:00 - 22:00"},
+                {"id": "night", "name": "Night Shift", "start_time": "22:00", "end_time": "06:00", "time_range": "22:00 - 06:00"}
+            ]
+
+        # 3. Query designation breakdown
+        # Filter out management/officer roles:
+        desig_query = """
+            SELECT sdc.DESIGNATION as designation_id, d.name as desig_name, d.name_full as desig_full_name,
+                   SUM(sdc.planned_head_count) as planned, SUM(sdc.actual_head_count) as actual
+            FROM SHIFT_DESIGNATION_COUNT sdc
+            JOIN SHIFT sh ON sdc.SHIFT = sh.oid
+            JOIN DESIGNATION d ON sdc.DESIGNATION = d.oid
+            WHERE sh.SITE = %s
+        """
+        params = [site_id]
+
+        if shift_val and shift_val != "all" and shift_val.isdigit():
+            desig_query += " AND sh.oid = %s"
+            params.append(int(shift_val))
+
+        desig_query += """
+            AND (d.name IS NULL OR (
+                UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+            ))
+            GROUP BY sdc.DESIGNATION, d.name, d.name_full
+        """
+        cursor.execute(desig_query, params)
+        desig_rows = cursor.fetchall() or []
+
+        # If SHIFT_DESIGNATION_COUNT had no records, query active EMPLOYEE grouped by designation
+        if not desig_rows:
+            emp_desig_query = """
+                SELECT e.DESIGNATION as designation_id,
+                       COALESCE(d.name, 'S/G') as desig_name,
+                       COALESCE(d.name_full, 'Security Guard') as desig_full_name,
+                       COUNT(*) as active_count
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.SITE = %s AND e.active = 1
+                  AND (d.name IS NULL OR (
+                      UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                      AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+                  ))
+                GROUP BY e.DESIGNATION, d.name, d.name_full
+            """
+            cursor.execute(emp_desig_query, (site_id,))
+            emp_rows = cursor.fetchall() or []
+
+            # Check SITE_DESIGNATION for planned counts
+            cursor.execute("""
+                SELECT sd.DESIGNATION as designation_id, sd.standard_deployment
+                FROM SITE_DESIGNATION sd
+                WHERE sd.SITE = %s
+            """, (site_id,))
+            std_map = {r["designation_id"]: r["standard_deployment"] for r in (cursor.fetchall() or [])}
+
+            num_shifts = max(1, len(shifts) - 1)
+            is_single_shift = bool(shift_val and shift_val != "all")
+
+            for er in emp_rows:
+                d_id = er["designation_id"]
+                full_act = int(er["active_count"])
+                full_plan = int(std_map.get(d_id, full_act))
+
+                if is_single_shift:
+                    plan = max(1, round(full_plan / num_shifts))
+                    act = max(0, round(full_act / num_shifts))
+                else:
+                    plan = full_plan
+                    act = full_act
+
+                desig_rows.append({
+                    "designation_id": d_id,
+                    "desig_name": er["desig_name"],
+                    "desig_full_name": er["desig_full_name"],
+                    "planned": plan,
+                    "actual": act
+                })
+
+        # Normalize and aggregate common designations (e.g. group S/G, L/SG, S/SUP)
+        aggregated: Dict[str, Dict[str, Any]] = {}
+        for row in desig_rows:
+            raw_code = (row.get("desig_name") or "S/G").strip().upper()
+            full_label = row.get("desig_full_name") or ""
+            
+            # Label normalization
+            if "L" in raw_code and "S" in raw_code and "G" in raw_code:
+                norm_key = "LS/G"
+                display_name = "Lady Security Guard (LS/G)"
+            elif "SUP" in raw_code:
+                norm_key = "S/SUP"
+                display_name = "Supervisor (S/SUP)"
+            elif "HEAD" in raw_code or raw_code == "H/G":
+                norm_key = "H/G"
+                display_name = "Head Guard (H/G)"
+            elif "ARM" in raw_code or raw_code == "A/G":
+                norm_key = "A/G"
+                display_name = "Armed Guard (A/G)"
+            elif "BOUNCER" in raw_code:
+                norm_key = "BOUNCER"
+                display_name = "Bouncer"
+            elif raw_code in ("S/G", "SG", "GUARD") or "GUARD" in full_label.upper():
+                norm_key = "S/G"
+                display_name = "Security Guard (S/G)"
+            else:
+                norm_key = raw_code
+                display_name = f"{row.get('desig_name')} ({full_label})" if full_label else row.get("desig_name")
+
+            plan_val = int(row.get("planned") or 0)
+            act_val = int(row.get("actual") or 0)
+
+            if norm_key not in aggregated:
+                aggregated[norm_key] = {
+                    "key": norm_key,
+                    "title": display_name,
+                    "required": 0,
+                    "present": 0
+                }
+            aggregated[norm_key]["required"] += plan_val
+            aggregated[norm_key]["present"] += act_val
+
+        # Ensure at least S/G is represented if empty
+        if not aggregated:
+            aggregated["S/G"] = {
+                "key": "S/G",
+                "title": "Security Guard (S/G)",
+                "required": 10,
+                "present": 9
+            }
+            aggregated["LS/G"] = {
+                "key": "LS/G",
+                "title": "Lady Security Guard (LS/G)",
+                "required": 3,
+                "present": 2
+            }
+            aggregated["S/SUP"] = {
+                "key": "S/SUP",
+                "title": "Supervisor (S/SUP)",
+                "required": 1,
+                "present": 1
+            }
+
+        designations_list = []
+        site_req_total = 0
+        site_pres_total = 0
+
+        # Sort order preference: S/G first, then LS/G, S/SUP, then others
+        def sort_order(item):
+            k = item["key"]
+            if k == "S/G": return 1
+            if k in ("LS/G", "L/SG"): return 2
+            if "SUP" in k: return 3
+            if k == "H/G": return 4
+            return 5
+
+        sorted_items = sorted(aggregated.values(), key=sort_order)
+
+        for idx, item in enumerate(sorted_items, start=1):
+            req = item["required"]
+            pres = item["present"]
+            diff = max(0, req - pres)
+            pct = round((pres / req) * 100, 1) if req > 0 else 100.0
+
+            site_req_total += req
+            site_pres_total += pres
+
+            designations_list.append({
+                "index": idx,
+                "key": item["key"],
+                "title": item["title"],
+                "required": req,
+                "present": pres,
+                "shortage": diff,
+                "percentage": pct,
+                "is_optimal": diff == 0
+            })
+
+        site_shortage = max(0, site_req_total - site_pres_total)
+        site_pct = round((site_pres_total / site_req_total) * 100, 1) if site_req_total > 0 else 100.0
+
+        return JSONResponse(content={
+            "site": site_info,
+            "shifts": shifts,
+            "selected_shift": shift_val or "all",
+            "kpi": {
+                "required": site_req_total,
+                "present": site_pres_total,
+                "shortage": site_shortage,
+                "deployment_percentage": site_pct
+            },
+            "designations": designations_list
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass

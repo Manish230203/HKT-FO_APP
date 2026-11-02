@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'rea
 import { Clock, X, Check } from 'lucide-react-native';
 import { THEME } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface TimePicker24ModalProps {
   visible: boolean;
@@ -14,12 +15,13 @@ interface TimePicker24ModalProps {
 
 export function TimePicker24Modal({
   visible,
-  title = 'Select Time (24-Hour Clock)',
+  title,
   initialValue = '10:00',
   onConfirm,
   onClose,
 }: TimePicker24ModalProps) {
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
   const [selectedHour, setSelectedHour] = useState('10');
   const [selectedMinute, setSelectedMinute] = useState('00');
 
@@ -58,7 +60,7 @@ export function TimePicker24Modal({
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Clock color={colors.primary} size={20} style={{ marginRight: 8 }} />
-              <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+              <Text style={[styles.title, { color: colors.text }]}>{title || t('select_time_title')}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <X color={colors.textSecondary} size={20} />
@@ -75,7 +77,7 @@ export function TimePicker24Modal({
 
           <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
             {/* Hours Section */}
-            <Text style={styles.sectionLabel}>HOUR (00 - 23)</Text>
+            <Text style={styles.sectionLabel}>{t('hours').toUpperCase()} (00 - 23)</Text>
             <View style={styles.gridRow}>
               {hours.map((h) => {
                 const isSelected = selectedHour === h;
@@ -92,7 +94,7 @@ export function TimePicker24Modal({
             </View>
 
             {/* Minutes Section */}
-            <Text style={styles.sectionLabel}>MINUTE (00 - 55)</Text>
+            <Text style={styles.sectionLabel}>{t('minutes').toUpperCase()} (00 - 55)</Text>
             <View style={styles.gridRow}>
               {minutes.map((m) => {
                 const isSelected = selectedMinute === m;
@@ -112,7 +114,7 @@ export function TimePicker24Modal({
           {/* Confirm Button */}
           <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
             <Check color="#FFFFFF" size={18} style={{ marginRight: 6 }} />
-            <Text style={styles.confirmBtnText}>Set Time ({selectedHour}:{selectedMinute})</Text>
+            <Text style={styles.confirmBtnText}>{t('confirm_submission') || 'Set Time'} ({selectedHour}:{selectedMinute})</Text>
           </TouchableOpacity>
         </View>
       </View>

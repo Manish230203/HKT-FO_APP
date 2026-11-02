@@ -213,7 +213,8 @@ def get_video_duration_seconds(file_path: str) -> float:
 
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    uploads_dir = os.path.join(os.getcwd(), "uploads")
+    backend_base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    uploads_dir = os.path.join(backend_base_dir, "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
     
     # Generate unique filename

@@ -691,7 +691,7 @@ export function SvgCssUri(props) {
   useEffect(() => {
     uri ? fetchText(uri).then(data => {
       setXml(data);
-      onLoad === null || onLoad === void 0 || onLoad();
+      onLoad?.();
     }).catch(e => {
       onError(e);
       setIsError(true);
@@ -763,11 +763,10 @@ export class SvgWithCssUri extends Component {
   }
   async fetch(uri) {
     try {
-      var _this$props$onLoad, _this$props;
       this.setState({
         xml: uri ? await fetchText(uri) : null
       });
-      (_this$props$onLoad = (_this$props = this.props).onLoad) === null || _this$props$onLoad === void 0 || _this$props$onLoad.call(_this$props);
+      this.props.onLoad?.();
     } catch (e) {
       this.props.onError ? this.props.onError(e) : console.error(e);
     }

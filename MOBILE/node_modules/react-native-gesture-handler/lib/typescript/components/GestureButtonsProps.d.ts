@@ -1,7 +1,10 @@
-import * as React from 'react';
-import { AccessibilityProps, ColorValue, LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
+import type * as React from 'react';
+import type { AccessibilityProps, ColorValue, LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import type { NativeViewGestureHandlerProps } from '../handlers/NativeViewGestureHandler';
-export interface RawButtonProps extends NativeViewGestureHandlerProps, AccessibilityProps {
+/**
+ * @deprecated use `RawButtonProps` with `RawButton` instead
+ */
+export interface LegacyRawButtonProps extends NativeViewGestureHandlerProps, AccessibilityProps {
     /**
      * Defines if more than one button could be pressed simultaneously. By default
      * set true.
@@ -44,7 +47,7 @@ export interface RawButtonProps extends NativeViewGestureHandlerProps, Accessibi
     /**
      * Invoked on mount and layout changes.
      */
-    onLayout?: ((event: LayoutChangeEvent) => void) | undefined;
+    onLayout?: (event: LayoutChangeEvent) => void;
     /**
      * Used for testing-library compatibility, not passed to the native component.
      * @deprecated test-only props are deprecated and will be removed in the future.
@@ -65,11 +68,24 @@ export interface RawButtonProps extends NativeViewGestureHandlerProps, Accessibi
      * @deprecated test-only props are deprecated and will be removed in the future.
      */
     testOnly_onLongPress?: Function | null | undefined;
+    /**
+     * Used for testing-library compatibility, not passed to the native component.
+     * @deprecated test-only props are deprecated and will be removed in the future.
+     */
+    testOnly_onHoverIn?: Function | null | undefined;
+    /**
+     * Used for testing-library compatibility, not passed to the native component.
+     * @deprecated test-only props are deprecated and will be removed in the future.
+     */
+    testOnly_onHoverOut?: Function | null | undefined;
 }
 interface ButtonWithRefProps {
-    innerRef?: React.ForwardedRef<React.ComponentType<any>> | undefined;
+    innerRef?: React.Ref<React.ComponentType<any>> | undefined;
 }
-export interface BaseButtonProps extends RawButtonProps {
+/**
+ * @deprecated use `BaseButtonProps` with `BaseButton` instead
+ */
+export interface LegacyBaseButtonProps extends LegacyRawButtonProps {
     /**
      * Called when the button gets pressed (analogous to `onPress` in
      * `TouchableHighlight` from RN core).
@@ -94,9 +110,12 @@ export interface BaseButtonProps extends RawButtonProps {
      */
     delayLongPress?: number | undefined;
 }
-export interface BaseButtonWithRefProps extends BaseButtonProps, ButtonWithRefProps {
+export interface BaseButtonWithRefProps extends LegacyBaseButtonProps, ButtonWithRefProps {
 }
-export interface RectButtonProps extends BaseButtonProps {
+/**
+ * @deprecated use `RectButtonProps` with `RectButton` instead
+ */
+export interface LegacyRectButtonProps extends LegacyBaseButtonProps {
     /**
      * Background color that will be dimmed when button is in active state.
      */
@@ -108,9 +127,12 @@ export interface RectButtonProps extends BaseButtonProps {
      */
     activeOpacity?: number | undefined;
 }
-export interface RectButtonWithRefProps extends RectButtonProps, ButtonWithRefProps {
+export interface RectButtonWithRefProps extends LegacyRectButtonProps, ButtonWithRefProps {
 }
-export interface BorderlessButtonProps extends BaseButtonProps {
+/**
+ * @deprecated use `BorderlessButtonProps` with `BorderlessButton` instead
+ */
+export interface LegacyBorderlessButtonProps extends LegacyBaseButtonProps {
     /**
      * iOS only.
      *
@@ -118,7 +140,7 @@ export interface BorderlessButtonProps extends BaseButtonProps {
      */
     activeOpacity?: number | undefined;
 }
-export interface BorderlessButtonWithRefProps extends BorderlessButtonProps, ButtonWithRefProps {
+export interface BorderlessButtonWithRefProps extends LegacyBorderlessButtonProps, ButtonWithRefProps {
 }
 export {};
 //# sourceMappingURL=GestureButtonsProps.d.ts.map

@@ -21,7 +21,8 @@ export default function LoginScreen() {
 
   const [mobileNumber, setMobileNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorKey, setErrorKey] = useState('');
+  const [customError, setCustomError] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -34,12 +35,14 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!mobileNumber || mobileNumber.length !== 10) {
-      setErrorMessage(t('invalid_mobile'));
+      setErrorKey('invalid_mobile');
+      setCustomError('');
       return;
     }
 
     setIsLoading(true);
-    setErrorMessage('');
+    setErrorKey('');
+    setCustomError('');
 
     try {
       // Format mobile number and bypass password verification for testing
@@ -49,16 +52,31 @@ export default function LoginScreen() {
       if (res.success) {
         router.replace('/(tabs)/dashboard');
       } else {
-        setErrorMessage((res as any).message || (res as any).error || t('invalid_credentials'));
+        if (res.errorType === 'RESTRICTED_ROLE') {
+          setErrorKey('access_restricted_fo');
+        } else if (res.errorType === 'ALREADY_REGISTERED') {
+          setErrorKey('device_already_registered');
+        } else if (res.errorType === 'DEACTIVATED') {
+          setErrorKey('employee_deactivated');
+        } else if (res.errorType === 'NO_ACCOUNT') {
+          setErrorKey('no_account_found');
+        } else if (res.errorType === 'NETWORK_ERROR') {
+          setErrorKey('network_error');
+        } else if (res.message) {
+          setErrorKey(res.message);
+        } else {
+          setErrorKey('invalid_credentials');
+        }
       }
     } catch (err: any) {
       console.error('Login Error:', err);
-      setErrorMessage(t('network_error'));
+      setErrorKey('network_error');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const displayedError = errorKey ? t(errorKey) : customError;
   const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   return (
@@ -85,15 +103,15 @@ export default function LoginScreen() {
                 <Image source={require('../assets/images/app_logo.png')} style={styles.logoImage} resizeMode="contain" />
               </View>
               <Text style={styles.appTitle}>
-                <Text style={{ color: '#3B82F6' }}>VIGILO-OFFICER</Text>
+                <Text style={{ color: '#3B82F6' }}>VIGILO-O</Text>
               </Text>
               <Text style={styles.subtitle}>{t('login_subtitle')}</Text>
             </View>
 
             <Card style={styles.loginCard}>
-              {errorMessage ? (
+              {displayedError ? (
                 <View style={styles.errorBanner}>
-                  <Text style={styles.errorText}>{errorMessage}</Text>
+                  <Text style={styles.errorText}>{displayedError}</Text>
                 </View>
               ) : null}
 
@@ -105,7 +123,10 @@ export default function LoginScreen() {
                   // Only allow digits and max 10 characters
                   const digitsOnly = val.replace(/\D/g, '').slice(0, 10);
                   setMobileNumber(digitsOnly);
-                  if (errorMessage) setErrorMessage('');
+                  if (errorKey || customError) {
+                    setErrorKey('');
+                    setCustomError('');
+                  }
                 }}
                 keyboardType="phone-pad"
                 maxLength={10}
@@ -152,54 +173,57 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
     justifyContent: 'center',
+    padding: 24,
   },
   header: {
     alignItems: 'center',
     marginBottom: 32,
   },
   logoContainer: {
-    width: 90,
+    width: 130,
     height: 90,
-    borderRadius: 22,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 12,
   },
   logoImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 22,
   },
   appTitle: {
-    fontSize: THEME.typography.xxl,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: 0.5,
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: THEME.typography.sm,
+    fontSize: 16,
     color: colors.textSecondary,
-    marginTop: 4,
+    fontWeight: '500',
   },
   loginCard: {
     padding: 24,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   errorBanner: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2',
     borderWidth: 1,
-    borderRadius: 10,
+    borderColor: '#EF4444',
     padding: 12,
+    borderRadius: 8,
     marginBottom: 16,
   },
   errorText: {
-    color: THEME.danger,
-    fontSize: THEME.typography.xs,
-    fontWeight: '600',
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
   },
   signInBtn: {
-    marginTop: 12,
+    marginTop: 8,
   },
 });

@@ -2,18 +2,17 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { isTestEnv, tagMessage } from '../../../utils';
-import { BaseGesture } from '../gesture';
 import { flingGestureHandlerProps } from '../../FlingGestureHandler';
 import { forceTouchGestureHandlerProps } from '../../ForceTouchGestureHandler';
-import { longPressGestureHandlerProps } from '../../LongPressGestureHandler';
-import { panGestureHandlerProps, panGestureHandlerCustomNativeProps } from '../../PanGestureHandler';
-import { tapGestureHandlerProps } from '../../TapGestureHandler';
-import { hoverGestureHandlerProps } from '../hoverGesture';
-import { nativeViewGestureHandlerProps } from '../../NativeViewGestureHandler';
 import { baseGestureHandlerWithDetectorProps } from '../../gestureHandlerCommon';
-import { isNewWebImplementationEnabled } from '../../../EnableNewWebImplementation';
-import { Reanimated } from '../reanimatedWrapper';
+import { longPressGestureHandlerProps } from '../../LongPressGestureHandler';
+import { nativeViewGestureHandlerProps } from '../../NativeViewGestureHandler';
+import { panGestureHandlerCustomNativeProps, panGestureHandlerProps } from '../../PanGestureHandler';
+import { tapGestureHandlerProps } from '../../TapGestureHandler';
 import { onGestureHandlerEvent } from '../eventReceiver';
+import { BaseGesture } from '../gesture';
+import { hoverGestureHandlerProps } from '../hoverGesture';
+import { Reanimated } from '../reanimatedWrapper';
 export const ALLOWED_PROPS = [...baseGestureHandlerWithDetectorProps, ...tapGestureHandlerProps, ...panGestureHandlerProps, ...panGestureHandlerCustomNativeProps, ...longPressGestureHandlerProps, ...forceTouchGestureHandlerProps, ...flingGestureHandlerProps, ...hoverGestureHandlerProps, ...nativeViewGestureHandlerProps];
 
 // In some environments (e.g. `Next.js`) Reanimated Babel plugin might not be used.
@@ -40,13 +39,13 @@ function extractValidHandlerTags(interactionGroup) {
   return Array.from(new Set(interactionGroup?.map(convertToHandlerTag)?.filter(tag => tag > 0) ?? []));
 }
 export function extractGestureRelations(gesture) {
-  gesture.config.requireToFail = extractValidHandlerTags(gesture.config.requireToFail);
-  gesture.config.simultaneousWith = extractValidHandlerTags(gesture.config.simultaneousWith);
-  gesture.config.blocksHandlers = extractValidHandlerTags(gesture.config.blocksHandlers);
+  const requireToFail = extractValidHandlerTags(gesture.config.requireToFail);
+  const simultaneousWith = extractValidHandlerTags(gesture.config.simultaneousWith);
+  const blocksHandlers = extractValidHandlerTags(gesture.config.blocksHandlers);
   return {
-    waitFor: gesture.config.requireToFail,
-    simultaneousHandlers: gesture.config.simultaneousWith,
-    blocksHandlers: gesture.config.blocksHandlers
+    waitFor: requireToFail,
+    simultaneousHandlers: simultaneousWith,
+    blocksHandlers: blocksHandlers
   };
 }
 export function checkGestureCallbacksForWorklets(gesture) {
@@ -89,9 +88,12 @@ export function useWebEventHandlers() {
     onGestureHandlerEvent: e => {
       onGestureHandlerEvent(e.nativeEvent);
     },
-    onGestureHandlerStateChange: isNewWebImplementationEnabled() ? e => {
+    onGestureHandlerStateChange: e => {
       onGestureHandlerEvent(e.nativeEvent);
-    } : undefined
+    },
+    onGestureHandlerTouchEvent: () => {
+      // no-op
+    }
   });
 }
 //# sourceMappingURL=utils.js.map

@@ -1,22 +1,25 @@
 "use strict";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GestureObjects as Gesture } from '../../handlers/gestures/gestureObjects';
+import { Platform } from 'react-native';
 import { GestureDetector } from '../../handlers/gestures/GestureDetector';
-import { Platform, processColor } from 'react-native';
-import NativeButton from '../GestureHandlerButton';
-import { gestureToPressableEvent, addInsets, numberAsInset, gestureTouchToPressableEvent, isTouchWithinInset } from './utils';
+import { GestureObjects as Gesture } from '../../handlers/gestures/gestureObjects';
 import { PressabilityDebugView } from '../../handlers/PressabilityDebugView';
-import { INT32_MAX, isFabric, isTestEnv } from '../../utils';
+import { useIsScreenReaderEnabled } from '../../useIsScreenReaderEnabled';
+import { INT32_MAX, isTestEnv } from '../../utils';
+import { ButtonComponent as NativeButton } from '../GestureHandlerButton';
 import { applyRelationProp } from '../utils';
 import { getStatesConfig, StateMachineEvent } from './stateDefinitions';
 import { PressableStateMachine } from './StateMachine';
-import { useIsScreenReaderEnabled } from '../../useIsScreenReaderEnabled';
+import { addInsets, gestureToPressableEvent, gestureTouchToPressableEvent, isTouchWithinInset, numberAsInset, viewCenterToPressableEvent } from './utils';
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 const DEFAULT_LONG_PRESS_DURATION = 500;
 const IS_TEST_ENV = isTestEnv();
-let IS_FABRIC = null;
-const Pressable = props => {
+
+/**
+ * @deprecated `LegacyPressable` is deprecated, use `Pressable` instead.
+ */
+const LegacyPressable = props => {
   const {
     testOnly_pressed,
     hitSlop,
@@ -41,6 +44,7 @@ const Pressable = props => {
     simultaneousWithExternalGesture,
     requireExternalGestureToFail,
     blocksExternalGesture,
+    ref,
     ...remainingProps
   } = props;
   const relationProps = {
@@ -190,6 +194,10 @@ const Pressable = props => {
       handlePressOut(pressableEvent, false);
     }
   }).onBegin(() => {
+    if (Platform.OS === 'android' && isScreenReaderEnabled) {
+      stateMachine.handleEvent(StateMachineEvent.NATIVE_BEGIN, viewCenterToPressableEvent(dimensions.current));
+      return;
+    }
     stateMachine.handleEvent(StateMachineEvent.NATIVE_BEGIN);
   }).onStart(() => {
     if (Platform.OS !== 'android') {
@@ -209,7 +217,7 @@ const Pressable = props => {
         handleFinalize();
       }
     }
-  }), [stateMachine, handlePressOut, handleFinalize]);
+  }).shouldActivateOnStart(Platform.OS === 'web'), [stateMachine, handlePressOut, handleFinalize, isScreenReaderEnabled]);
   const isPressableEnabled = disabled !== true;
   const gestures = [buttonGesture, pressAndTouchGesture, hoverGesture];
   for (const gesture of gestures) {
@@ -233,12 +241,8 @@ const Pressable = props => {
     pressed: pressedState
   }) : children;
   const rippleColor = useMemo(() => {
-    if (IS_FABRIC === null) {
-      IS_FABRIC = isFabric();
-    }
     const defaultRippleColor = android_ripple ? undefined : 'transparent';
-    const unprocessedRippleColor = android_ripple?.color ?? defaultRippleColor;
-    return IS_FABRIC ? unprocessedRippleColor : processColor(unprocessedRippleColor);
+    return android_ripple?.color ?? defaultRippleColor;
   }, [android_ripple]);
   const setDimensions = useCallback(event => {
     onLayout?.(event);
@@ -248,6 +252,8 @@ const Pressable = props => {
     gesture: gesture,
     children: /*#__PURE__*/_jsxs(NativeButton, {
       ...remainingProps,
+      ref: ref,
+      needsOffscreenAlphaCompositing: true,
       onLayout: setDimensions,
       accessible: accessible !== false,
       hitSlop: appliedHitSlop,
@@ -255,11 +261,15 @@ const Pressable = props => {
       touchSoundDisabled: android_disableSound ?? undefined,
       rippleColor: rippleColor,
       rippleRadius: android_ripple?.radius ?? undefined,
+      borderless: android_ripple?.borderless ?? undefined,
+      foreground: android_ripple?.foreground ?? undefined,
       style: [pointerStyle, styleProp],
       testOnly_onPress: IS_TEST_ENV ? onPress : undefined,
       testOnly_onPressIn: IS_TEST_ENV ? onPressIn : undefined,
       testOnly_onPressOut: IS_TEST_ENV ? onPressOut : undefined,
       testOnly_onLongPress: IS_TEST_ENV ? onLongPress : undefined,
+      testOnly_onHoverIn: IS_TEST_ENV ? onHoverIn : undefined,
+      testOnly_onHoverOut: IS_TEST_ENV ? onHoverOut : undefined,
       children: [childrenProp, __DEV__ ? /*#__PURE__*/_jsx(PressabilityDebugView, {
         color: "red",
         hitSlop: normalizedHitSlop
@@ -267,5 +277,5 @@ const Pressable = props => {
     })
   });
 };
-export default Pressable;
+export default LegacyPressable;
 //# sourceMappingURL=Pressable.js.map

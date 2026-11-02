@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Component } from 'react';
-import { GestureEvent, HandlerStateChangeEvent } from '../../handlers/gestureHandlerCommon';
+import type { GestureEvent, HandlerStateChangeEvent } from '../../handlers/gestureHandlerCommon';
 import type { NativeViewGestureHandlerPayload } from '../../handlers/GestureHandlerEventPayload';
 import type { GenericTouchableProps } from './GenericTouchableProps';
 /**

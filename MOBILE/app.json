@@ -1,23 +1,30 @@
 {
   "expo": {
-    "name": "VIGILO-OFFICER",
+    "name": "VIGILO-O",
     "slug": "fo-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+
     "scheme": "vigiloo",
     "userInterfaceStyle": "dark",
     "ios": {
+      "bundleIdentifier": "com.humankind.vigilofo",
+      "buildNumber": "1.0.0",
       "supportsTablet": true,
       "icon": "./assets/icon.png",
       "infoPlist": {
         "UIBackgroundModes": [
-          "location"
+          "location",
+          "fetch"
         ],
-        "NSLocationWhenInUseUsageDescription": "Allow VIGILO-OFFICER to access your location for attendance and site visit verification.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow VIGILO-OFFICER to access your location for background duty tracking.",
-        "NSLocationAlwaysUsageDescription": "Allow VIGILO-OFFICER to access your location in the background while screen is locked.",
-        "NSLocationUsageDescription": "Allow VIGILO-OFFICER to access your location for attendance and site visit verification."
+        "NSLocationWhenInUseUsageDescription": "Allow VIGILO-O to access your location for attendance and site visit verification.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow VIGILO-O to access your location for background duty tracking.",
+        "NSLocationAlwaysUsageDescription": "Allow VIGILO-O to access your location in the background while screen is locked.",
+        "NSLocationUsageDescription": "Allow VIGILO-O to access your location for attendance and site visit verification.",
+        "NSCameraUsageDescription": "Allow VIGILO-O to access your camera for attendance and site observation photos.",
+        "NSPhotoLibraryUsageDescription": "Allow VIGILO-O to access your photo library for attaching observation photos.",
+        "NSPhotoLibraryAddUsageDescription": "Allow VIGILO-O to save observation photos to your photo library."
       }
     },
     "android": {
@@ -53,13 +60,13 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow VIGILO-OFFICER to access your location for attendance and site visit verification.",
-          "locationAlwaysAndWhenInUsePermission": "Allow VIGILO-OFFICER to access your location for background duty tracking.",
-          "locationAlwaysPermission": "Allow VIGILO-OFFICER to access your location in the background while screen is locked.",
+          "locationWhenInUsePermission": "Allow VIGILO-O to access your location for attendance and site visit verification.",
+          "locationAlwaysAndWhenInUsePermission": "Allow VIGILO-O to access your location for background duty tracking.",
+          "locationAlwaysPermission": "Allow VIGILO-O to access your location in the background while screen is locked.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true,
           "foregroundService": {
-            "notificationTitle": "VIGILO-OFFICER Duty Active",
+            "notificationTitle": "VIGILO-O Duty Active",
             "notificationBody": "Location tracking is active for officer verification.",
             "notificationColor": "#00599B",
             "foregroundServiceType": "location"
@@ -69,7 +76,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow VIGILO-OFFICER to access your camera for site observation photos."
+          "cameraPermission": "Allow VIGILO-O to access your camera for site observation photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow VIGILO-O to access your photo library for attaching observation photos."
         }
       ],
       [

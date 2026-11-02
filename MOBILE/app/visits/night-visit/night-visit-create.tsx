@@ -54,6 +54,15 @@ export default function CreateNightVisitReportScreen() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const steps = React.useMemo(() => [
+    t('step_general_info'),
+    t('step_guards'),
+    t('step_night_checklist'),
+    t('step_briefing'),
+    t('step_suggestions'),
+    t('step_review'),
+  ], [t]);
+
   // Form State
   const [clients, setClients] = useState<Client[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -134,28 +143,139 @@ export default function CreateNightVisitReportScreen() {
   const [newGuardName, setNewGuardName] = useState('');
   const [newGuardCode, setNewGuardCode] = useState('');
 
-  // Question Photo Capture State
-  const [questionPhotos, setQuestionPhotos] = useState<Record<string, string>>({});
+  // Question Photo Capture State (Multiple Photos per Question)
+  const [questionPhotos, setQuestionPhotos] = useState<Record<string, string[]>>({});
 
-  const handleCaptureQuestionPhoto = async (qText: string) => {
+  // Overall Suggestion / Remarks Photos State
+  const [suggestionPhotos, setSuggestionPhotos] = useState<string[]>([]);
+
+  const handleAddQuestionPhoto = (qText: string) => {
+    Alert.alert(
+      t('attach_photo') || 'Attach Question Photo',
+      'Choose an option:',
+      [
+        {
+          text: t('camera_option') || 'Take Photo',
+          onPress: async () => {
+            try {
+              const perm = await ImagePicker.requestCameraPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(t('permission_denied'), t('camera_permission_required'));
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                quality: 0.5,
+                base64: true,
+              });
+              if (!result.canceled && result.assets && result.assets[0]) {
+                const asset = result.assets[0];
+                const pData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+                setQuestionPhotos((prev) => ({
+                  ...prev,
+                  [qText]: [...(prev[qText] || []), pData],
+                }));
+              }
+            } catch (e) {
+              console.warn('Error capturing question photo:', e);
+            }
+          },
+        },
+        {
+          text: t('gallery_option') || 'Choose from Gallery',
+          onPress: async () => {
+            try {
+              const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(t('permission_denied'), t('gallery_permission_required'));
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsMultipleSelection: true,
+                selectionLimit: 5,
+                quality: 0.5,
+                base64: true,
+              });
+              if (!result.canceled && result.assets && result.assets.length > 0) {
+                const newPhotos = result.assets.map((asset) =>
+                  asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri
+                );
+                setQuestionPhotos((prev) => ({
+                  ...prev,
+                  [qText]: [...(prev[qText] || []), ...newPhotos],
+                }));
+              }
+            } catch (e) {
+              console.warn('Error choosing gallery photo for question:', e);
+            }
+          },
+        },
+        { text: t('cancel') || 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleRemoveQuestionPhoto = (qText: string, photoIdx: number) => {
+    setQuestionPhotos((prev) => ({
+      ...prev,
+      [qText]: (prev[qText] || []).filter((_, i) => i !== photoIdx),
+    }));
+  };
+
+  const handlePickSuggestionPhoto = async () => {
     try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission Required', 'Camera permission is required to take question photos.');
-        return;
-      }
-      const result = await ImagePicker.launchCameraAsync({
-        quality: 0.5,
-        base64: true,
-      });
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        const photoData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
-        setQuestionPhotos((prev) => ({ ...prev, [qText]: photoData }));
-      }
+      Alert.alert(
+        t('attach_suggestion_photo'),
+        t('attach_photo_desc'),
+        [
+          {
+            text: t('camera_option'),
+            onPress: async () => {
+              const perm = await ImagePicker.requestCameraPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(t('permission_denied'), t('camera_permission_required'));
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                quality: 0.5,
+                base64: true,
+              });
+              if (!result.canceled && result.assets && result.assets[0]) {
+                const asset = result.assets[0];
+                const pData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+                setSuggestionPhotos((prev) => [...prev, pData]);
+              }
+            },
+          },
+          {
+            text: t('gallery_option'),
+            onPress: async () => {
+              const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert(t('permission_denied'), t('gallery_permission_required'));
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                quality: 0.5,
+                base64: true,
+              });
+              if (!result.canceled && result.assets && result.assets[0]) {
+                const asset = result.assets[0];
+                const pData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+                setSuggestionPhotos((prev) => [...prev, pData]);
+              }
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
     } catch (e) {
-      console.warn('Error launching camera for question photo:', e);
+      console.warn('Error attaching suggestion photo:', e);
     }
+  };
+
+  const handleRemoveSuggestionPhoto = (index: number) => {
+    setSuggestionPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Checklist
@@ -210,7 +330,7 @@ export default function CreateNightVisitReportScreen() {
           const regularGuards = fetched.map((g) => ({
             name: g.name,
             empCode: g.empCode || `G${g.empOid || '001'}`,
-            status: g.status || 'Alert & Awake',
+            status: g.status || 'Present',
             isTemporary: false,
           }));
           return [...regularGuards, ...tempGuards];
@@ -223,10 +343,11 @@ export default function CreateNightVisitReportScreen() {
 
   const loadClientsAndSites = async () => {
     try {
-      const empOidVal = user?.id || user?.empOid || user?.employee_id || 7558;
+      const empOidVal = user?.id || (user as any)?.empOid || user?.employee_id || 7558;
+      const branchNameVal = user?.branch_name || undefined;
       const [clientData, siteData, templates] = await Promise.all([
-        getClients(),
-        getSites(),
+        getClients(empOidVal, branchNameVal),
+        getSites(empOidVal, undefined, branchNameVal),
         getNightVisitTemplates(),
       ]);
       setClients(clientData || []);
@@ -292,7 +413,7 @@ export default function CreateNightVisitReportScreen() {
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
 
   const filteredClients = React.useMemo(() => {
-    return fuzzyFilter(clients, clientSearchQuery, (c) => c.name || '');
+    return fuzzyFilter(clients, clientSearchQuery, (c) => [c.name, c.code].filter(Boolean) as string[]);
   }, [clients, clientSearchQuery]);
 
   const filteredSites = sites.filter((s) => {
@@ -308,7 +429,7 @@ export default function CreateNightVisitReportScreen() {
     const tempGuard = {
       name: newGuardName.trim(),
       empCode: newGuardCode.trim() || `TEMP${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'Alert & Awake',
+      status: 'Present',
       isTemporary: true,
     };
     setGuards([...guards, tempGuard]);
@@ -346,20 +467,20 @@ export default function CreateNightVisitReportScreen() {
     setChecklist((prev) => ({ ...prev, [qText]: 'Satisfactory' }));
     setOnSpotModalVisible(false);
     setBankSearchQuery('');
-    Alert.alert('Question Added', `"${qText}" added to the checklist.`);
+    Alert.alert(t('question_added'), t('question_added_msg', { question: qText }));
   };
 
   const handleAddCustomQuestion = () => {
     const qText = newQuestionText.trim();
     if (!qText) {
-      Alert.alert('Question Required', 'Please enter your on-spot inspection question in the input field first.');
+      Alert.alert(t('question_required_title'), t('question_required_desc'));
       return;
     }
     const exists = [...templateQuestions, ...customQuestions].some(
       (q: any) => (q.question || String(q)).toLowerCase() === qText.toLowerCase()
     );
     if (exists) {
-      Alert.alert('Duplicate Item', 'This checklist item already exists in the checklist.');
+      Alert.alert(t('duplicate_item'), t('duplicate_checklist_item'));
       return;
     }
     const newQ = {
@@ -372,7 +493,7 @@ export default function CreateNightVisitReportScreen() {
     setChecklist((prev) => ({ ...prev, [qText]: 'Satisfactory' }));
     setNewQuestionText('');
     Keyboard.dismiss();
-    Alert.alert('Question Added', `"${qText}" added to the checklist.`);
+    Alert.alert(t('question_added'), t('question_added_msg', { question: qText }));
   };
 
   const handleRemoveCustomQuestion = (qText: string) => {
@@ -405,7 +526,21 @@ export default function CreateNightVisitReportScreen() {
         currentGps = await fetchCurrentLocation();
       }
 
-      const capturedPhotos = Object.values(questionPhotos).filter((p) => p && typeof p === 'string');
+      const allQuestionPhotos: string[] = [];
+      Object.values(questionPhotos).forEach((pList) => {
+        if (Array.isArray(pList)) {
+          pList.forEach((p) => {
+            if (p && typeof p === 'string') allQuestionPhotos.push(p);
+          });
+        } else if (pList && typeof pList === 'string') {
+          allQuestionPhotos.push(pList);
+        }
+      });
+
+      const capturedPhotos = [
+        ...allQuestionPhotos,
+        ...suggestionPhotos,
+      ];
 
       const payload: any = {
         client_id: isCustomVisit ? null : (parseInt(clientId, 10) || 1),
@@ -430,15 +565,21 @@ export default function CreateNightVisitReportScreen() {
         guards: guards,
         checklist: [...templateQuestions, ...customQuestions].map((qItem: any) => {
           const text = qItem.question || String(qItem);
+          const qPhotos = Array.isArray(questionPhotos[text])
+            ? questionPhotos[text]
+            : (questionPhotos[text] ? [questionPhotos[text]] : []);
           return {
             section: qItem.section || 'General',
             question: text,
             status: checklist[text] || 'Satisfactory',
             isCustom: !!qItem.isCustom,
-            photo: questionPhotos[text] || null,
+            photos: qPhotos,
+            photo: qPhotos[0] || null,
           };
         }),
         photos: capturedPhotos,
+        attachments: suggestionPhotos,
+        suggestion_photos: suggestionPhotos,
         lecture_details: lectureDetails,
         random_checking: randomChecking,
         overall_remarks: overallRemarks,
@@ -455,7 +596,7 @@ export default function CreateNightVisitReportScreen() {
       setAlertInfo({
         visible: true,
         title: t('night_visit_submitted') || 'Report Submitted',
-        message: 'Night Round Report submitted successfully! Please tap Check-Out on the visits screen when you leave site.',
+        message: 'Night Round Report submitted successfully! Please proceed to Check-Out to complete your site visit.',
         type: 'success',
       });
     } catch (e: any) {
@@ -473,8 +614,8 @@ export default function CreateNightVisitReportScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-      <StepIndicator steps={STEPS} currentStep={currentStep} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <StepIndicator steps={steps} currentStep={currentStep} />
 
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 140 }]}
@@ -574,33 +715,16 @@ export default function CreateNightVisitReportScreen() {
             ) : (
               guards.map((g, idx) => (
                 <View key={idx} style={styles.guardRow}>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={styles.guardName}>{g.name} ({g.empCode})</Text>
-                      <View
-                        style={{
-                          backgroundColor: g.isTemporary ? 'rgba(245, 158, 11, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                          borderRadius: 4,
-                          marginLeft: 8,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: '800',
-                            color: g.isTemporary ? '#F59E0B' : '#60A5FA',
-                          }}
-                        >
-                          {g.isTemporary ? 'TEMPORARY' : 'REGULAR'}
-                        </Text>
-                      </View>
-                    </View>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.guardName}>{g.name} ({g.empCode})</Text>
                     <Text style={styles.guardMeta}>Status: {g.status}</Text>
                   </View>
-                  <TouchableOpacity onPress={() => handleRemoveGuard(idx)}>
-                    <Trash2 color={THEME.danger} size={18} />
+                  <TouchableOpacity
+                    onPress={() => handleRemoveGuard(idx)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={{ padding: 6 }}
+                  >
+                    <X color="#EF4444" size={20} strokeWidth={2.5} />
                   </TouchableOpacity>
                 </View>
               ))
@@ -699,35 +823,61 @@ export default function CreateNightVisitReportScreen() {
                     })}
                   </View>
 
-                  {/* Per-Question Photo Capture Button & Preview */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={() => handleCaptureQuestionPhoto(qText)}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: questionPhotos[qText] ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)',
-                        borderColor: questionPhotos[qText] ? '#10B981' : '#3B82F6',
-                        borderWidth: 1,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 6,
-                      }}
-                    >
-                      <Camera size={14} color={questionPhotos[qText] ? '#10B981' : '#3B82F6'} style={{ marginRight: 6 }} />
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: questionPhotos[qText] ? '#10B981' : '#3B82F6' }}>
-                        {questionPhotos[qText] ? 'Change Photo' : 'Attach Photo'}
-                      </Text>
-                    </TouchableOpacity>
+                  {/* Per-Question Photo Attachment & Multi-Photo Preview */}
+                  {(() => {
+                    const currentPhotos = questionPhotos[qText] || [];
+                    return (
+                      <View style={{ marginTop: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={() => handleAddQuestionPhoto(qText)}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: currentPhotos.length > 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.15)',
+                              borderColor: currentPhotos.length > 0 ? '#10B981' : '#3B82F6',
+                              borderWidth: 1,
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Camera size={14} color={currentPhotos.length > 0 ? '#10B981' : '#3B82F6'} style={{ marginRight: 6 }} />
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: currentPhotos.length > 0 ? '#10B981' : '#3B82F6' }}>
+                              {currentPhotos.length > 0 ? `Add Photo (${currentPhotos.length})` : 'Attach Photo'}
+                            </Text>
+                          </TouchableOpacity>
 
-                    {questionPhotos[qText] ? (
-                      <Image
-                        source={{ uri: questionPhotos[qText] }}
-                        style={{ width: 36, height: 36, borderRadius: 6, borderWidth: 1, borderColor: '#10B981' }}
-                      />
-                    ) : null}
-                  </View>
+                          {currentPhotos.map((photoUri, pIdx) => (
+                            <View key={pIdx} style={{ position: 'relative' }}>
+                              <Image
+                                source={{ uri: photoUri }}
+                                style={{ width: 38, height: 38, borderRadius: 6, borderWidth: 1, borderColor: '#10B981' }}
+                              />
+                              <TouchableOpacity
+                                onPress={() => handleRemoveQuestionPhoto(qText, pIdx)}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                style={{
+                                  position: 'absolute',
+                                  top: -5,
+                                  right: -5,
+                                  backgroundColor: '#EF4444',
+                                  borderRadius: 10,
+                                  width: 18,
+                                  height: 18,
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <X size={10} color="#FFFFFF" />
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })()}
                 </View>
               );
             })}
@@ -745,7 +895,7 @@ export default function CreateNightVisitReportScreen() {
                   <TouchableOpacity
                     style={styles.pickerButton}
                     activeOpacity={0.8}
-                    onPress={() => setOnSpotModalVisible(true)}
+                    onPress={() => { setBankSearchQuery(''); setOnSpotModalVisible(true); }}
                   >
                     <Text style={[styles.pickerButtonText, { color: '#E2E8F0' }]}>
                       Select from Question Bank...
@@ -790,6 +940,75 @@ export default function CreateNightVisitReportScreen() {
           <Card style={styles.stepCard}>
             <Text style={styles.stepTitle}>Overall Night Round Remarks</Text>
             <Input label="Overall Remarks" value={overallRemarks} onChangeText={setOverallRemarks} multiline numberOfLines={4} style={{ height: 100 }} placeholder="All posts found alert during night round." />
+
+            {/* Photo Attachment Section */}
+            <View style={{ marginTop: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                  Suggestion / Remark Photos ({suggestionPhotos.length})
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handlePickSuggestionPhoto}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: '#3B82F6',
+                    gap: 6,
+                  }}
+                >
+                  <Camera color="#3B82F6" size={15} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#3B82F6' }}>Add Photo</Text>
+                </TouchableOpacity>
+              </View>
+
+              {suggestionPhotos.length > 0 ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+                  {suggestionPhotos.map((photoUri, pIdx) => (
+                    <View
+                      key={pIdx}
+                      style={{
+                        width: 78,
+                        height: 78,
+                        borderRadius: 10,
+                        overflow: 'hidden',
+                        borderWidth: 1.5,
+                        borderColor: '#3B82F6',
+                        position: 'relative',
+                      }}
+                    >
+                      <Image source={{ uri: photoUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => handleRemoveSuggestionPhoto(pIdx)}
+                        style={{
+                          position: 'absolute',
+                          top: 3,
+                          right: 3,
+                          backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                          width: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Trash2 color="#FFFFFF" size={12} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginTop: 2 }}>
+                  No photos attached to overall remarks. Tap "Add Photo" to attach photos.
+                </Text>
+              )}
+            </View>
           </Card>
         )}
 
@@ -802,6 +1021,8 @@ export default function CreateNightVisitReportScreen() {
             <Text style={styles.reviewLabel}>Shift: <Text style={styles.reviewVal}>{shift}</Text></Text>
             <Text style={styles.reviewLabel}>Guards Checked: <Text style={styles.reviewVal}>{guards.length}</Text></Text>
             <Text style={styles.reviewLabel}>Briefing Provided: <Text style={styles.reviewVal}>{lectureDetails ? 'Yes' : 'No'}</Text></Text>
+            <Text style={styles.reviewLabel}>Overall Remarks: <Text style={styles.reviewVal}>{overallRemarks || 'Satisfactory'}</Text></Text>
+            <Text style={styles.reviewLabel}>Remark Photos: <Text style={styles.reviewVal}>{suggestionPhotos.length} attached</Text></Text>
           </Card>
         )}
       </ScrollView>
@@ -812,7 +1033,7 @@ export default function CreateNightVisitReportScreen() {
           <Button title={t('previous')} variant="ghost" onPress={() => setCurrentStep((s) => s - 1)} style={styles.flexBtn} />
         ) : null}
 
-        {currentStep < STEPS.length - 1 ? (
+        {currentStep < steps.length - 1 ? (
           <Button title={t('next')} variant="primary" onPress={() => setCurrentStep((s) => s + 1)} style={styles.flexBtn} />
         ) : (
           <Button title={t('submit')} variant="secondary" onPress={handleSubmit} loading={submitting} style={styles.flexBtn} />
@@ -866,7 +1087,12 @@ export default function CreateNightVisitReportScreen() {
                   }}
                 >
                   <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
-                  <Text style={styles.modalItemText}>{item.name}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalItemText}>{item.name}</Text>
+                    {item.code ? (
+                      <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>{item.code}</Text>
+                    ) : null}
+                  </View>
                 </TouchableOpacity>
               )}
             />
@@ -1069,7 +1295,9 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    maxHeight: '85%',
+    minHeight: 420,
+    height: '75%',
     padding: 16,
     flexShrink: 1,
   },

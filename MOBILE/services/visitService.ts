@@ -22,6 +22,12 @@ export const submitNightVisitReport = async (payload: any) => {
   return response.data;
 };
 
+export const getPatrolTourReports = async (empOid?: number | string) => {
+  const url = empOid ? `/officer-tours/reports?empOid=${empOid}` : '/officer-tours/reports';
+  const response = await api.get(url);
+  return response.data || [];
+};
+
 export const getGeneralVisits = async (empOid?: number | string) => {
   const url = empOid ? `/general-visits?empOid=${empOid}` : '/general-visits';
   const response = await api.get(url);

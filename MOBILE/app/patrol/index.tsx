@@ -34,15 +34,18 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getPatrolTours, startPatrolTour, PatrolTourItem } from '../../services/patrolService';
 import { getDeviceBatteryLevel } from '../../services/battery';
+import { getPunchRecords } from '../../services/db';
 
 export default function PatrolTourSelectionScreen() {
   const router = useRouter();
   const { user, profileImage } = useAuth();
-  const { todayRecord, profileData } = useAttendance();
+  const { todayRecord, profileData, refreshStatus } = useAttendance();
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
 
   const [tours, setTours] = useState<PatrolTourItem[]>([]);
   const [activeTour, setActiveTour] = useState<any>(null);
@@ -52,14 +55,38 @@ export default function PatrolTourSelectionScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [startingTour, setStartingTour] = useState<string | null>(null);
   const [batteryLevel, setBatteryLevel] = useState<number>(100);
+  const [localActive, setLocalActive] = useState<boolean>(false);
 
-  // Compute On Duty status
-  const isOnDuty = Boolean(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+  const checkLocalActivePunch = useCallback(async () => {
+    try {
+      const empId = user?.employee_id || (user?.id ? String(user.id) : '');
+      const punchLogs = await getPunchRecords(empId);
+      const nowMs = Date.now();
+      const todayStr = new Date().toISOString().split('T')[0];
+      const activePunch = punchLogs.find((r) => {
+        const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+        const punchMs = r.timestamp || 0;
+        const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
+        const isToday = !r.date || r.date === todayStr;
+        return isPunchedIn && isWithin16Hours && isToday;
+      });
+      setLocalActive(Boolean(activePunch));
+    } catch (e) {
+      // ignore
+    }
+  }, [user]);
+
+  // Compute On Duty status (checks backend record with fallback to local punch log)
+  const isServerActive = Boolean(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+  const hasServerExplicitInactive = Boolean(
+    (todayRecord && (todayRecord as any).no_active_session) ||
+    (todayRecord && todayRecord.check_out)
+  );
+  const isOnDuty = isServerActive || (!hasServerExplicitInactive && localActive);
+
   const empCode = (user as any)?.emp_code || (profileData as any)?.emp_code || 'EMP';
-  const designation = (profileData as any)?.designation || (user as any)?.designation || 'Field Officer';
   const officerName = user?.name || (profileData as any)?.name || 'Officer';
   const empOid = user?.id || (profileData as any)?.oid || 113;
-
 
   const loadData = useCallback(async () => {
     try {
@@ -75,7 +102,8 @@ export default function PatrolTourSelectionScreen() {
         setSiteId(res.site_id || 1);
       }
     } catch (e: any) {
-      console.error('Error loading patrolling tours:', e);
+      const errDetail = e.response?.data?.message || e.response?.data?.detail || (typeof e.response?.data === 'string' ? e.response.data : e.message);
+      console.error('Error loading patrolling tours:', errDetail || e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -84,41 +112,55 @@ export default function PatrolTourSelectionScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      refreshStatus?.();
+      checkLocalActivePunch();
       loadData();
-    }, [loadData])
+    }, [loadData, refreshStatus, checkLocalActivePunch])
   );
 
   const onRefresh = () => {
     setRefreshing(true);
+    refreshStatus?.();
+    checkLocalActivePunch();
     loadData();
   };
 
   const hasProfilePhoto = Boolean(
-    profileImage ||
-    (profileData && profileData.profile_photo) ||
-    (user && (user as any).profile_photo)
+    (profileImage && profileImage.trim().length > 0) ||
+    (profileData && profileData.profile_photo && String(profileData.profile_photo).trim().length > 0 && String(profileData.profile_photo) !== 'null')
   );
 
   const handleStartTour = async (tour: PatrolTourItem) => {
     if (!hasProfilePhoto) {
       Alert.alert(
-        'Profile Photo Required',
-        'Please upload your profile photo first in Settings before starting a checklist tour.',
+        t('profile_photo_required_title'),
+        t('profile_photo_required_msg'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Upload Photo', onPress: () => router.push('/settings') }
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('upload_photo'), onPress: () => router.push({ pathname: '/settings', params: { autoUpload: 'true' } }) }
         ]
       );
       return;
     }
 
     if (!isOnDuty) {
+      if (!hasProfilePhoto) {
+        Alert.alert(
+          t('profile_photo_required_title'),
+          t('profile_photo_required_msg'),
+          [
+            { text: t('cancel'), style: 'cancel' },
+            { text: t('upload_photo'), onPress: () => router.push({ pathname: '/settings', params: { autoUpload: 'true' } }) }
+          ]
+        );
+        return;
+      }
       Alert.alert(
-        'Active Status Required',
-        'You are currently INACTIVE. You must activate your session before starting a checklist tour.',
+        t('duty_session_inactive_title'),
+        t('duty_session_inactive_msg'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Activate', onPress: () => router.push('/mark-attendance') }
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('activate_session'), onPress: () => router.push('/mark-attendance') }
         ]
       );
       return;
@@ -126,12 +168,12 @@ export default function PatrolTourSelectionScreen() {
 
     if (activeTour && activeTour.tour_name !== tour.tour_name) {
       Alert.alert(
-        'Active Tour In Progress',
-        `You currently have tour '${activeTour.tour_name}' ongoing. Starting '${tour.tour_name}' will close the previous tour. Do you wish to continue?`,
+        t('active_tour_progress_title'),
+        t('switch_tour_prompt', { currentTour: activeTour.tour_name, newTour: tour.tour_name }),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           {
-            text: 'Switch Tour',
+            text: t('switch_tour'),
             onPress: () => proceedStart(tour),
           },
         ]
@@ -155,11 +197,11 @@ export default function PatrolTourSelectionScreen() {
           },
         });
       } else {
-        Alert.alert('Unable to Start Tour', res?.message || 'Please check your connection and try again.');
+        Alert.alert(t('unable_start_tour'), res?.message || t('network_error'));
       }
     } catch (e: any) {
-      const errorMsg = e?.response?.data?.detail || e?.message || 'Could not start tour.';
-      Alert.alert('Tour Start Notice', errorMsg);
+      const errorMsg = e?.response?.data?.detail || e?.message || t('unable_start_tour');
+      Alert.alert(t('tour_start_notice'), errorMsg);
     } finally {
       setStartingTour(null);
     }
@@ -181,7 +223,7 @@ export default function PatrolTourSelectionScreen() {
 
   const darkNavyBg = isDark ? '#0A1128' : '#F4F7FA';
   const cardBg = isDark ? '#131C33' : '#FFFFFF';
-  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0';
   const textColor = isDark ? '#FFFFFF' : '#0F172A';
   const subTextColor = isDark ? '#94A3B8' : '#64748B';
 
@@ -190,7 +232,7 @@ export default function PatrolTourSelectionScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header */}
-      <View style={styles.headerBar}>
+      <View style={[styles.headerBar, { borderBottomColor: cardBorder }]}>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => router.back()}
@@ -198,7 +240,7 @@ export default function PatrolTourSelectionScreen() {
         >
           <ArrowLeft color={isDark ? '#FFFFFF' : '#0F172A'} size={22} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: '#3B82F6' }]}>Checklist</Text>
+        <Text style={[styles.headerTitle, { color: '#3B82F6' }]}>{t('patrolling')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -223,7 +265,7 @@ export default function PatrolTourSelectionScreen() {
                 {officerName}
               </Text>
               <Text style={[styles.officerMetaText, { color: subTextColor }]}>
-                {designation}
+                {empCode}
               </Text>
               <Text style={[styles.officerSiteText, { color: '#3B82F6' }]} numberOfLines={1}>
                 <MapPin size={12} color="#3B82F6" /> {siteName}
@@ -252,7 +294,7 @@ export default function PatrolTourSelectionScreen() {
                   { color: isOnDuty ? '#22C55E' : '#EF4444' },
                 ]}
               >
-                {isOnDuty ? 'ACTIVE' : 'INACTIVE'}
+                {isOnDuty ? t('on_duty') : t('off_duty')}
               </Text>
             </View>
           </View>
@@ -265,31 +307,31 @@ export default function PatrolTourSelectionScreen() {
               <Radio color="#22C55E" size={16} />
             </View>
             <View>
-              <Text style={[styles.statusItemLabel, { color: subTextColor }]}>GPS Status</Text>
-              <Text style={[styles.statusItemValue, { color: '#22C55E' }]}>Active • 3m</Text>
+              <Text style={[styles.statusItemLabel, { color: subTextColor }]}>{t('gps_status')}</Text>
+              <Text style={[styles.statusItemValue, { color: '#22C55E' }]}>{t('gps_active_status')}</Text>
             </View>
           </View>
 
-          <View style={styles.statusDivider} />
+          <View style={[styles.statusDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0' }]} />
 
           <View style={styles.statusItem}>
             <View style={[styles.statusIconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
               <Wifi color="#3B82F6" size={16} />
             </View>
             <View>
-              <Text style={[styles.statusItemLabel, { color: subTextColor }]}>Sync Status</Text>
-              <Text style={[styles.statusItemValue, { color: '#3B82F6' }]}>Live Synced</Text>
+              <Text style={[styles.statusItemLabel, { color: subTextColor }]}>{t('sync_status')}</Text>
+              <Text style={[styles.statusItemValue, { color: '#3B82F6' }]}>{t('live_synced')}</Text>
             </View>
           </View>
 
-          <View style={styles.statusDivider} />
+          <View style={[styles.statusDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0' }]} />
 
           <View style={styles.statusItem}>
             <View style={[styles.statusIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
               <Battery color="#F59E0B" size={16} />
             </View>
             <View>
-              <Text style={[styles.statusItemLabel, { color: subTextColor }]}>Battery</Text>
+              <Text style={[styles.statusItemLabel, { color: subTextColor }]}>{t('battery')}</Text>
               <Text style={[styles.statusItemValue, { color: textColor }]}>{batteryLevel}%</Text>
             </View>
           </View>
@@ -306,7 +348,7 @@ export default function PatrolTourSelectionScreen() {
             <View style={styles.activeTourRow}>
               <View style={styles.activeTourPulseDot} />
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.activeTourNoticeLabel}>ACTIVE TOUR IN PROGRESS</Text>
+                <Text style={styles.activeTourNoticeLabel}>{t('active_tour_in_progress')}</Text>
                 <Text style={styles.activeTourNoticeTitle}>{activeTour.tour_name}</Text>
               </View>
               <TouchableOpacity
@@ -323,7 +365,7 @@ export default function PatrolTourSelectionScreen() {
                   })
                 }
               >
-                <Text style={styles.resumeActiveButtonText}>Resume</Text>
+                <Text style={styles.resumeActiveButtonText}>{t('resume')}</Text>
                 <ArrowRight color="#FFFFFF" size={16} />
               </TouchableOpacity>
             </View>
@@ -332,9 +374,9 @@ export default function PatrolTourSelectionScreen() {
 
         {/* Section Heading */}
         <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionHeadingTitle, { color: textColor }]}>Select Checklist Tour</Text>
+          <Text style={[styles.sectionHeadingTitle, { color: textColor }]}>{t('select_checklist_tour')}</Text>
           <Text style={[styles.sectionHeadingCount, { color: '#3B82F6' }]}>
-            {tours.length} Available
+            {t('available_count', { count: tours.length })}
           </Text>
         </View>
 
@@ -342,25 +384,25 @@ export default function PatrolTourSelectionScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text style={[styles.loadingText, { color: subTextColor }]}>Loading Checklist Tours...</Text>
+            <Text style={[styles.loadingText, { color: subTextColor }]}>{t('loading_checklist_tours')}</Text>
           </View>
         ) : tours.length === 0 ? (
           <View style={[styles.emptyContainer, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <Shield color="#64748B" size={44} />
-            <Text style={[styles.emptyTitle, { color: textColor }]}>No Checklist Tours Found</Text>
+            <Text style={[styles.emptyTitle, { color: textColor }]}>{t('no_checklist_tours_found')}</Text>
             <Text style={[styles.emptySubtitle, { color: subTextColor }]}>
-              There are no checklist tours configured for {siteName}. Please check with your supervisor or administrator.
+              {t('no_checklist_tours_desc', { siteName })}
             </Text>
           </View>
         ) : (
-          tours.map((t, idx) => {
-            const isThisTourActive = activeTour && activeTour.tour_name === t.tour_name;
-            const isBusyByOther = Boolean(t.active_runner_name && !isThisTourActive);
-            const isStartingThis = startingTour === t.tour_name;
+          tours.map((tourItem, idx) => {
+            const isThisTourActive = activeTour && activeTour.tour_name === tourItem.tour_name;
+            const isBusyByOther = Boolean(tourItem.active_runner_name && !isThisTourActive);
+            const isStartingThis = startingTour === tourItem.tour_name;
 
             return (
               <View
-                key={`${t.tour_name}_${idx}`}
+                key={`${tourItem.tour_name}_${idx}`}
                 style={[
                   styles.tourCard,
                   {
@@ -372,23 +414,23 @@ export default function PatrolTourSelectionScreen() {
               >
                 <View style={styles.tourCardTop}>
                   <View style={[styles.tourIconBox, { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : '#EFF6FF' }]}>
-                    {getTourIcon(t.tour_name)}
+                    {getTourIcon(tourItem.tour_name)}
                   </View>
 
                   <View style={styles.tourCardHeaderInfo}>
                     <View style={styles.tourTitleRow}>
                       <Text style={[styles.tourNameText, { color: textColor }]} numberOfLines={1}>
-                        {t.tour_name}
+                        {tourItem.tour_name}
                       </Text>
                       {isThisTourActive && (
                         <View style={styles.activeTourBadge}>
-                          <Text style={styles.activeTourBadgeText}>RESUMABLE</Text>
+                          <Text style={styles.activeTourBadgeText}>{t('resumable')}</Text>
                         </View>
                       )}
                     </View>
 
                     <Text style={[styles.tourDescText, { color: subTextColor }]} numberOfLines={2}>
-                      {t.description}
+                      {tourItem.description}
                     </Text>
                   </View>
                 </View>
@@ -398,13 +440,13 @@ export default function PatrolTourSelectionScreen() {
                   <View style={styles.tourStatItem}>
                     <CheckCircle2 color="#10B981" size={16} />
                     <Text style={[styles.tourStatText, { color: subTextColor }]}>
-                      {t.completed_checkpoints} of {t.total_checkpoints} Completed
+                      {t('checkpoints_completed_ratio', { completed: tourItem.completed_checkpoints, total: tourItem.total_checkpoints })}
                     </Text>
                   </View>
 
                   {isBusyByOther && (
                     <View style={styles.busyGuardBadge}>
-                      <Text style={styles.busyGuardText}>Run by {t.active_runner_name}</Text>
+                      <Text style={styles.busyGuardText}>{t('run_by_guard', { name: tourItem.active_runner_name || '' })}</Text>
                     </View>
                   )}
                 </View>
@@ -413,7 +455,7 @@ export default function PatrolTourSelectionScreen() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   disabled={isStartingThis}
-                  onPress={() => handleStartTour(t)}
+                  onPress={() => handleStartTour(tourItem)}
                   style={[
                     styles.startTourButton,
                     {
@@ -427,7 +469,7 @@ export default function PatrolTourSelectionScreen() {
                     <>
                       <Play color="#FFFFFF" size={16} fill="#FFFFFF" />
                       <Text style={styles.startTourButtonText}>
-                        {isThisTourActive ? 'RESUME TOUR' : 'START TOUR'}
+                        {isThisTourActive ? t('resume_tour_btn') : t('start_tour_btn')}
                       </Text>
                     </>
                   )}

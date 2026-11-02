@@ -30,7 +30,10 @@ internal struct MediaHandler {
     return try await asyncMap(selection) { selectedItem in
       let itemProvider = selectedItem.itemProvider
 
-      if itemProvider.canLoadObject(ofClass: PHLivePhoto.self) && options.mediaTypes.contains(.livePhotos) {
+      // Match on the registered identifier rather than `canLoadObject(ofClass: PHLivePhoto.self)`,
+      // which raises NSInvalidArgumentException on iOS 27.1.
+      if options.mediaTypes.contains(.livePhotos)
+        && itemProvider.hasItemConformingToTypeIdentifier(UTType.livePhoto.identifier) {
         return try await handleLivePhoto(from: selectedItem)
       }
       if itemProvider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
@@ -227,7 +230,7 @@ internal struct MediaHandler {
 
   // Unlike the case of regular images, we have to operate on original data of the image in order to preserve the exif data,
   // otherwise it won't be possible to connect the image and video into a `PHLivePhoto` after reading it from the cache directory later.
-  // As a result a live photo photo cannot be compressed or edited.
+  // As a result a live photo cannot be compressed or edited.
   private func handleLivePhoto(from selectedImage: PHPickerResult) async throws -> AssetInfo {
     let itemProvider = selectedImage.itemProvider
     let livePhotoObject = try await itemProvider.loadObject(ofClass: PHLivePhoto.self)
@@ -249,13 +252,18 @@ internal struct MediaHandler {
     let (photoUrl, pairedVideoUrl) = try generatePairedUrls(
       photoFileExtension: photoFileExtension, videoFileExtension: pairedVideoFileExtension)
 
+    // `isNetworkAccessAllowed` defaults to `false`, so without these options a Live Photo whose
+    // resources have been offloaded to iCloud can never be read.
+    let resourceOptions = PHAssetResourceRequestOptions()
+    resourceOptions.isNetworkAccessAllowed = options.shouldDownloadFromNetwork
+
     let imageData = try await PHAssetResourceManager.default().requestData(
-      for: photoResource, options: nil)
+      for: photoResource, options: resourceOptions)
 
     try await PHAssetResourceManager.default().writeData(
-      for: photoResource, toFile: photoUrl, options: nil)
+      for: photoResource, toFile: photoUrl, options: resourceOptions)
     try await PHAssetResourceManager.default().writeData(
-      for: videoResource, toFile: pairedVideoUrl, options: nil)
+      for: videoResource, toFile: pairedVideoUrl, options: resourceOptions)
 
     let fileSize = getFileSize(from: photoUrl)
     let mimeType = getMimeType(from: photoResource, fileExtension: photoUrl.pathExtension)
@@ -344,19 +352,25 @@ internal struct MediaHandler {
         let resourceOptions = PHAssetResourceRequestOptions()
         resourceOptions.isNetworkAccessAllowed = options.shouldDownloadFromNetwork
 
-        try await PHAssetResourceManager.default().writeData(
-          for: resource,
-          toFile: destinationUrl,
-          options: resourceOptions
-        )
+        do {
+          try await PHAssetResourceManager.default().writeData(
+            for: resource,
+            toFile: destinationUrl,
+            options: resourceOptions
+          )
 
-        let mimeType = getMimeType(from: resource, fileExtension: destinationUrl.pathExtension)
-        return try buildVideoResult(
-          for: destinationUrl,
-          withName: originalFilename,
-          mimeType: mimeType,
-          assetId: asset.localIdentifier
-        )
+          let mimeType = getMimeType(from: resource, fileExtension: destinationUrl.pathExtension)
+          return try buildVideoResult(
+            for: destinationUrl,
+            withName: originalFilename,
+            mimeType: mimeType,
+            assetId: asset.localIdentifier
+          )
+        } catch {
+          // Fall through to the slower path below, which writes to a freshly generated URL.
+          // Remove the partial export so truncated files don't pile up in the caches directory.
+          try? FileManager.default.removeItem(at: destinationUrl)
+        }
       }
     }
 
@@ -429,15 +443,21 @@ internal struct MediaHandler {
           let resourceOptions = PHAssetResourceRequestOptions()
           resourceOptions.isNetworkAccessAllowed = options.shouldDownloadFromNetwork
 
-          try await PHAssetResourceManager.default().writeData(for: resource, toFile: destinationUrl, options: resourceOptions)
+          do {
+            try await PHAssetResourceManager.default().writeData(for: resource, toFile: destinationUrl, options: resourceOptions)
 
-          let mimeType = getMimeType(from: resource, fileExtension: destinationUrl.pathExtension)
-          return try buildVideoResult(
-            for: destinationUrl,
-            withName: originalFilename,
-            mimeType: mimeType,
-            assetId: assetId
-          )
+            let mimeType = getMimeType(from: resource, fileExtension: destinationUrl.pathExtension)
+            return try buildVideoResult(
+              for: destinationUrl,
+              withName: originalFilename,
+              mimeType: mimeType,
+              assetId: assetId
+            )
+          } catch {
+            // Fall through to the slower path below, which writes to a freshly generated URL.
+            // Remove the partial export so truncated files don't pile up in the caches directory.
+            try? FileManager.default.removeItem(at: destinationUrl)
+          }
         }
       }
       // If anything above fails we'll gracefully fall back to the existing (slower) path below.

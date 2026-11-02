@@ -1,21 +1,26 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { UserProfile, loginOfficer, getAuthenticatedUser } from '../services/authService';
 import { getUserSession, saveUserSession, clearUserSession, getProfileImage, saveProfileImage } from '../services/db';
 import { Config } from '../constants/Config';
+import { setOnSessionTerminatedCallback } from '../services/api';
 
 export interface LoginResult {
   success: boolean;
-  errorType?: 'NO_ACCOUNT' | 'RESTRICTED_ROLE' | 'NETWORK_ERROR';
+  errorType?: 'NO_ACCOUNT' | 'RESTRICTED_ROLE' | 'NETWORK_ERROR' | 'DEACTIVATED' | 'ALREADY_REGISTERED';
+  message?: string;
 }
 
 interface AuthContextType {
   user: UserProfile | null;
   token: string | null;
   profileImage: string | null;
+  hasProfilePhoto: boolean;
   isLoading: boolean;
   login: (identifier: string, password?: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   updateProfileImage: (uri: string) => Promise<{ success: boolean; message: string }>;
+  syncRemoteProfilePhoto: (uri: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +33,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadUserSession();
+
+    setOnSessionTerminatedCallback(() => {
+      console.warn('Session terminated callback received in AuthContext. Resetting state.');
+      setUser(null);
+      setToken(null);
+      setProfileImage(null);
+    });
+
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        // When app is brought back to foreground, verify session validity with server
+        loadUserSession();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   const loadUserSession = async () => {
@@ -48,7 +71,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(updatedUser);
             await saveUserSession(updatedUser, session.token);
           }
-        } catch (syncErr) {
+        } catch (syncErr: any) {
+          const status = syncErr.response?.status;
+          const detail = String(syncErr.response?.data?.detail || '').toLowerCase();
+          const isDeactivatedOrInvalid =
+            status === 401 ||
+            (status === 403 && (detail.includes('deactivated') || detail.includes('deregistered') || detail.includes('session')));
+
+          if (isDeactivatedOrInvalid) {
+            console.warn('Session invalidated by server, clearing local user state:', detail);
+            await clearUserSession();
+            setUser(null);
+            setToken(null);
+            setProfileImage(null);
+          }
           // Fallback to cached session if offline
         }
       } else {
@@ -102,7 +138,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ];
 
         if (restrictedRoles.includes(role)) {
-          return { success: false, errorType: 'RESTRICTED_ROLE' };
+          return {
+            success: false,
+            errorType: 'RESTRICTED_ROLE',
+            message: 'Access Restricted: Security Guards and non-Officer staff cannot log in. This app is for Officers only.',
+          };
         }
 
         setUser(res.user);
@@ -120,7 +160,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, errorType: 'NO_ACCOUNT' };
       }
       if (e.response?.status === 403) {
-        return { success: false, errorType: 'RESTRICTED_ROLE' };
+        const detail = String(e.response?.data?.detail || '');
+        const lower = detail.toLowerCase();
+        let errorType: 'RESTRICTED_ROLE' | 'DEACTIVATED' | 'ALREADY_REGISTERED' = 'DEACTIVATED';
+        if (lower.includes('registered') || lower.includes('device')) {
+          errorType = 'ALREADY_REGISTERED';
+        } else if (lower.includes('restricted') || lower.includes('officer')) {
+          errorType = 'RESTRICTED_ROLE';
+        } else if (lower.includes('deactivated') || lower.includes('inactive')) {
+          errorType = 'DEACTIVATED';
+        }
+        return {
+          success: false,
+          errorType,
+          message: detail || 'Access denied. Please contact administrator.',
+        };
       }
       return { success: false, errorType: 'NETWORK_ERROR' };
     } finally {
@@ -167,6 +221,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: 'Profile photo saved locally' };
   };
 
+  const syncRemoteProfilePhoto = async (uri: string) => {
+    if (!profileImage && uri && uri.trim().length > 0) {
+      setProfileImage(uri);
+      const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username;
+      await saveProfileImage(uri, empId ? String(empId) : undefined);
+    }
+  };
+
+  const hasProfilePhoto = Boolean(profileImage && profileImage.trim().length > 0);
+
   const logout = async () => {
     try {
       await clearUserSession();
@@ -179,7 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, profileImage, isLoading, login, logout, updateProfileImage }}>
+    <AuthContext.Provider value={{ user, token, profileImage, hasProfilePhoto, isLoading, login, logout, updateProfileImage, syncRemoteProfilePhoto }}>
       {children}
     </AuthContext.Provider>
   );

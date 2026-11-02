@@ -42,7 +42,9 @@
 
 @implementation RNBetterPanGestureRecognizer {
   __weak RNGestureHandler *_gestureHandler;
-#if !TARGET_OS_OSX
+#if TARGET_OS_OSX
+  BOOL _blockAutomaticActivation;
+#else
   NSUInteger _realMinimumNumberOfTouches;
 #endif
   BOOL _hasCustomActivationCriteria;
@@ -75,12 +77,12 @@
 
 - (void)triggerAction
 {
-  [_gestureHandler handleGesture:self fromReset:NO];
+  [_gestureHandler handleGesture:self fromReset:NO fromManualStateChange:NO];
 }
 
 - (void)triggerActionFromReset
 {
-  [_gestureHandler handleGesture:self fromReset:YES];
+  [_gestureHandler handleGesture:self fromReset:YES fromManualStateChange:NO];
 }
 
 #if !TARGET_OS_OSX
@@ -114,6 +116,9 @@
 
 - (void)activateAfterLongPress
 {
+#if TARGET_OS_OSX
+  _blockAutomaticActivation = NO;
+#endif
   self.state = UIGestureRecognizerStateBegan;
   // Send event in ACTIVE state because UIGestureRecognizerStateBegan is mapped to RNGestureHandlerStateBegan
   [_gestureHandler handleGesture:self inState:RNGestureHandlerStateActive];
@@ -121,6 +126,11 @@
 
 - (void)interactionsBegan:(NSSet *)touches withEvent:(UIEvent *)event
 {
+  if (self.state == UIGestureRecognizerStatePossible && ![self.delegate gestureRecognizerShouldBegin:self]) {
+    self.state = UIGestureRecognizerStateFailed;
+    return;
+  }
+
   if (touches.count == 0) {
     [_gestureHandler reset];
   }
@@ -139,6 +149,11 @@
 #endif
 
 #if TARGET_OS_OSX
+  // NSPanGestureRecognizer transitions to the Began state on mouse-down, without any
+  // built-in movement hysteresis. To honor the custom activation criteria (minDist,
+  // activeOffsets, minVelocity) we hold the recognizer in the Possible state until
+  // they are met in interactionsMoved.
+  _blockAutomaticActivation = _hasCustomActivationCriteria;
   [super mouseDown:event];
 #else
   [super touchesBegan:touches withEvent:event];
@@ -176,7 +191,14 @@
     }
   }
 
-#if !TARGET_OS_TV && !TARGET_OS_OSX
+#if TARGET_OS_OSX
+  if (_hasCustomActivationCriteria && self.state == UIGestureRecognizerStatePossible &&
+      [self shouldActivateUnderCustomCriteria]) {
+    _blockAutomaticActivation = NO;
+    self.state = UIGestureRecognizerStateBegan;
+    [self setTranslation:CGPointMake(0, 0) inView:self.view];
+  }
+#elif !TARGET_OS_TV
   if (_hasCustomActivationCriteria && self.state == UIGestureRecognizerStatePossible &&
       [self shouldActivateUnderCustomCriteria]) {
     super.minimumNumberOfTouches = _realMinimumNumberOfTouches;
@@ -208,6 +230,23 @@
 }
 
 #if TARGET_OS_OSX
+
+- (void)setState:(NSGestureRecognizerState)state
+{
+  if (_blockAutomaticActivation) {
+    if (state == NSGestureRecognizerStateBegan || state == NSGestureRecognizerStateChanged) {
+      // Hold the recognizer in the Possible state until the custom activation criteria
+      // are met — the superclass keeps tracking the mouse regardless, so translation
+      // and velocity stay valid for the criteria checks.
+      return;
+    }
+    if (state == NSGestureRecognizerStateEnded) {
+      // Mouse released before the activation criteria were met — the gesture failed.
+      state = NSGestureRecognizerStateFailed;
+    }
+  }
+  [super setState:state];
+}
 
 - (void)mouseDown:(NSEvent *)event
 {
@@ -264,7 +303,9 @@
   [self triggerActionFromReset];
   [_gestureHandler.pointerTracker reset];
   [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(activateAfterLongPress) object:nil];
-  self.enabled = YES;
+#if TARGET_OS_OSX
+  _blockAutomaticActivation = NO;
+#endif
   [super reset];
   [_gestureHandler reset];
 
@@ -333,10 +374,10 @@
   }
 
   CGPoint velocity = [self velocityInView:self.view];
-  if (TEST_MIN_IF_NOT_NAN(velocity.x, _minVelocityX)) {
+  if (TEST_ABS_MIN_IF_NOT_NAN(velocity.x, _minVelocityX)) {
     return YES;
   }
-  if (TEST_MIN_IF_NOT_NAN(velocity.y, _minVelocityY)) {
+  if (TEST_ABS_MIN_IF_NOT_NAN(velocity.y, _minVelocityY)) {
     return YES;
   }
   if (TEST_MIN_IF_NOT_NAN(VEC_LEN_SQ(velocity), _minVelocitySq)) {
@@ -358,6 +399,11 @@
   return self;
 }
 
+- (BOOL)isContinuous
+{
+  return YES;
+}
+
 - (void)resetConfig
 {
   [super resetConfig];
@@ -371,14 +417,9 @@
   recognizer.activeOffsetYStart = NAN;
   recognizer.activeOffsetYEnd = NAN;
   recognizer.failOffsetYStart = NAN;
-  recognizer.failOffsetYStart = NAN;
   recognizer.failOffsetYEnd = NAN;
-#if !TARGET_OS_OSX && !TARGET_OS_TV && __IPHONE_OS_VERSION_MAX_ALLOWED >= 130400
-  if (@available(iOS 13.4, *)) {
-    recognizer.allowedScrollTypesMask = 0;
-  }
-#endif
 #if !TARGET_OS_OSX && !TARGET_OS_TV
+  recognizer.allowedScrollTypesMask = 0;
   recognizer.minimumNumberOfTouches = 1;
   recognizer.maximumNumberOfTouches = NSUIntegerMax;
 #endif
@@ -387,9 +428,9 @@
   recognizer.activateAfterLongPress = NAN;
 }
 
-- (void)configure:(NSDictionary *)config
+- (void)updateConfig:(NSDictionary *)config
 {
-  [super configure:config];
+  [super updateConfig:config];
   RNBetterPanGestureRecognizer *recognizer = (RNBetterPanGestureRecognizer *)_recognizer;
 
   APPLY_FLOAT_PROP(minVelocityX);
@@ -403,12 +444,10 @@
   APPLY_FLOAT_PROP(failOffsetYStart);
   APPLY_FLOAT_PROP(failOffsetYEnd);
 
-#if !TARGET_OS_OSX && !TARGET_OS_TV && __IPHONE_OS_VERSION_MAX_ALLOWED >= 130400
-  if (@available(iOS 13.4, *)) {
-    bool enableTrackpadTwoFingerGesture = [RCTConvert BOOL:config[@"enableTrackpadTwoFingerGesture"]];
-    if (enableTrackpadTwoFingerGesture) {
-      recognizer.allowedScrollTypesMask = UIScrollTypeMaskAll;
-    }
+#if !TARGET_OS_OSX && !TARGET_OS_TV
+  id enableTrackpadTwoFingerGesture = config[@"enableTrackpadTwoFingerGesture"];
+  if (enableTrackpadTwoFingerGesture != nil) {
+    recognizer.allowedScrollTypesMask = [RCTConvert BOOL:enableTrackpadTwoFingerGesture] ? UIScrollTypeMaskAll : 0;
   }
 
   APPLY_NAMED_INT_PROP(minimumNumberOfTouches, @"minPointers");
@@ -447,7 +486,7 @@
 #if TARGET_OS_OSX
 - (RNGestureHandlerEventExtraData *)eventExtraData:(NSPanGestureRecognizer *)recognizer
 {
-  return [RNGestureHandlerEventExtraData forPan:[recognizer locationInView:recognizer.view]
+  return [RNGestureHandlerEventExtraData forPan:[recognizer locationInView:self.coordinateView]
                            withAbsolutePosition:[recognizer locationInView:recognizer.view.window.contentView]
                                 withTranslation:[recognizer translationInView:recognizer.view.window.contentView]
                                    withVelocity:[recognizer velocityInView:recognizer.view.window.contentView]
@@ -461,7 +500,7 @@
   RNBetterPanGestureRecognizer *panRecognizer = (RNBetterPanGestureRecognizer *)recognizer;
 
   return [RNGestureHandlerEventExtraData
-                    forPan:[recognizer locationInView:recognizer.view]
+                    forPan:[recognizer locationInView:self.coordinateView]
       withAbsolutePosition:[recognizer locationInView:recognizer.view.window]
            withTranslation:[recognizer translationInView:recognizer.view.window]
               withVelocity:[recognizer velocityInView:recognizer.view.window]

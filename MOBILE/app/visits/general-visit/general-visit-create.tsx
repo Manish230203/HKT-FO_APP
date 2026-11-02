@@ -6,9 +6,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { BookOpen, Send, ChevronDown, Building, X, MapPin, Camera, Lock } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
-import { getSites, getClients, Site, Client } from '../../../services/siteService';
+import { getSites, getClients, Site, Client, checkOutSiteVisit } from '../../../services/siteService';
 import { submitGeneralVisit } from '../../../services/visitService';
-import { markReportSubmittedForCheckIn } from '../../../services/db';
+import { markReportSubmittedForCheckIn, clearActiveCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
 import { useTheme } from '../../../context/ThemeContext';
 import { Card } from '../../../components/ui/Card';
@@ -78,7 +78,7 @@ export default function CreateGeneralVisitScreen() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission Required', 'Camera permission is required to take visit photos.');
+        Alert.alert(t('permission_denied'), t('camera_permission_required'));
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -86,8 +86,9 @@ export default function CreateGeneralVisitScreen() {
         base64: true,
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const photoUri = result.assets[0].uri;
-        setGeneralPhotos((prev) => [...prev, photoUri]);
+        const asset = result.assets[0];
+        const photoData = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        setGeneralPhotos((prev) => [...prev, photoData]);
       }
     } catch (e) {
       console.warn('Error launching camera for general photo:', e);
@@ -130,7 +131,9 @@ export default function CreateGeneralVisitScreen() {
 
   const loadClientsAndSites = async () => {
     try {
-      const clientData = await getClients();
+      const empOidVal = user?.id || (user as any)?.empOid || user?.employee_id || 7558;
+      const branchNameVal = user?.branch_name || undefined;
+      const clientData = await getClients(empOidVal, branchNameVal);
       setClients(clientData);
 
       if (isCustomVisit) {
@@ -144,7 +147,7 @@ export default function CreateGeneralVisitScreen() {
         const initialClient = clientData.find((c) => String(c.id) === String(params.clientId));
         if (initialClient) {
           setClientName(initialClient.name);
-          const initialSites = await getSites(initialClient.id);
+          const initialSites = await getSites(empOidVal, initialClient.id, branchNameVal);
           setSites(initialSites);
 
           if (params.siteId) {
@@ -155,7 +158,7 @@ export default function CreateGeneralVisitScreen() {
           }
         }
       } else {
-        const siteData = await getSites();
+        const siteData = await getSites(empOidVal, undefined, branchNameVal);
         setSites(siteData);
         if (params.siteId) {
           const initialSite = siteData.find((s) => String(s.id) === String(params.siteId));
@@ -181,7 +184,9 @@ export default function CreateGeneralVisitScreen() {
     setSiteId('');
     setSiteName('');
     try {
-      const siteData = await getSites(Number(selectedClientId));
+      const empOidVal = user?.id || (user as any)?.empOid || user?.employee_id || 7558;
+      const branchNameVal = user?.branch_name || undefined;
+      const siteData = await getSites(empOidVal, Number(selectedClientId), branchNameVal);
       setSites(siteData);
     } catch (e) {
       console.error('Failed to load sites for client', e);
@@ -283,7 +288,7 @@ export default function CreateGeneralVisitScreen() {
       setAlertInfo({
         visible: true,
         title: t('general_visit_submitted') || 'Report Submitted',
-        message: 'General Visit Report submitted successfully! Please tap Check-Out on the visits screen when you leave site.',
+        message: 'General Visit Report submitted successfully! Please proceed to Check-Out to complete your site visit.',
         type: 'success',
       });
     } catch (e: any) {
@@ -310,7 +315,7 @@ export default function CreateGeneralVisitScreen() {
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
 
   const filteredClients = React.useMemo(() => {
-    return fuzzyFilter(clients, clientSearchQuery, (c) => c.name || '');
+    return fuzzyFilter(clients, clientSearchQuery, (c) => [c.name, c.code].filter(Boolean) as string[]);
   }, [clients, clientSearchQuery]);
 
   const filteredSites = sites.filter((s) => {
@@ -325,7 +330,7 @@ export default function CreateGeneralVisitScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, { paddingBottom: 140 }]}
@@ -512,7 +517,12 @@ export default function CreateGeneralVisitScreen() {
                   }}
                 >
                   <Building color="#3B82F6" size={18} style={{ marginRight: 10 }} />
-                  <Text style={styles.modalItemText}>{item.name}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalItemText}>{item.name}</Text>
+                    {item.code ? (
+                      <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>{item.code}</Text>
+                    ) : null}
+                  </View>
                 </TouchableOpacity>
               )}
             />

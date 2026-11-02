@@ -15,6 +15,7 @@ import { SwipeableBackWrapper } from '../../components/SwipeableBackWrapper';
 
 export default function SitesScreen() {
   const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const { t } = useLanguage();
   const { user } = useAuth();
   const router = useRouter();
@@ -33,8 +34,8 @@ export default function SitesScreen() {
   const fetchSitesData = async () => {
     setLoading(true);
     try {
-      const empOid = user?.id || user?.employee_id;
-      const data = await getSites(empOid);
+      const empOid = user?.id || (user as any)?.empOid || user?.employee_id;
+      const data = await getSites(empOid, undefined, user?.branch_name || undefined);
       setSites(data || []);
       const initialExpanded: Record<string, boolean> = {};
       (data || []).forEach((item) => {
@@ -96,7 +97,7 @@ export default function SitesScreen() {
   return (
     <SwipeableBackWrapper>
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <View style={styles.searchBar}>
           <Input
             placeholder={t('search_sites')}
@@ -113,7 +114,7 @@ export default function SitesScreen() {
           {Object.keys(filteredGroupedSites).length === 0 ? (
             <Card style={styles.emptyCard}>
               <Building color={colors.textMuted} size={32} />
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No assigned sites found.</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t('no_sites_found')}</Text>
             </Card>
           ) : (
             Object.keys(filteredGroupedSites).map((clientName) => {
@@ -177,10 +178,10 @@ export default function SitesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME.background,
+    backgroundColor: colors.background,
   },
   searchBar: {
     paddingHorizontal: 16,
@@ -200,8 +201,8 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   emptyText: {
-    color: THEME.textVariant,
-    fontSize: THEME.typography.xs,
+    color: colors.textSecondary,
+    fontSize: 12,
     marginTop: 8,
   },
   clientGroup: {
@@ -211,11 +212,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: THEME.card,
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: THEME.border,
+    borderColor: colors.border,
     marginBottom: 8,
   },
   clientHeaderLeft: {
@@ -224,9 +225,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   clientTitle: {
-    fontSize: THEME.typography.sm,
+    fontSize: 14,
     fontWeight: '700',
-    color: THEME.text,
+    color: colors.text,
     textTransform: 'uppercase',
   },
   siteCard: {
@@ -251,13 +252,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   siteTitle: {
-    fontSize: THEME.typography.sm,
+    fontSize: 14,
     fontWeight: '600',
-    color: THEME.text,
+    color: colors.text,
   },
   branchText: {
-    fontSize: THEME.typography.xs,
-    color: THEME.textVariant,
+    fontSize: 12,
+    color: colors.textSecondary,
     marginTop: 2,
   },
 });

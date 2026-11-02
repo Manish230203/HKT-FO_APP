@@ -138,7 +138,7 @@ export default function extractTransform(props) {
   // this type is not correct since props can be of type TransformsStyle['transform'] too
   // but it satisfies TS and should not produce any type errors
   const transformProps = props;
-  return transformToMatrix(props2transform(transformProps), transformProps === null || transformProps === void 0 ? void 0 : transformProps.transform);
+  return transformToMatrix(props2transform(transformProps), transformProps?.transform);
 }
 export function extractTransformSvgView(props) {
   if (typeof props.transform === 'string') {

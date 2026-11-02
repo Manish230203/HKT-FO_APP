@@ -61,6 +61,12 @@ export const deleteStorageItem = async (key: string) => {
 
 export const saveUserSession = async (userData: any, token: string) => {
   try {
+    const existing = await getUserSession();
+    if (existing && existing.user && String(existing.user.id || existing.user.employee_id) !== String(userData.id || userData.employee_id)) {
+      // Switched to a different employee account: clear previous employee's local punches and check-ins
+      await deleteStorageItem('fo_punch_records');
+      await deleteStorageItem('fo_active_checkins');
+    }
     const payload = JSON.stringify({ user: userData, token });
     await setStorageItem('fo_user_session', payload);
   } catch (e) {
@@ -82,6 +88,7 @@ export const clearUserSession = async () => {
   try {
     await deleteStorageItem('fo_user_session');
     await deleteStorageItem('fo_punch_records');
+    await deleteStorageItem('fo_active_checkins');
   } catch (e) {
     console.error("Clear user session failed", e);
   }
@@ -248,6 +255,7 @@ export const getPunchRecords = async (empId?: string): Promise<any[]> => {
 
 export interface ActiveCheckInInfo {
   checkInTime: string;
+  checkOutTime?: string | null;
   date: string;
   siteId?: string | number | null;
   customVisitId?: string | number | null;
@@ -277,15 +285,22 @@ export const getActiveCheckIns = async (): Promise<Record<string, ActiveCheckInI
   }
 };
 
-export const markReportSubmittedForCheckIn = async (plannedId?: string | number, siteId?: string | number, reportId?: string, reportType?: string) => {
+export const markReportSubmittedForCheckIn = async (
+  plannedId?: string | number,
+  siteId?: string | number,
+  reportId?: string,
+  reportType?: string,
+  customVisitId?: string | number
+) => {
   try {
     const active = await getActiveCheckIns();
     const pKey = plannedId ? String(plannedId) : null;
     const sKey = siteId ? String(siteId) : null;
+    const cKey = customVisitId ? String(customVisitId) : null;
 
     if (pKey) {
       active[pKey] = {
-        ...(active[pKey] || { siteId: siteId ? String(siteId) : '' }),
+        ...(active[pKey] || { siteId: siteId ? String(siteId) : '', customVisitId: customVisitId ? String(customVisitId) : undefined }),
         reportSubmitted: true,
         reportId: reportId || active[pKey]?.reportId,
         reportType: reportType || active[pKey]?.reportType,
@@ -299,11 +314,23 @@ export const markReportSubmittedForCheckIn = async (plannedId?: string | number,
         reportType: reportType || active[sKey]?.reportType,
       };
     }
+    if (cKey) {
+      active[cKey] = {
+        ...(active[cKey] || { customVisitId: cKey }),
+        reportSubmitted: true,
+        reportId: reportId || active[cKey]?.reportId,
+        reportType: reportType || active[cKey]?.reportType,
+      };
+    }
     Object.keys(active).forEach((k) => {
-      if (siteId && String(active[k].siteId) === String(siteId)) {
+      const matchSite = siteId && String(active[k]?.siteId) === String(siteId);
+      const matchCustom = customVisitId && String(active[k]?.customVisitId) === String(customVisitId);
+      const matchKey = (pKey && k === pKey) || (sKey && k === sKey) || (cKey && k === cKey);
+      if (matchSite || matchCustom || matchKey) {
         active[k].reportSubmitted = true;
         if (reportId) active[k].reportId = reportId;
         if (reportType) active[k].reportType = reportType;
+        if (customVisitId) active[k].customVisitId = customVisitId;
       }
     });
     await saveActiveCheckIns(active);
@@ -315,16 +342,29 @@ export const markReportSubmittedForCheckIn = async (plannedId?: string | number,
 export const clearActiveCheckIn = async (plannedId: string | number) => {
   try {
     const active = await getActiveCheckIns();
-    delete active[String(plannedId)];
-    // Also remove any entries matching by siteId
+    const targetStr = String(plannedId);
+    delete active[targetStr];
+    // Also remove any entries matching by siteId or customVisitId
     Object.keys(active).forEach(k => {
-      if (String(active[k].siteId) === String(plannedId)) {
+      if (
+        String(active[k]?.siteId) === targetStr ||
+        String(active[k]?.customVisitId) === targetStr ||
+        k === targetStr
+      ) {
         delete active[k];
       }
     });
     await saveActiveCheckIns(active);
   } catch (e) {
     console.error("Clear active checkin failed", e);
+  }
+};
+
+export const clearAllActiveCheckIns = async () => {
+  try {
+    await saveActiveCheckIns({});
+  } catch (e) {
+    console.error("Clear all active checkins failed", e);
   }
 };
 

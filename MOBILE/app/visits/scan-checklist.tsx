@@ -29,11 +29,13 @@ import {
 import * as Haptics from 'expo-haptics';
 import { validateSiteQr } from '../../services/visitService';
 import { getSites, Site } from '../../services/siteService';
+import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { StatusBar } from 'react-native';
 
 export default function ScanChecklistScreen() {
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
   const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -104,11 +106,11 @@ export default function ScanChecklistScreen() {
         const qp = `siteId=${encodeURIComponent(targetSiteId)}&siteName=${encodeURIComponent(resolvedSiteName)}&clientId=${encodeURIComponent(selectedClientId || '')}&clientName=${encodeURIComponent(selectedClientName || '')}&plannedId=${encodeURIComponent(params.plannedId || '')}&customVisitId=${encodeURIComponent(params.customVisitId || '')}&isCustom=${encodeURIComponent(params.isCustom || '0')}`;
 
         Alert.alert(
-          'QR Verified ✓',
-          `Successfully scanned QR for ${resolvedSiteName}.\nOpening assigned checklist...`,
+          t('qr_verified_title'),
+          t('site_qr_verified_msg', { site: resolvedSiteName }),
           [
             {
-              text: 'Open Checklist',
+              text: t('open_checklist'),
               onPress: () => {
                 router.replace(`/visits/checklist-form?${qp}`);
               },
@@ -116,10 +118,10 @@ export default function ScanChecklistScreen() {
           ]
         );
       } else {
-        const msg = res?.message || 'Invalid QR code. Please scan the QR code for this site.';
-        Alert.alert('Scan Failed', msg, [
+        const msg = res?.message || t('scan_failed_title');
+        Alert.alert(t('scan_failed_title'), msg, [
           {
-            text: 'Try Again',
+            text: t('try_again'),
             onPress: () => {
               setScanned(false);
               setValidating(false);
@@ -138,9 +140,9 @@ export default function ScanChecklistScreen() {
         const qp = `siteId=${encodeURIComponent(selectedSiteId || '1')}&siteName=${encodeURIComponent(selectedSiteName || 'Site')}&clientId=${encodeURIComponent(selectedClientId || '')}&clientName=${encodeURIComponent(selectedClientName || '')}&plannedId=${encodeURIComponent(params.plannedId || '')}&customVisitId=${encodeURIComponent(params.customVisitId || '')}&isCustom=${encodeURIComponent(params.isCustom || '0')}`;
         router.replace(`/visits/checklist-form?${qp}`);
       } else {
-        Alert.alert('Validation Error', 'Could not verify QR code. Please ensure you are scanning the site QR code.', [
+        Alert.alert(t('validation_error'), t('invalid_qr_site_mismatch'), [
           {
-            text: 'Scan Again',
+            text: t('scan_again'),
             onPress: () => {
               setScanned(false);
               setValidating(false);
@@ -155,7 +157,7 @@ export default function ScanChecklistScreen() {
 
   const handleBypassForTesting = () => {
     if (!selectedSiteId) {
-      Alert.alert('Select Site', 'Please select a site first.');
+      Alert.alert(t('select_site_title'), t('please_select_site_first'));
       return;
     }
     const qp = `siteId=${encodeURIComponent(selectedSiteId)}&siteName=${encodeURIComponent(selectedSiteName || 'Site')}&clientId=${encodeURIComponent(selectedClientId || '')}&clientName=${encodeURIComponent(selectedClientName || '')}&plannedId=${encodeURIComponent(params.plannedId || '')}&customVisitId=${encodeURIComponent(params.customVisitId || '')}&isCustom=${encodeURIComponent(params.isCustom || '0')}`;
@@ -170,7 +172,7 @@ export default function ScanChecklistScreen() {
 
   return (
     <SafeAreaView style={styles.safeContainer} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -218,16 +220,16 @@ export default function ScanChecklistScreen() {
         {!permission?.granted ? (
           <View style={styles.permissionBox}>
             <AlertTriangle color="#F59E0B" size={44} style={{ marginBottom: 12 }} />
-            <Text style={styles.permissionTitle}>Camera Permission Required</Text>
+            <Text style={styles.permissionTitle}>{t('camera_perm_required')}</Text>
             <Text style={styles.permissionDesc}>
-              Please grant camera access to scan the site QR code.
+              {t('camera_perm_msg')}
             </Text>
             <TouchableOpacity
               style={styles.permissionBtn}
               onPress={requestPermission}
               activeOpacity={0.85}
             >
-              <Text style={styles.permissionBtnText}>GRANT PERMISSION</Text>
+              <Text style={styles.permissionBtnText}>{t('grant_camera_perm')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -296,7 +298,7 @@ export default function ScanChecklistScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Choose Target Site</Text>
+              <Text style={styles.modalTitle}>{t('select_site_title')}</Text>
               <TouchableOpacity onPress={() => setSitePickerVisible(false)}>
                 <X color="#94A3B8" size={24} />
               </TouchableOpacity>

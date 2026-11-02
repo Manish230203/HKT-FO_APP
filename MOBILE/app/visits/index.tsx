@@ -37,14 +37,15 @@ import {
   ActiveSiteSession,
   isVisitDateRangeExpired,
 } from '../../services/siteService';
-import { getDayVisitReports, getNightVisitReports, getGeneralVisits, sendReportEmail } from '../../services/visitService';
-import { getActiveCheckIns, saveActiveCheckIns, clearActiveCheckIn, ActiveCheckInInfo } from '../../services/db';
+import { getDayVisitReports, getNightVisitReports, getGeneralVisits, getPatrolTourReports, sendReportEmail } from '../../services/visitService';
+import { getActiveCheckIns, saveActiveCheckIns, clearActiveCheckIn, ActiveCheckInInfo, getPunchRecords } from '../../services/db';
 import { THEME } from '../../constants/theme';
+import { Config } from '../../constants/Config';
 import { useTheme } from '../../context/ThemeContext';
 import * as Location from 'expo-location';
 
 import { Modal } from 'react-native';
-import { X, User, MapPin, Building, FileText, Mail, Clock as ClockIcon, ShieldAlert, LogOut as LogOutIcon, Navigation, FileDown } from 'lucide-react-native';
+import { X, User, MapPin, Building, FileText, Mail, Clock as ClockIcon, ShieldAlert, LogOut as LogOutIcon, Navigation, FileDown, Camera, Maximize2 } from 'lucide-react-native';
 import { generateAndShareVisitPdf } from '../../services/pdfService';
 
 type CompletedVisit = {
@@ -80,24 +81,74 @@ export default function VisitsScreen() {
   const { colors, isDark } = useTheme();
   const styles = React.useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const { user, profileImage } = useAuth();
-  const { todayRecord, profileData } = useAttendance();
+  const { todayRecord, profileData, refreshStatus } = useAttendance();
   const { t } = useLanguage();
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
 
+  const [localActive, setLocalActive] = useState<boolean>(false);
+
+  const checkLocalActivePunch = useCallback(async () => {
+    try {
+      const empId = user?.employee_id || (user?.id ? String(user.id) : '');
+      const punchLogs = await getPunchRecords(empId);
+      const nowMs = Date.now();
+      const todayStr = new Date().toISOString().split('T')[0];
+        const currentEmpId = String(user?.employee_id || user?.id || '').toLowerCase();
+        const activePunch = punchLogs.find((r) => {
+          const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+          const punchMs = r.timestamp || 0;
+          const isWithin16Hours = (nowMs - punchMs) < 16 * 3600 * 1000;
+          const isToday = !r.date || r.date === todayStr;
+          const recordEmpId = String(r.employee_id || r.employeeId || '').toLowerCase();
+          const matchesEmp = !currentEmpId || recordEmpId === currentEmpId;
+          return isPunchedIn && isWithin16Hours && isToday && matchesEmp;
+        });
+      setLocalActive(Boolean(activePunch));
+    } catch (e) {
+      // ignore
+    }
+  }, [user]);
+
   const hasProfilePhoto = Boolean(
-    profileImage ||
-    (profileData && profileData.profile_photo) ||
-    (user && (user as any).profile_photo)
+    (profileImage && profileImage.trim().length > 0) ||
+    (profileData && profileData.profile_photo && String(profileData.profile_photo).trim().length > 0 && String(profileData.profile_photo) !== 'null')
   );
 
-  const isOfficerActive = Boolean(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+  const isServerActive = Boolean(todayRecord && todayRecord.check_in && !todayRecord.check_out);
+  const hasServerExplicitInactive = Boolean(
+    (todayRecord && (todayRecord as any).no_active_session) ||
+    (todayRecord && todayRecord.check_out)
+  );
+  const isOfficerActive = isServerActive || (!hasServerExplicitInactive && localActive);
 
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [loading, setLoading] = useState(false);
   const [plannedVisits, setPlannedVisits] = useState<PlannedVisit[]>([]);
   const [completedVisits, setCompletedVisits] = useState<CompletedVisit[]>([]);
   const [selectedReport, setSelectedReport] = useState<CompletedVisit | null>(null);
+  const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  const resolveMobilePhotoUrl = (url: string) => {
+    if (!url || typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('data:image/') || trimmed.startsWith('file://')) {
+      return trimmed;
+    }
+    let targetUrl = trimmed;
+    if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) {
+      const clean = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+      const rawApi = Config.BASE_URL || process.env.EXPO_PUBLIC_API_URL || 'https://registry-amuser-bagging.ngrok-free.dev';
+      const serverHost = rawApi.replace(/\/api\/?$/, '');
+      targetUrl = `${serverHost}${clean}`;
+    }
+    if (targetUrl.includes('ngrok-free.dev') && !targetUrl.includes('ngrok-skip-browser-warning')) {
+      const separator = targetUrl.includes('?') ? '&' : '?';
+      targetUrl = `${targetUrl}${separator}ngrok-skip-browser-warning=true`;
+    }
+    return targetUrl;
+  };
 
   const getReportCompany = (rep: CompletedVisit | null) => {
     if (!rep) {
@@ -138,7 +189,7 @@ export default function VisitsScreen() {
 
   // Dynamic Live Duration Timer for Active Site Visit Session
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: any;
     if (activeBackendSession && activeBackendSession.start_time) {
       const calcDuration = () => {
         const startMs = new Date(activeBackendSession.start_time).getTime();
@@ -172,6 +223,8 @@ export default function VisitsScreen() {
       let locationSubscription: Location.LocationSubscription | null = null;
       let isSubscribed = true;
 
+      refreshStatus?.();
+      checkLocalActivePunch();
       loadStoredCheckIns();
       fetchActiveSession();
       fetchCurrentLocation();
@@ -244,7 +297,16 @@ export default function VisitsScreen() {
     try {
       const stored = await getActiveCheckIns();
       if (stored) {
-        setActiveCheckIns(stored);
+        const clean: Record<string, ActiveCheckInInfo> = {};
+        Object.keys(stored).forEach((k) => {
+          if (stored[k] && !stored[k].checkOutTime) {
+            clean[k] = stored[k];
+          }
+        });
+        setActiveCheckIns(clean);
+        if (Object.keys(clean).length !== Object.keys(stored).length) {
+          await saveActiveCheckIns(clean);
+        }
       }
     } catch (e) {
       console.error('Failed to load active checkins', e);
@@ -259,7 +321,7 @@ export default function VisitsScreen() {
         'Please upload your profile photo first in Settings before starting a site visit.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Upload Photo', onPress: () => router.push('/settings') }
+          { text: 'Upload Photo', onPress: () => router.push({ pathname: '/settings', params: { autoUpload: 'true' } }) }
         ]
       );
       return;
@@ -268,11 +330,11 @@ export default function VisitsScreen() {
     // 1. Enforce active requirement
     if (!isOfficerActive) {
       Alert.alert(
-        'First Activate Yourself',
-        'You are currently INACTIVE. You must first activate yourself before checking in to this site.',
+        'Duty Session Inactive',
+        'You are currently OFF DUTY. You must first activate your session in Attendance before checking in to this site.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Activate Now', onPress: () => router.push('/mark-attendance') }
+          { text: 'Activate Session', onPress: () => router.push('/mark-attendance') }
         ]
       );
       return;
@@ -363,10 +425,38 @@ export default function VisitsScreen() {
           await saveActiveCheckIns(newCheckIns);
           await fetchActiveSession();
 
-          Alert.alert(
-            t('checked_in_success_title') || 'Checked-In Successfully',
-            `Check-In recorded at ${nowTime} for:\n${visitObj.siteName || visitObj.customSiteName || 'Site'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`
-          );
+          if (isCustomVisit) {
+            const sName = visitObj.siteName || visitObj.customSiteName || '';
+            Alert.alert(
+              t('checked_in_success_title') || 'Checked-In Successfully',
+              `Check-In recorded at ${nowTime} for:\n${sName || t('new_client_visit') || 'New Client Visit'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`,
+              [
+                {
+                  text: 'Submit Report',
+                  onPress: () => handleSubmitReportNav(visitObj),
+                },
+                {
+                  text: 'Later',
+                  style: 'cancel',
+                },
+              ]
+            );
+          } else {
+            Alert.alert(
+              t('checked_in_success_title') || 'Checked-In Successfully',
+              `Check-In recorded at ${nowTime} for:\n${visitObj.siteName || visitObj.customSiteName || 'Site'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`,
+              [
+                {
+                  text: 'Submit Report',
+                  onPress: () => handleSubmitReportNav(visitObj),
+                },
+                {
+                  text: 'Later',
+                  style: 'cancel',
+                },
+              ]
+            );
+          }
         } else if (res && res.has_active_session) {
           setEnforcerModal({
             visible: true,
@@ -377,7 +467,7 @@ export default function VisitsScreen() {
         }
       } catch (err: any) {
         console.error('Check-in error:', err);
-        Alert.alert('Check-In Error', err?.response?.data?.message || 'Failed to check in to site visit.');
+        Alert.alert(t('check_in_error'), err?.response?.data?.message || t('failed_check_in'));
       }
     };
 
@@ -441,7 +531,7 @@ export default function VisitsScreen() {
       });
 
       if (res && res.success) {
-        Alert.alert('Checked Out Previous Visit', res.message || 'Successfully checked out of previous visit.');
+        Alert.alert(t('checked_out_previous_visit'), res.message || t('checked_out_previous_visit'));
         setActiveBackendSession(null);
         const pendingToStart = enforcerModal.pendingVisit;
         setEnforcerModal({ visible: false });
@@ -452,10 +542,10 @@ export default function VisitsScreen() {
           }, 400);
         }
       } else {
-        Alert.alert('Check-Out Error', res?.message || 'Could not check out of previous visit.');
+        Alert.alert(t('check_out_error'), res?.message || t('failed_checkout_previous'));
       }
     } catch (e) {
-      Alert.alert('Error', 'Failed to check out of previous visit.');
+      Alert.alert(t('error'), t('failed_checkout_previous'));
     }
   };
 
@@ -466,9 +556,16 @@ export default function VisitsScreen() {
     const cIn = activeData?.checkInTime || (activeBackendSession && activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00');
     const sName = pv.siteName || pv.site_name || pv.customSiteName || '';
     const cName = pv.clientName || pv.client_name || pv.customClientName || '';
-    router.push(
-      `/visits/scan-checklist?clientId=${pv.clientId || pv.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${pv.siteId || pv.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${pv.id}&checkInTime=${cIn}&customVisitId=${customVisitId || ''}&isCustom=${isCustom ? '1' : '0'}&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
-    );
+
+    if (isCustom) {
+      router.push(
+        `/visits/general-visit/general-visit-create?clientId=${pv.clientId || pv.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${pv.siteId || pv.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${pv.id}&checkInTime=${cIn}&customVisitId=${customVisitId || ''}&isCustom=1&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
+      );
+    } else {
+      router.push(
+        `/visits/select-type?clientId=${pv.clientId || pv.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${pv.siteId || pv.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${pv.id}&checkInTime=${cIn}&customVisitId=${customVisitId || ''}&isCustom=0&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
+      );
+    }
   };
 
   const handleCheckOutVisit = async (pv: PlannedVisit) => {
@@ -513,7 +610,20 @@ export default function VisitsScreen() {
               Alert.alert(t('visit_completed_title') || 'Visit Completed', t('visit_completed_desc') || 'You have checked out successfully! Visit record is complete.');
             } catch (e: any) {
               console.error('Check-out error:', e);
-              Alert.alert('Check-Out Error', e?.response?.data?.message || 'Failed to complete check out.');
+              const errMsg = String(e?.response?.data?.message || e?.message || '');
+              if (errMsg.toLowerCase().includes('already') || errMsg.toLowerCase().includes('no active') || e?.response?.status === 400) {
+                // Session is already closed or completed on backend; clean up local state gracefully
+                await clearActiveCheckIn(pv.id);
+                const updatedCheckIns = { ...activeCheckIns };
+                delete updatedCheckIns[pv.id];
+                setActiveCheckIns(updatedCheckIns);
+                await fetchActiveSession();
+                await fetchVisits();
+                setActiveTab('completed');
+                Alert.alert(t('visit_completed_title') || 'Visit Completed', t('visit_completed_desc') || 'You have checked out successfully! Visit record is complete.');
+              } else {
+                Alert.alert(t('check_out_error') || 'Check-out Error', e?.response?.data?.message || t('failed_complete_checkout') || 'Failed to complete checkout');
+              }
             }
           },
         },
@@ -612,7 +722,7 @@ export default function VisitsScreen() {
                   Alert.alert(t('visit_completed_title') || 'Visit Completed', t('visit_completed_desc') || 'You have checked out successfully! Visit record is complete.');
                 } catch (e: any) {
                   console.error('Check-out error:', e);
-                  Alert.alert('Check-Out Error', e?.response?.data?.message || 'Failed to complete check out.');
+                  Alert.alert(t('check_out_error'), e?.response?.data?.message || t('failed_complete_checkout'));
                 }
               },
             },
@@ -624,9 +734,15 @@ export default function VisitsScreen() {
       const isCustom = !!(activeBackendSession.custom_visit_id || matchingPv?.isCustomVisit || matchingPv?.is_custom);
       const sName = activeBackendSession.site_name || matchingPv?.siteName || matchingPv?.site_name || matchingPv?.customSiteName || '';
       const cName = matchingPv?.clientName || matchingPv?.client_name || matchingPv?.customClientName || '';
-      router.push(
-        `/visits/scan-checklist?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=${isCustom ? '1' : '0'}&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
-      );
+      if (isCustom) {
+        router.push(
+          `/visits/general-visit/general-visit-create?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=1&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
+        );
+      } else {
+        router.push(
+          `/visits/select-type?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=0&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
+        );
+      }
     }
   };
 
@@ -638,6 +754,7 @@ export default function VisitsScreen() {
     if (generatingPdfId) return; // Prevent duplicate concurrent generations
     setGeneratingPdfId(report.id);
     try {
+      const compInfo = getReportCompany(report);
       await generateAndShareVisitPdf({
         id: report.id,
         reportNo: report.reportNo,
@@ -647,11 +764,15 @@ export default function VisitsScreen() {
         siteName: report.siteName,
         officer: user?.name || (user as any)?.full_name || 'Field Officer',
         status: report.status || 'COMPLETED',
-        rawReport: report.rawReport,
+        rawReport: {
+          ...report.rawReport,
+          companyName: compInfo.name,
+          isEagle: compInfo.isEagle,
+        },
       });
     } catch (err: any) {
       console.error('Download PDF error:', err);
-      Alert.alert('PDF Report', err?.message || t('pdf_generate_failed'));
+      Alert.alert(t('pdf_report_title'), err?.message || t('pdf_generate_failed'));
     } finally {
       setGeneratingPdfId(null);
     }
@@ -678,7 +799,36 @@ export default function VisitsScreen() {
       const compiled: CompletedVisit[] = [];
       const seenIds = new Set<string>();
 
-      const dayReps = await getDayVisitReports(empOidVal);
+      const [dayReps, nightReps, genReps, tourReps] = await Promise.all([
+        getDayVisitReports(empOidVal).catch(() => []),
+        getNightVisitReports(empOidVal).catch(() => []),
+        getGeneralVisits(empOidVal).catch(() => []),
+        getPatrolTourReports(empOidVal).catch(() => []),
+      ]);
+
+      (tourReps || []).forEach((r: any, idx: number) => {
+        const rawOid = String(r.id || r.oid || idx);
+        const itemKey = rawOid.startsWith('tour_') ? rawOid : `tour_${rawOid}`;
+        if (!seenIds.has(itemKey)) {
+          seenIds.add(itemKey);
+          compiled.push({
+            id: itemKey,
+            reportNo: r.report_id || r.reportNo || `TOUR-${rawOid}`,
+            clientName: r.client_name || r.clientName || 'ADIENT INDIA PVT LTD',
+            siteName: r.site_name || r.unit || 'ADIENT - PIMPRI',
+            visitType: 'Patrolling Tour',
+            date: r.visitDate || r.visit_date || r.createdOn || today,
+            officer: r.officer || user?.name || 'Field Officer',
+            status: r.status || 'Completed',
+            emailAccess: r.emailAccess !== undefined ? r.emailAccess : (r.email_access !== undefined ? r.email_access : 1),
+            companyName: r.companyName || r.company_name || user?.company_name || 'Unique Delta Force Security Pvt. Ltd.',
+            companyShortName: r.companyShortName || r.company_short_name || 'UDF',
+            companyId: r.companyId || r.company_id || user?.company_id || 1,
+            rawReport: r,
+          });
+        }
+      });
+
       (dayReps || []).forEach((r: any, idx: number) => {
         const rawOid = String(r.id || r.oid || idx);
         const itemKey = rawOid.startsWith('day_') ? rawOid : `day_${rawOid}`;
@@ -689,7 +839,7 @@ export default function VisitsScreen() {
             reportNo: r.reportNo || r.report_id || `DVR-${rawOid}`,
             clientName: r.client_name || r.clientName || r.company || 'ADIENT INDIA PVT LTD',
             siteName: r.site_name || r.unit || 'ADIENT - PIMPRI',
-            visitType: 'Day Visit',
+            visitType: (r.visit_type === 'Dynamic Tour' || String(r.reportNo || r.report_id || '').startsWith('TOUR-')) ? 'Patrolling Tour' : 'Day Visit',
             date: r.visitDate || r.visit_date || r.createdOn || today,
             officer: r.officer || user?.name || 'Amit Kulkarni',
             status: 'Completed',
@@ -702,7 +852,7 @@ export default function VisitsScreen() {
         }
       });
 
-      const nightReps = await getNightVisitReports(empOidVal);
+      // nightReps loaded in Promise.all
       (nightReps || []).forEach((r: any, idx: number) => {
         const rawOid = String(r.id || r.oid || idx);
         const itemKey = rawOid.startsWith('night_') ? rawOid : `night_${rawOid}`;
@@ -726,7 +876,7 @@ export default function VisitsScreen() {
         }
       });
 
-      const genReps = await getGeneralVisits(empOidVal);
+      // genReps loaded in Promise.all
       (genReps || []).forEach((r: any, idx: number) => {
         const rawOid = String(r.id || r.oid || idx);
         const itemKey = rawOid.startsWith('gen_') ? rawOid : `gen_${rawOid}`;
@@ -737,7 +887,11 @@ export default function VisitsScreen() {
             reportNo: r.report_id || r.report_no || r.reportNo || `GVR-${rawOid}`,
             clientName: r.client_name || r.clientName || 'ADIENT INDIA PVT LTD',
             siteName: r.site_name || r.siteName || 'ADIENT - PIMPRI',
-            visitType: 'General Audit',
+            visitType: (r.visit_type === 'Dynamic Tour' || String(r.report_id || r.report_no || r.reportNo || '').startsWith('TOUR-'))
+              ? 'Patrolling Tour'
+              : (Boolean(r.custom_visit_id || r.customVisitId || r.is_custom || r.isCustomVisit || r.visit_type === 'Custom Visit' || r.visit_type === 'New Client Visit' || String(r.client_id || '') === 'OTHER' || !r.site_id || r.site_id === 0 || r.site_id === '0')
+                ? 'New Client Visit'
+                : 'General Audit'),
             date: r.visit_date || r.visitDate || today,
             officer: r.officer || user?.name || 'Amit Kulkarni',
             status: 'Completed',
@@ -784,7 +938,7 @@ export default function VisitsScreen() {
 
       setCompletedVisits(compiled);
     } catch (e) {
-      console.error('Failed to fetch visits', e);
+      console.warn('Failed to fetch visits:', e);
     } finally {
       setLoading(false);
     }
@@ -851,7 +1005,7 @@ export default function VisitsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -924,19 +1078,32 @@ export default function VisitsScreen() {
               <TouchableOpacity
                 activeOpacity={0.88}
                 style={styles.inactiveWarningCard}
-                onPress={() => router.push('/mark-attendance')}
+                onPress={() => {
+                  if (!hasProfilePhoto) {
+                    Alert.alert(
+                      'Profile Photo Required',
+                      'Please upload your profile photo first in Settings before activating your duty session.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Upload Photo', onPress: () => router.push({ pathname: '/settings', params: { autoUpload: 'true' } }) },
+                      ]
+                    );
+                    return;
+                  }
+                  router.push('/mark-attendance');
+                }}
               >
                 <View style={styles.inactiveWarningIconBox}>
                   <ShieldAlert color="#EF4444" size={24} />
                 </View>
                 <View style={styles.inactiveWarningTextBox}>
-                  <Text style={styles.inactiveWarningTitle}>First Activate Yourself</Text>
+                  <Text style={styles.inactiveWarningTitle}>{t('officer_inactive_duty')}</Text>
                   <Text style={styles.inactiveWarningDesc}>
-                    You are currently inactive. Site check-in is disabled until you activate your session.
+                    {t('officer_inactive_helper')}
                   </Text>
                 </View>
                 <View style={styles.inactiveWarningActionBtn}>
-                  <Text style={styles.inactiveWarningActionText}>Activate</Text>
+                  <Text style={styles.inactiveWarningActionText}>{t('active')}</Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -1014,6 +1181,26 @@ export default function VisitsScreen() {
                       <Text style={styles.metaText}>{pv.clientName || pv.client_name || pv.customClientName || 'Client'}</Text>
                     </View>
 
+                    {pv.address ? (
+                      <View style={styles.metaRow}>
+                        <MapPin color="#3B82F6" size={14} style={{ marginRight: 6 }} />
+                        <Text style={[styles.metaText, { color: '#93C5FD', flex: 1 }]} numberOfLines={2}>
+                          {pv.address}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {hasSiteCoords && distanceMeters !== null ? (
+                      <View style={styles.metaRow}>
+                        <Navigation color={isOutsideGeofence ? "#EF4444" : "#10B981"} size={13} style={{ marginRight: 6 }} />
+                        <Text style={[styles.metaText, { color: isOutsideGeofence ? '#F87171' : '#34D399', fontWeight: '600' }]}>
+                          {isOutsideGeofence
+                            ? `${distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(1)}km` : `${distanceMeters}m`} away (100m geofence)`
+                            : `Within geofence (${distanceMeters}m)`}
+                        </Text>
+                      </View>
+                    ) : null}
+
                     <View style={styles.metaRow}>
                       <CalendarDays color="#64748B" size={14} style={{ marginRight: 6 }} />
                       <Text style={styles.metaText}>{pv.plannedPeriod || pv.date || 'Weekly Visit'}</Text>
@@ -1078,7 +1265,7 @@ export default function VisitsScreen() {
                             </Text>
                           </View>
                         </View>
-                      ) : !userLocation && !isCustomVisit ? (
+                      ) : !userLocation && hasSiteCoords ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
                             style={{
@@ -1098,7 +1285,7 @@ export default function VisitsScreen() {
                             </Text>
                           </View>
                         </View>
-                      ) : isOutsideGeofence && !isCustomVisit ? (
+                      ) : isOutsideGeofence && hasSiteCoords ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
                             style={{
@@ -1142,12 +1329,23 @@ export default function VisitsScreen() {
                             },
                           ]}
                           onPress={() => {
+                            if (!hasProfilePhoto) {
+                              Alert.alert(
+                                'Profile Photo Required',
+                                'Please upload your profile photo first in Settings before activating your duty session.',
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: 'Upload Photo', onPress: () => router.push({ pathname: '/settings', params: { autoUpload: 'true' } }) },
+                                ]
+                              );
+                              return;
+                            }
                             Alert.alert(
-                              'First Activate Yourself',
-                              'You are currently INACTIVE. You must first activate yourself before checking in to this site.',
+                              'Duty Session Inactive',
+                              'You are currently OFF DUTY. You must first activate your session in Attendance before checking in to this site.',
                               [
                                 { text: 'Cancel', style: 'cancel' },
-                                { text: 'Activate Now', onPress: () => router.push('/mark-attendance') },
+                                { text: 'Activate Session', onPress: () => router.push('/mark-attendance') },
                               ]
                             );
                           }}
@@ -1201,12 +1399,16 @@ export default function VisitsScreen() {
                       visit.visitType.includes('Day') && { backgroundColor: 'rgba(245,158,11,0.15)' },
                       visit.visitType.includes('Night') && { backgroundColor: 'rgba(129,140,248,0.15)' },
                       visit.visitType.includes('General') && { backgroundColor: 'rgba(52,211,153,0.15)' },
+                      (visit.visitType.includes('Tour') || visit.visitType.includes('Patrol')) && { backgroundColor: 'rgba(59,130,246,0.15)' },
+                      (visit.visitType.includes('New Client') || visit.visitType.includes('Custom')) && { backgroundColor: 'rgba(168,85,247,0.15)' },
                     ]}>
                       <Text style={[
                         styles.visitTypeBadgeText,
                         visit.visitType.includes('Day') && { color: '#F59E0B' },
                         visit.visitType.includes('Night') && { color: '#818CF8' },
                         visit.visitType.includes('General') && { color: '#34D399' },
+                        (visit.visitType.includes('Tour') || visit.visitType.includes('Patrol')) && { color: '#3B82F6' },
+                        (visit.visitType.includes('New Client') || visit.visitType.includes('Custom')) && { color: '#A855F7' },
                       ]}>
                         {visit.visitType}
                       </Text>
@@ -1293,7 +1495,7 @@ export default function VisitsScreen() {
                   <FileDown color="#3B82F6" size={16} style={{ marginRight: 5 }} />
                 )}
                 <Text style={styles.headerPdfBtnText}>
-                  {t('download_pdf')}
+                  {t('download_pdf') || t('download_pdf_report') || 'Download PDF'}
                 </Text>
               </TouchableOpacity>
 
@@ -1324,6 +1526,10 @@ export default function VisitsScreen() {
                           ? 'OFFICER DAY VISIT REPORT'
                           : selectedReport?.visitType === 'Night Round'
                           ? 'OFFICER NIGHT VISIT REPORT'
+                          : selectedReport?.visitType === 'Patrolling Tour'
+                          ? 'PATROLLING TOUR REPORT'
+                          : selectedReport?.visitType === 'New Client Visit'
+                          ? 'NEW CLIENT VISIT REPORT'
                           : 'OFFICER GENERAL VISIT REPORT'}
                       </Text>
                       <Text style={styles.reportIdTag}>REPORT ID : {selectedReport?.reportNo}</Text>
@@ -1340,7 +1546,7 @@ export default function VisitsScreen() {
                   {/* 1. General Information Card (Navy Section Header) */}
                   <View style={styles.detailSectionCard}>
                     <View style={styles.navySectionTitleBox}>
-                      <Text style={styles.navySectionTitle}>GENERAL INFORMATION</Text>
+                      <Text style={styles.navySectionTitle}>{selectedReport?.visitType === 'Patrolling Tour' ? 'TOUR DETAILS & SCHEDULE' : selectedReport?.visitType === 'New Client Visit' ? 'NEW CLIENT VISIT DETAILS' : 'VISIT INFORMATION'}</Text>
                     </View>
                     <View style={styles.gridInfoBox}>
                       <View style={styles.infoRowItem}>
@@ -1353,7 +1559,7 @@ export default function VisitsScreen() {
                       </View>
                       <View style={styles.infoRowItem}>
                         <Text style={styles.gridLabel}>Shift</Text>
-                        <Text style={styles.gridValue}>{selectedReport?.rawReport?.shift || (selectedReport?.visitType === 'Night Round' ? 'Night Shift' : 'Day Shift')}</Text>
+                        <Text style={styles.gridValue}>{selectedReport?.visitType === 'Patrolling Tour' ? 'Patrol Inspection' : (selectedReport?.rawReport?.shift || (selectedReport?.visitType === 'Night Round' ? 'Night Shift' : 'Day Shift'))}</Text>
                       </View>
                       <View style={styles.infoRowItem}>
                         <Text style={styles.gridLabel}>Visit Type</Text>
@@ -1378,8 +1584,8 @@ export default function VisitsScreen() {
                     </View>
                   </View>
 
-                  {/* 2. Visit Parameters & Scope (General Visit) */}
-                  {selectedReport?.visitType === 'General Audit' && (
+                  {/* 2. Visit Parameters & Scope (General Visit & New Client Visit) */}
+                  {(selectedReport?.visitType === 'General Audit' || selectedReport?.visitType === 'New Client Visit') && (
                     <View style={styles.detailSectionCard}>
                       <View style={styles.navySectionTitleBox}>
                         <Text style={styles.navySectionTitle}>VISIT PARAMETERS & SCOPE</Text>
@@ -1397,20 +1603,30 @@ export default function VisitsScreen() {
                     </View>
                   )}
 
-                  {/* 3. Guards Present on Site */}
-                  {selectedReport?.visitType !== 'General Audit' && (() => {
+                  {/* 3. Guards Present on Site (Day Visit & Night Round only) */}
+                  {(selectedReport?.visitType === 'Day Visit' || selectedReport?.visitType === 'Night Round') && (() => {
                     let guardsList: any[] = [];
                     const rawG = selectedReport?.rawReport?.guards;
                     if (Array.isArray(rawG)) guardsList = rawG;
                     else if (typeof rawG === 'string' && rawG.trim()) {
                       try { guardsList = JSON.parse(rawG); } catch (e) {}
                     }
+                    const presentGuards = guardsList.filter((g: any) => {
+                      const statusRaw = String(g.status || '').trim().toLowerCase();
+                      const isAbsent =
+                        statusRaw.includes('absent') ||
+                        statusRaw === 'a' ||
+                        g.present === false ||
+                        g.isAbsent === true ||
+                        g.is_absent === true;
+                      return !isAbsent;
+                    });
                     return (
                       <View style={styles.detailSectionCard}>
                         <View style={styles.navySectionTitleBox}>
-                          <Text style={styles.navySectionTitle}>GUARDS PRESENT ON SITE ({guardsList.length})</Text>
+                          <Text style={styles.navySectionTitle}>GUARDS PRESENT ON SITE ({presentGuards.length})</Text>
                         </View>
-                        {guardsList.length > 0 ? (
+                        {presentGuards.length > 0 ? (
                           <View style={styles.tableWrap}>
                             <View style={styles.tableHeaderRow}>
                               <Text style={[styles.thCell, { flex: 0.5 }]}>#</Text>
@@ -1418,28 +1634,32 @@ export default function VisitsScreen() {
                               <Text style={[styles.thCell, { flex: 1 }]}>Emp Code</Text>
                               <Text style={[styles.thCell, { flex: 1.5, textAlign: 'right' }]}>Status</Text>
                             </View>
-                            {guardsList.map((g: any, idx: number) => (
-                              <View key={idx} style={styles.tableBodyRow}>
-                                <Text style={[styles.tdCell, { flex: 0.5, color: '#64748B' }]}>{idx + 1}</Text>
-                                <Text style={[styles.tdCell, { flex: 2, fontWeight: '700', color: '#F8FAFC' }]}>{g.name || 'Guard'}</Text>
-                                <Text style={[styles.tdCell, { flex: 1, color: '#94A3B8' }]}>{g.empCode || g.employeeId || g.emp_code || 'G'}</Text>
-                                <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
-                                  <View style={[styles.statusBadgePill, g.present !== false && g.status !== 'Absent' ? styles.statusBadgeSuccess : styles.statusBadgeDanger]}>
-                                    <Text style={styles.statusBadgePillText}>{g.status || (g.present !== false ? 'Present' : 'Absent')}</Text>
+                            {presentGuards.map((g: any, idx: number) => {
+                              const guardName = g.name || g.guard_name || g.guardName || g.employee_name || g.emp_name || 'Guard';
+                              const guardCode = g.empCode || g.emp_code || g.employeeId || g.employee_id || g.empOid || '-';
+                              return (
+                                <View key={idx} style={styles.tableBodyRow}>
+                                  <Text style={[styles.tdCell, { flex: 0.5, color: '#64748B' }]}>{idx + 1}</Text>
+                                  <Text style={[styles.tdCell, { flex: 2, fontWeight: '700', color: colors.text }]}>{guardName}</Text>
+                                  <Text style={[styles.tdCell, { flex: 1, color: isDark ? '#94A3B8' : '#64748B' }]}>{guardCode}</Text>
+                                  <View style={{ flex: 1.5, alignItems: 'flex-end' }}>
+                                    <View style={[styles.statusBadgePill, styles.statusBadgeSuccess]}>
+                                      <Text style={[styles.statusBadgePillText, { color: '#16A34A' }]}>Present</Text>
+                                    </View>
                                   </View>
                                 </View>
-                              </View>
-                            ))}
+                              );
+                            })}
                           </View>
                         ) : (
-                          <Text style={styles.emptyTableText}>No guards listed for this visit.</Text>
+                          <Text style={styles.emptyTableText}>No guards present on site for this visit.</Text>
                         )}
                       </View>
                     );
                   })()}
 
-                  {/* 4. Inspection Checklist Items */}
-                  {selectedReport?.visitType !== 'General Audit' && (() => {
+                  {/* 4. Inspection Checklist Items with direct question photos (Day Visit, Night Round & Patrolling Tour) */}
+                  {(selectedReport?.visitType === 'Day Visit' || selectedReport?.visitType === 'Night Round' || selectedReport?.visitType === 'Patrolling Tour') && (() => {
                     let checklistList: any[] = [];
                     const rawC = selectedReport?.rawReport?.checklist;
                     if (Array.isArray(rawC)) checklistList = rawC;
@@ -1449,7 +1669,7 @@ export default function VisitsScreen() {
                     return (
                       <View style={styles.detailSectionCard}>
                         <View style={styles.navySectionTitleBox}>
-                          <Text style={styles.navySectionTitle}>INSPECTION CHECKLIST ITEMS ({checklistList.length})</Text>
+                          <Text style={styles.navySectionTitle}>{selectedReport?.visitType === 'Patrolling Tour' ? 'CHECKPOINT INSPECTION & OBSERVATIONS' : 'INSPECTION CHECKLIST ITEMS'} ({checklistList.length})</Text>
                         </View>
                         {checklistList.length > 0 ? (
                           <View style={styles.tableWrap}>
@@ -1457,17 +1677,90 @@ export default function VisitsScreen() {
                               const qText = item.question || item.title || String(item);
                               const statusStr = item.status || item.answer || 'Satisfactory';
                               const isNegative = statusStr === 'Unsatisfactory' || statusStr === 'NO' || statusStr === 'NOT OK';
+
+                              // Photos attached specifically to this question
+                              const itemPhotos: string[] = Array.from(new Set([
+                                item.photo,
+                                item.image,
+                                ...(Array.isArray(item.photos) ? item.photos : (typeof item.photos === 'string' && item.photos ? [item.photos] : []))
+                              ])).filter((p): p is string => Boolean(p && typeof p === 'string' && p.trim()));
+
                               return (
-                                <View key={idx} style={styles.checklistRow}>
-                                  <View style={{ flex: 1, marginRight: 8 }}>
-                                    <Text style={styles.questionText}>{idx + 1}. {qText}</Text>
-                                    {item.remarks || item.observation ? (
-                                      <Text style={styles.questionRemarkText}>Remarks: {item.remarks || item.observation}</Text>
-                                    ) : null}
+                                <View key={idx} style={styles.checklistItemCard}>
+                                  <View style={styles.checklistTopRow}>
+                                    <View style={{ flex: 1, marginRight: 8 }}>
+                                      <Text style={styles.questionText}>{idx + 1}. {qText}</Text>
+                                      {item.remarks || item.observation ? (
+                                        <Text style={styles.questionRemarkText}>Remarks: {item.remarks || item.observation}</Text>
+                                      ) : null}
+                                    </View>
+                                    <View style={[styles.statusBadgePill, !isNegative ? styles.statusBadgeSuccess : styles.statusBadgeDanger]}>
+                                      <Text style={styles.statusBadgePillText}>{statusStr}</Text>
+                                    </View>
                                   </View>
-                                  <View style={[styles.statusBadgePill, !isNegative ? styles.statusBadgeSuccess : styles.statusBadgeDanger]}>
-                                    <Text style={styles.statusBadgePillText}>{statusStr}</Text>
-                                  </View>
+
+                                  {itemPhotos.length > 0 && (
+                                    <View style={styles.questionPhotosContainer}>
+                                      <View style={styles.questionPhotoHeader}>
+                                        <Camera color="#38BDF8" size={13} style={{ marginRight: 5 }} />
+                                        <Text style={styles.questionPhotoLabel}>Attached Photo ({itemPhotos.length})</Text>
+                                      </View>
+                                      <View style={styles.questionPhotoGrid}>
+                                        {itemPhotos.map((photoStr, pIdx) => {
+                                          const fullUrl = resolveMobilePhotoUrl(photoStr);
+                                          const isFailed = failedImages[fullUrl];
+                                          return (
+                                            <TouchableOpacity
+                                              key={pIdx}
+                                              activeOpacity={0.85}
+                                              onPress={() => {
+                                                if (!isFailed) setSelectedImagePreview(fullUrl);
+                                                else {
+                                                  Alert.alert(
+                                                    'Photo Not Available',
+                                                    'This photo could not be found on the server (404 Not Found). It was recorded on a different server session and was not stored in permanent cloud storage.'
+                                                  );
+                                                }
+                                              }}
+                                              style={[
+                                                styles.questionPhotoThumbBox,
+                                                isFailed && { borderColor: '#EF4444', backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEE2E2', justifyContent: 'center', alignItems: 'center' }
+                                              ]}
+                                            >
+                                              {isFailed ? (
+                                                <View style={{ alignItems: 'center', justifyContent: 'center', padding: 4 }}>
+                                                  <AlertCircle color="#EF4444" size={20} />
+                                                  <Text style={{ fontSize: 9, color: '#EF4444', fontWeight: '800', textAlign: 'center', marginTop: 3 }}>
+                                                    Not Found
+                                                  </Text>
+                                                  <Text style={{ fontSize: 7, color: colors.textSecondary, textAlign: 'center' }}>
+                                                    404 Server
+                                                  </Text>
+                                                </View>
+                                              ) : (
+                                                <>
+                                                  <Image
+                                                    source={{
+                                                      uri: fullUrl,
+                                                      headers: { 'ngrok-skip-browser-warning': 'true' }
+                                                    }}
+                                                    style={styles.questionPhotoImg}
+                                                    resizeMode="cover"
+                                                    onError={() => {
+                                                      setFailedImages((prev) => ({ ...prev, [fullUrl]: true }));
+                                                    }}
+                                                  />
+                                                  <View style={styles.questionPhotoZoomBadge}>
+                                                    <Maximize2 color="#FFFFFF" size={10} />
+                                                  </View>
+                                                </>
+                                              )}
+                                            </TouchableOpacity>
+                                          );
+                                        })}
+                                      </View>
+                                    </View>
+                                  )}
                                 </View>
                               );
                             })}
@@ -1498,54 +1791,6 @@ export default function VisitsScreen() {
                     </View>
                   )}
 
-                  {/* 6. Photo Evidence */}
-                  {(() => {
-                    const rawPhotos = selectedReport?.rawReport?.photos || selectedReport?.rawReport?.photo_evidence || [];
-                    const baseList = Array.isArray(rawPhotos) ? rawPhotos : (typeof rawPhotos === 'string' ? (JSON.parse(rawPhotos || '[]') || []) : []);
-                    const rawChecklist = selectedReport?.rawReport?.checklist;
-                    const parsedChecklist = Array.isArray(rawChecklist) ? rawChecklist : (typeof rawChecklist === 'string' ? (JSON.parse(rawChecklist || '[]') || []) : []);
-                    const checklistPhotos = (parsedChecklist || []).map((c: any) => c.photo || (Array.isArray(c.photos) ? c.photos[0] : null)).filter(Boolean);
-                    const allPhotos = Array.from(new Set([...baseList, ...checklistPhotos])).filter(Boolean);
-
-                    const resolveMobilePhotoUrl = (url: string) => {
-                      if (!url || typeof url !== 'string') return '';
-                      if (url.startsWith('data:image/') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('file://')) {
-                        return url;
-                      }
-                      if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
-                        const clean = url.startsWith('/') ? url : `/${url}`;
-                        const rawApi = process.env.EXPO_PUBLIC_API_URL || 'https://tarot-carrot-celery.ngrok-free.dev';
-                        const serverHost = rawApi.replace(/\/api\/?$/, '');
-                        return `${serverHost}${clean}`;
-                      }
-                      return url;
-                    };
-
-                    if (allPhotos.length === 0) return null;
-
-                    return (
-                      <View style={styles.detailSectionCard}>
-                        <View style={styles.navySectionTitleBox}>
-                          <Text style={styles.navySectionTitle}>PHOTO EVIDENCE ({allPhotos.length})</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 12, backgroundColor: '#1E293B', borderRadius: 8 }}>
-                          {allPhotos.map((p: any, idx: number) => {
-                            const fullUrl = resolveMobilePhotoUrl(String(p));
-                            return (
-                              <View key={idx} style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#334155', backgroundColor: '#0F172A' }}>
-                                <Image
-                                  source={{ uri: fullUrl }}
-                                  style={{ width: '100%', height: '100%' }}
-                                  resizeMode="cover"
-                                />
-                              </View>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    );
-                  })()}
-
                   {/* 7. Remarks & Customer Feedback */}
                   <View style={styles.detailSectionCard}>
                     <View style={styles.navySectionTitleBox}>
@@ -1559,6 +1804,119 @@ export default function VisitsScreen() {
                          'No additional remarks recorded.'}
                       </Text>
                     </View>
+
+                    {/* Attached Suggestion Photos / Remarks Photos Only */}
+                    {(() => {
+                      const raw = selectedReport?.rawReport || {};
+
+                      // Collect all photos attached to checklist questions so they are NEVER duplicated under remarks
+                      const checklistPhotoSet = new Set<string>();
+                      if (Array.isArray(raw.checklist)) {
+                        raw.checklist.forEach((item: any) => {
+                          if (item && item.photo && typeof item.photo === 'string') {
+                            checklistPhotoSet.add(item.photo.trim());
+                          }
+                          if (item && Array.isArray(item.photos)) {
+                            item.photos.forEach((p: any) => {
+                              if (p && typeof p === 'string') checklistPhotoSet.add(p.trim());
+                            });
+                          }
+                        });
+                      }
+
+                      let rawPhotosList: any[] = [];
+                      if (Array.isArray(raw.photos)) rawPhotosList = raw.photos;
+                      else if (typeof raw.photos === 'string' && raw.photos.trim()) {
+                        try { rawPhotosList = JSON.parse(raw.photos); } catch (e) { rawPhotosList = [raw.photos]; }
+                      }
+
+                      let rawAttachmentsList: any[] = [];
+                      if (Array.isArray(raw.attachments)) rawAttachmentsList = raw.attachments;
+                      else if (typeof raw.attachments === 'string' && raw.attachments.trim()) {
+                        try { rawAttachmentsList = JSON.parse(raw.attachments); } catch (e) { rawAttachmentsList = [raw.attachments]; }
+                      }
+
+                      // Only photos uploaded specifically in the remarks/suggestions section
+                      let candidateRemarksPhotos: string[] = [];
+                      if (Array.isArray(raw.suggestion_photos) && raw.suggestion_photos.length > 0) {
+                        candidateRemarksPhotos = raw.suggestion_photos;
+                      } else if (Array.isArray(raw.suggestionPhotos) && raw.suggestionPhotos.length > 0) {
+                        candidateRemarksPhotos = raw.suggestionPhotos;
+                      } else if (rawAttachmentsList.length > 0) {
+                        candidateRemarksPhotos = rawAttachmentsList;
+                      } else {
+                        candidateRemarksPhotos = rawPhotosList;
+                      }
+
+                      const sugPhotos: string[] = Array.from(new Set(candidateRemarksPhotos))
+                        .filter((p): p is string => Boolean(p && typeof p === 'string' && p.trim()))
+                        .filter((p) => !checklistPhotoSet.has(p.trim()));
+
+                      if (sugPhotos.length === 0) return null;
+
+                      return (
+                        <View style={styles.questionPhotosContainer}>
+                          <View style={styles.questionPhotoHeader}>
+                            <Camera color="#38BDF8" size={13} style={{ marginRight: 5 }} />
+                            <Text style={styles.questionPhotoLabel}>Attached Photos ({sugPhotos.length})</Text>
+                          </View>
+                          <View style={styles.questionPhotoGrid}>
+                            {sugPhotos.map((photoStr, pIdx) => {
+                              const fullUrl = resolveMobilePhotoUrl(photoStr);
+                              const isFailed = failedImages[fullUrl];
+                              return (
+                                <TouchableOpacity
+                                  key={pIdx}
+                                  activeOpacity={0.85}
+                                  onPress={() => {
+                                    if (!isFailed) setSelectedImagePreview(fullUrl);
+                                    else {
+                                      Alert.alert(
+                                        'Photo Not Available',
+                                        'This photo could not be retrieved from the server (404 Not Found).'
+                                      );
+                                    }
+                                  }}
+                                  style={[
+                                    styles.questionPhotoThumbBox,
+                                    isFailed && { borderColor: '#EF4444', backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEE2E2', justifyContent: 'center', alignItems: 'center' }
+                                  ]}
+                                >
+                                  {isFailed ? (
+                                    <View style={{ alignItems: 'center', justifyContent: 'center', padding: 4 }}>
+                                      <AlertCircle color="#EF4444" size={20} />
+                                      <Text style={{ fontSize: 9, color: '#EF4444', fontWeight: '800', textAlign: 'center', marginTop: 3 }}>
+                                        Not Found
+                                      </Text>
+                                      <Text style={{ fontSize: 7, color: colors.textSecondary, textAlign: 'center' }}>
+                                        404 Server
+                                      </Text>
+                                    </View>
+                                  ) : (
+                                    <>
+                                      <Image
+                                        source={{
+                                          uri: fullUrl,
+                                          headers: { 'ngrok-skip-browser-warning': 'true' }
+                                        }}
+                                        style={styles.questionPhotoImg}
+                                        resizeMode="cover"
+                                        onError={() => {
+                                          setFailedImages((prev) => ({ ...prev, [fullUrl]: true }));
+                                        }}
+                                      />
+                                      <View style={styles.questionPhotoZoomBadge}>
+                                        <Maximize2 color="#FFFFFF" size={10} />
+                                      </View>
+                                    </>
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      );
+                    })()}
                   </View>
 
                   {/* 8. Action Button: Download PDF Report */}
@@ -1582,6 +1940,34 @@ export default function VisitsScreen() {
         </View>
       </Modal>
 
+      {/* FULL-SCREEN PHOTO PREVIEW MODAL */}
+      <Modal
+        visible={!!selectedImagePreview}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedImagePreview(null)}
+      >
+        <View style={styles.imageModalOverlay}>
+          <TouchableOpacity
+            style={styles.imageModalCloseBtn}
+            onPress={() => setSelectedImagePreview(null)}
+            activeOpacity={0.8}
+          >
+            <X color="#FFFFFF" size={24} />
+          </TouchableOpacity>
+          {selectedImagePreview ? (
+            <Image
+              source={{
+                uri: selectedImagePreview,
+                headers: { 'ngrok-skip-browser-warning': 'true' },
+              }}
+              style={styles.imageModalFull}
+              resizeMode="contain"
+            />
+          ) : null}
+        </View>
+      </Modal>
+
       {/* ACTIVE VISIT CHECK-OUT ENFORCER MODAL */}
       <Modal
         visible={enforcerModal.visible}
@@ -1598,7 +1984,7 @@ export default function VisitsScreen() {
             <Text style={styles.enforcerTitle}>Active Visit Session Detected</Text>
 
             <Text style={styles.enforcerMessage}>
-              You are currently checked into <Text style={{ fontWeight: '800', color: '#F8FAFC' }}>'{enforcerModal.activeSiteName || 'Previous Site'}'</Text> since {enforcerModal.activeStartTime ? new Date(enforcerModal.activeStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'earlier'}.
+              You are currently checked into <Text style={{ fontWeight: '800', color: colors.text }}>'{enforcerModal.activeSiteName || 'Previous Site'}'</Text> since {enforcerModal.activeStartTime ? new Date(enforcerModal.activeStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'earlier'}.
               {'\n\n'}
               Please check out of your previous visit before starting a new visit.
             </Text>
@@ -2097,6 +2483,80 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     paddingHorizontal: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  checklistItemCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  checklistTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  questionPhotosContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+  },
+  questionPhotoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  questionPhotoLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#38BDF8',
+    letterSpacing: 0.3,
+  },
+  questionPhotoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  questionPhotoThumbBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#38BDF8',
+    backgroundColor: isDark ? '#0F172A' : '#F1F5F9',
+    position: 'relative',
+  },
+  questionPhotoImg: {
+    width: '100%',
+    height: '100%',
+  },
+  questionPhotoZoomBadge: {
+    position: 'absolute',
+    bottom: 3,
+    right: 3,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    borderRadius: 4,
+    padding: 2,
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.94)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    padding: 8,
+    borderRadius: 20,
+  },
+  imageModalFull: {
+    width: '92%',
+    height: '80%',
   },
   questionText: {
     fontSize: 12,

@@ -2,9 +2,9 @@
 
 import * as React from 'react';
 import { Component } from 'react';
-import { Animated, Platform } from 'react-native';
+import { Animated } from 'react-native';
 import { State } from '../../State';
-import { BaseButton } from '../GestureButtons';
+import { LegacyBaseButton } from '../GestureButtons';
 import { jsx as _jsx } from "react/jsx-runtime";
 /**
  * Each touchable is a states' machine which preforms transitions.
@@ -151,11 +151,7 @@ export default class GenericTouchable extends Component {
     if (state === State.CANCELLED || state === State.FAILED) {
       // Need to handle case with external cancellation (e.g. by ScrollView)
       this.moveToState(TOUCHABLE_STATE.UNDETERMINED);
-    } else if (
-    // This platform check is an implication of slightly different behavior of handlers on different platform.
-    // And Android "Active" state is achieving on first move of a finger, not on press in.
-    // On iOS event on "Began" is not delivered.
-    state === (Platform.OS !== 'android' ? State.ACTIVE : State.BEGAN) && this.STATE === TOUCHABLE_STATE.UNDETERMINED) {
+    } else if (state === State.BEGAN && this.STATE === TOUCHABLE_STATE.UNDETERMINED) {
       // Moving inside requires
       this.handlePressIn();
     } else if (state === State.END) {
@@ -210,7 +206,7 @@ export default class GenericTouchable extends Component {
       nativeID: this.props.nativeID,
       onLayout: this.props.onLayout
     };
-    return /*#__PURE__*/_jsx(BaseButton, {
+    return /*#__PURE__*/_jsx(LegacyBaseButton, {
       style: this.props.containerStyle,
       onHandlerStateChange:
       // TODO: not sure if it can be undefined instead of null

@@ -546,6 +546,8 @@ def get_planned_vs_actual_visits_service(db: Session, date_str: Optional[str] = 
                     ncv.oid as custom_visit_id,
                     ncv.site_name as site_name,
                     ncv.client_name as client_name,
+                    ncv.latitude as latitude,
+                    ncv.longitude as longitude,
                     ncv.visit_frequency as required_frequency
                 FROM FIELD_OFFICER_ASSIGNED_VISITS av
                 JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON av.oid = ncv.plan_oid
@@ -553,6 +555,8 @@ def get_planned_vs_actual_visits_service(db: Session, date_str: Optional[str] = 
             """
             cursor.execute(sql_custom, tuple(params))
             for r in cursor.fetchall():
+                lat_v = float(r["latitude"]) if r.get("latitude") is not None else None
+                lon_v = float(r["longitude"]) if r.get("longitude") is not None else None
                 planned_schedules.append({
                     "schedule_id": r["plan_id"],
                     "employee_id": r["employee_id"],
@@ -560,6 +564,9 @@ def get_planned_vs_actual_visits_service(db: Session, date_str: Optional[str] = 
                     "custom_visit_id": r["custom_visit_id"],
                     "site_name": r["site_name"] or f"Custom Visit #{r['custom_visit_id']}",
                     "client_name": r.get("client_name") or "Custom Client",
+                    "latitude": lat_v,
+                    "longitude": lon_v,
+                    "radius": 100,
                     "planned_date": target_date.strftime("%Y-%m-%d"),
                     "required_frequency": int(r["required_frequency"] or 1),
                     "min_duration_minutes": 15,
@@ -932,6 +939,31 @@ def manual_site_check_out_service(
     open_session = query.order_by(SiteVisitSession.start_time.desc()).first()
 
     if not open_session:
+        # Check if a session was already completed recently (e.g. via tour completion or previous checkout)
+        recent_session_query = db.query(SiteVisitSession).filter(
+            SiteVisitSession.employee_id == employee_id
+        )
+        if custom_visit_id:
+            recent_session_query = recent_session_query.filter(SiteVisitSession.custom_visit_id == custom_visit_id)
+        elif site_id:
+            recent_session_query = recent_session_query.filter(SiteVisitSession.site_id == site_id)
+
+        recent_session = recent_session_query.order_by(SiteVisitSession.end_time.desc(), SiteVisitSession.id.desc()).first()
+        if recent_session and recent_session.status == "COMPLETED":
+            return {
+                "success": True,
+                "message": "Site visit already checked out",
+                "already_completed": True,
+                "session": {
+                    "id": recent_session.id,
+                    "site_id": recent_session.site_id,
+                    "custom_visit_id": recent_session.custom_visit_id,
+                    "site_name": recent_session.site_name,
+                    "start_time": recent_session.start_time.isoformat() if recent_session.start_time else None,
+                    "end_time": recent_session.end_time.isoformat() if recent_session.end_time else None,
+                    "status": recent_session.status
+                }
+            }
         return {"success": False, "message": "No active site visit session found to check out"}
 
     now = datetime.now()
@@ -985,6 +1017,14 @@ def manual_site_check_out_service(
                           AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
                           AND (visit_date = %s OR created_on LIKE %s)
                     """, (checkin_formatted, checkout_formatted, checkin_formatted, checkout_formatted, open_session.custom_visit_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                    c.execute("""
+                        UPDATE FIELD_OFFICER_PATROL_TOUR_REPORTS
+                        SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                            `check-out_time` = %s
+                        WHERE custom_visit_id = %s 
+                          AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND (visit_date = %s OR created_on LIKE %s)
+                    """, (checkin_formatted, checkout_formatted, open_session.custom_visit_id, employee_id, employee_id, today_str, f"{today_str}%"))
                 elif open_session.site_id:
                     c.execute("""
                         UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS
@@ -1014,6 +1054,14 @@ def manual_site_check_out_service(
                           AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
                           AND (visit_date = %s OR created_on LIKE %s)
                     """, (checkin_formatted, checkout_formatted, checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                    c.execute("""
+                        UPDATE FIELD_OFFICER_PATROL_TOUR_REPORTS
+                        SET `check-in_time` = COALESCE(NULLIF(`check-in_time`, ''), %s),
+                            `check-out_time` = %s
+                        WHERE site_id = %s 
+                          AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND (visit_date = %s OR created_on LIKE %s)
+                    """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
                 raw_conn.commit()
             finally:
                 if c:

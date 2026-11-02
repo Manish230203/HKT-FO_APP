@@ -1,6 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
 import { THEME } from '../../constants/theme';
+import { useTheme } from '../../context/ThemeContext';
 
 interface ButtonProps {
   title: string;
@@ -23,23 +24,25 @@ export const Button: React.FC<ButtonProps> = ({
   textStyle,
   icon,
 }) => {
+  const { colors, isDark } = useTheme();
+
   const getBackgroundColor = () => {
-    if (disabled) return '#334155';
+    if (disabled) return isDark ? '#334155' : '#E2E8F0';
     switch (variant) {
-      case 'primary': return THEME.primary;
-      case 'secondary': return THEME.secondary;
-      case 'danger': return THEME.danger;
+      case 'primary': return colors.primary;
+      case 'secondary': return colors.secondary;
+      case 'danger': return colors.danger;
       case 'outline': return 'transparent';
       case 'ghost': return 'transparent';
-      default: return THEME.primary;
+      default: return colors.primary;
     }
   };
 
   const getTextColor = () => {
-    if (disabled) return '#94A3B8';
+    if (disabled) return isDark ? '#94A3B8' : '#94A3B8';
     switch (variant) {
-      case 'outline': return THEME.primary;
-      case 'ghost': return THEME.textVariant;
+      case 'outline': return colors.primary;
+      case 'ghost': return colors.textSecondary;
       default: return '#FFFFFF';
     }
   };
@@ -52,7 +55,7 @@ export const Button: React.FC<ButtonProps> = ({
       style={[
         styles.button,
         { backgroundColor: getBackgroundColor() },
-        variant === 'outline' && { borderWidth: 1, borderColor: THEME.primary },
+        variant === 'outline' && { borderWidth: 1, borderColor: colors.primary },
         style,
       ]}
     >

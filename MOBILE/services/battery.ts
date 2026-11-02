@@ -1,16 +1,13 @@
-import { requireOptionalNativeModule } from 'expo-modules-core';
+import * as Battery from 'expo-battery';
 
 export const getDeviceBatteryLevel = async (): Promise<number> => {
   try {
-    const ExpoBattery = requireOptionalNativeModule('ExpoBattery');
-    if (ExpoBattery && typeof ExpoBattery.getBatteryLevelAsync === 'function') {
-      const level = await ExpoBattery.getBatteryLevelAsync();
-      if (typeof level === 'number' && level >= 0) {
-        return Math.round(level * 100);
-      }
+    const level = await Battery.getBatteryLevelAsync();
+    if (typeof level === 'number' && level >= 0) {
+      return Math.round(level * 100);
     }
   } catch (e) {
-    console.warn('ExpoBattery optional module check:', e);
+    console.warn('ExpoBattery level check:', e);
   }
   return 100;
 };

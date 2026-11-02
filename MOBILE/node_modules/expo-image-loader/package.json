@@ -1,6 +1,6 @@
 {
   "name": "expo-image-loader",
-  "version": "57.0.1",
+  "version": "58.0.3",
   "description": "Image loader",
   "main": "index.js",
   "keywords": [
@@ -21,10 +21,12 @@
   "homepage": "https://github.com/expo/expo/tree/main/packages/expo-image-loader",
   "dependencies": {},
   "devDependencies": {
-    "expo": "57.0.6"
+    "expo": "58.0.2"
   },
   "peerDependencies": {
     "expo": "*"
   },
-  "gitHead": "b9503d06b8e130abfca1bc16f671dbefb41ad709"
+  "scripts": {
+    "precompile-android": "et prebuild-android-package-for-publish"
+  }
 }

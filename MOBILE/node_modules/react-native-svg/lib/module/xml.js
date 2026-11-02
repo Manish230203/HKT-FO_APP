@@ -52,7 +52,7 @@ export function SvgUri(props) {
     uri ? fetchText(uri).then(data => {
       setXml(data);
       isError && setIsError(false);
-      onLoad === null || onLoad === void 0 || onLoad();
+      onLoad?.();
     }).catch(e => {
       onError(e);
       setIsError(true);
@@ -179,7 +179,7 @@ export function astToReact(value, index) {
       props,
       children
     } = value;
-    if (props !== null && props !== void 0 && props.class) {
+    if (props?.class) {
       props.className = props.class;
       delete props.class;
     }

@@ -22,10 +22,11 @@ function getAndroidStatesConfig(handlePressIn, handlePressOut) {
 }
 function getAndroidAccessibilityStatesConfig(handlePressIn, handlePressOut) {
   return [{
-    eventName: StateMachineEvent.LONG_PRESS_TOUCHES_DOWN,
+    eventName: StateMachineEvent.NATIVE_BEGIN,
     callback: handlePressIn
   }, {
-    eventName: StateMachineEvent.NATIVE_BEGIN
+    eventName: StateMachineEvent.LONG_PRESS_TOUCHES_DOWN,
+    optional: true
   }, {
     eventName: StateMachineEvent.FINALIZE,
     callback: handlePressOut
@@ -35,8 +36,10 @@ function getIosStatesConfig(handlePressIn, handlePressOut) {
   return [{
     eventName: StateMachineEvent.LONG_PRESS_TOUCHES_DOWN
   }, {
-    eventName: StateMachineEvent.NATIVE_START,
+    eventName: StateMachineEvent.NATIVE_BEGIN,
     callback: handlePressIn
+  }, {
+    eventName: StateMachineEvent.NATIVE_START
   }, {
     eventName: StateMachineEvent.FINALIZE,
     callback: handlePressOut

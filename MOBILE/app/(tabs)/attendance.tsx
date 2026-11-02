@@ -11,6 +11,7 @@ import {
   StatusBar,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -40,7 +41,7 @@ import { getPunchRecords } from '../../services/db';
 export default function AttendanceScreen() {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
-  const { user, profileImage } = useAuth();
+  const { user, profileImage, hasProfilePhoto } = useAuth();
   const { todayRecord, attendanceLogs, monthlyStats: apiMonthlyStats, refreshStatus } = useAttendance();
   const { t } = useLanguage();
   const router = useRouter();
@@ -56,6 +57,20 @@ export default function AttendanceScreen() {
   const [loading, setLoading] = useState(false);
   const [punchRecords, setPunchRecords] = useState<any[]>([]);
 
+  // Derived Active State (independent of second-by-second timer string)
+  const isSessionActive = Boolean(
+    (todayRecord && todayRecord.check_in && !todayRecord.check_out) ||
+    punchRecords.some((r) => {
+      const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
+      const punchMs = r.timestamp || 0;
+      const isToday = !r.date || r.date === new Date().toISOString().split('T')[0];
+      const currentEmpId = String(user?.employee_id || user?.id || '').toLowerCase();
+      const recordEmpId = String(r.employee_id || r.employeeId || '').toLowerCase();
+      const matchesEmp = !currentEmpId || recordEmpId === currentEmpId;
+      return isPunchedIn && (Date.now() - punchMs) < 16 * 3600 * 1000 && isToday && matchesEmp;
+    })
+  );
+
   // Live pulse animation for Active Session card
   const pulseAnim = React.useRef(new Animated.Value(1)).current;
   const pulseOpacity = React.useRef(new Animated.Value(0.8)).current;
@@ -64,7 +79,7 @@ export default function AttendanceScreen() {
   const scanAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (sessionTime !== '00:00:00') {
+    if (isSessionActive) {
       const pulseLoop = Animated.loop(
         Animated.parallel([
           Animated.sequence([
@@ -114,7 +129,7 @@ export default function AttendanceScreen() {
       pulseOpacity.setValue(0);
       scanAnim.setValue(0);
     }
-  }, [sessionTime]);
+  }, [isSessionActive]);
 
   // Search & Filter States
   const [searchLogs, setSearchLogs] = useState('');
@@ -156,7 +171,7 @@ export default function AttendanceScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshStatus();
+      refreshStatus(false, true);
       fetchLogs();
     }, [])
   );
@@ -180,7 +195,7 @@ export default function AttendanceScreen() {
 
   // Digital Live Timer calculating elapsed time from Punch In timestamp
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     const nowMs = Date.now();
     const activePunch = punchRecords.find((r) => {
       const isPunchedIn = r.status === 'PUNCHED-IN' || r.punchOutTime === '--:--';
@@ -387,7 +402,7 @@ export default function AttendanceScreen() {
   return (
     <SwipeableBackWrapper>
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
         {/* ----------------- SUB-VIEW 1: ATTENDANCE DASHBOARD ----------------- */}
         {activeSubView === 'dashboard' && (
@@ -402,15 +417,15 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
 
               <View style={styles.avatarBox}>
-                {profileImage ? (
+                {hasProfilePhoto && profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.avatarImg} />
                 ) : (
-                  <User color={colors.text} size={32} />
+                  <User color={colors.primary} size={32} />
                 )}
               </View>
 
               <View style={styles.headerTextCol}>
-                <Text style={styles.greetingText} numberOfLines={1}>Good Afternoon,</Text>
+                <Text style={styles.greetingText} numberOfLines={1}>{t('good_afternoon')},</Text>
                 <View style={styles.nameRow}>
                   <Text style={styles.userNameText} numberOfLines={1}>
                     {user?.name || 'PAPPU KUMAR'}
@@ -433,7 +448,7 @@ export default function AttendanceScreen() {
               <View style={styles.cardCirclePattern2} />
 
               {/* Glowing Live Scan Line Running Top to Bottom when Punched In */}
-              {sessionTime !== '00:00:00' && (
+              {isSessionActive && (
                 <Animated.View
                   style={[
                     styles.scanLine,
@@ -453,7 +468,7 @@ export default function AttendanceScreen() {
 
               <View style={styles.liveHeaderRow}>
                 <View style={styles.pulseDotContainer}>
-                  {sessionTime !== '00:00:00' && (
+                  {isSessionActive && (
                     <Animated.View
                       style={[
                         styles.pulseRing,
@@ -464,10 +479,10 @@ export default function AttendanceScreen() {
                       ]}
                     />
                   )}
-                  <View style={[styles.liveDot, sessionTime !== '00:00:00' ? styles.liveGreenDot : styles.liveRedDot]} />
+                  <View style={[styles.liveDot, isSessionActive ? styles.liveGreenDot : styles.liveRedDot]} />
                 </View>
                 <Text style={styles.liveSessionTitle}>
-                  {sessionTime !== '00:00:00' ? (t('active_session') || 'LIVE SESSION ACTIVE') : (t('no_active_session') || 'NO ACTIVE SESSION')}
+                  {isSessionActive ? (t('active_session') || 'LIVE SESSION ACTIVE') : (t('no_active_session') || 'NO ACTIVE SESSION')}
                 </Text>
               </View>
               <Text style={styles.liveTimerDigits}>{sessionTime}</Text>
@@ -476,36 +491,52 @@ export default function AttendanceScreen() {
             {/* 3. Duty Status Action Big Card */}
             <TouchableOpacity
               activeOpacity={0.88}
-              onPress={() => router.push('/mark-attendance')}
+              onPress={() => {
+                if (!isSessionActive && !hasProfilePhoto) {
+                  Alert.alert(
+                    t('profile_photo_required_title') || 'Profile Photo Required',
+                    t('profile_photo_required_desc') || 'Profile photo is not uploaded. Please upload your profile photo first in Settings before activating.',
+                    [
+                      { text: t('cancel') || 'Cancel', style: 'cancel' },
+                      {
+                        text: t('upload_photo') || 'Upload Photo',
+                        onPress: () => router.push({ pathname: '/settings', params: { autoUpload: 'true' } }),
+                      },
+                    ]
+                  );
+                  return;
+                }
+                router.push('/mark-attendance');
+              }}
               style={[
                 styles.markAttendanceBigCard,
-                sessionTime !== '00:00:00' ? { borderColor: 'rgba(239, 68, 68, 0.4)' } : { borderColor: 'rgba(16, 185, 129, 0.4)' },
+                isSessionActive ? { borderColor: 'rgba(239, 68, 68, 0.4)' } : { borderColor: 'rgba(16, 185, 129, 0.4)' },
               ]}
             >
               <View
                 style={[
                   styles.bigFingerprintBox,
-                  sessionTime !== '00:00:00'
+                  isSessionActive
                     ? { backgroundColor: 'rgba(239, 68, 68, 0.15)' }
                     : { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
                 ]}
               >
-                <Power color={sessionTime !== '00:00:00' ? '#EF4444' : '#10B981'} size={38} />
+                <Power color={isSessionActive ? '#EF4444' : '#10B981'} size={38} />
               </View>
               <Text
                 style={[
                   styles.markAttendanceTitle,
-                  { color: sessionTime !== '00:00:00' ? '#EF4444' : '#10B981' },
+                  { color: isSessionActive ? '#EF4444' : '#10B981' },
                 ]}
               >
-                {sessionTime !== '00:00:00' ? 'DEACTIVATE' : 'ACTIVATE'}
+                {isSessionActive ? t('deactivate_caps') : t('activate_caps')}
               </Text>
             </TouchableOpacity>
 
             {/* 4. Monthly Attendance Stats Card */}
             <View style={styles.standardCard}>
               <Text style={styles.cardHeaderTitle}>
-                MONTHLY ATTENDANCE - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}
+                {t('monthly_attendance')} - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()}
               </Text>
 
               <View style={styles.statsRow}>
@@ -515,7 +546,7 @@ export default function AttendanceScreen() {
                       {String(monthlyStats.totalDays).padStart(2, '0')}
                     </Text>
                   </View>
-                  <Text style={styles.statLabelText}>Total Days</Text>
+                  <Text style={styles.statLabelText}>{t('total_days')}</Text>
                 </View>
 
                 <View style={styles.statBox}>
@@ -524,7 +555,7 @@ export default function AttendanceScreen() {
                       {String(monthlyStats.present).padStart(2, '0')}
                     </Text>
                   </View>
-                  <Text style={styles.statLabelText}>Days Present</Text>
+                  <Text style={styles.statLabelText}>{t('days_present')}</Text>
                 </View>
 
                 <View style={styles.statBox}>
@@ -533,7 +564,7 @@ export default function AttendanceScreen() {
                       {String(monthlyStats.absent).padStart(2, '0')}
                     </Text>
                   </View>
-                  <Text style={styles.statLabelText}>Days Absent</Text>
+                  <Text style={styles.statLabelText}>{t('days_absent')}</Text>
                 </View>
               </View>
             </View>
@@ -541,9 +572,9 @@ export default function AttendanceScreen() {
             {/* 5. Recent Activity Card */}
             <View style={styles.standardCard}>
               <View style={styles.recentActivityHeader}>
-                <Text style={styles.recentTitleText}>RECENT ACTIVITY</Text>
+                <Text style={styles.recentTitleText}>{t('recent_activity')}</Text>
                 <TouchableOpacity onPress={() => setActiveSubView('logs')}>
-                  <Text style={styles.viewAllLogsText}>VIEW ALL LOGS</Text>
+                  <Text style={styles.viewAllLogsText}>{t('view_all_logs')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -554,7 +585,7 @@ export default function AttendanceScreen() {
                   </View>
                   <View style={styles.activityTextCol}>
                     <Text style={styles.activityMainText}>
-                      {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? 'Punch Out' : 'Punch In'}
+                      {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? t('punch_out') : t('punch_in')}
                     </Text>
                     <Text style={styles.activitySubText}>
                       {latestPunch.date}, {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? latestPunch.punchOutTime : latestPunch.punchInTime}
@@ -562,12 +593,12 @@ export default function AttendanceScreen() {
                   </View>
                   <View style={styles.successBadge}>
                     <Text style={styles.successText}>
-                      {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? 'PRESENT' : 'SUCCESS'}
+                      {latestPunch.status === 'COMPLETED' || latestPunch.status === 'PRESENT' ? t('present_status') : t('success_status')}
                     </Text>
                   </View>
                 </View>
               ) : (
-                <Text style={styles.noActivityText}>No recent attendance activity recorded.</Text>
+                <Text style={styles.noActivityText}>{t('no_recent_activity')}</Text>
               )}
             </View>
           </ScrollView>
@@ -586,7 +617,6 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
               <View style={styles.logsTitleCol}>
                 <Text style={styles.officerNameText}>{user?.name || 'PAPPU KUMAR'}</Text>
-                <Text style={styles.officerRoleText}>{(user?.role || 'OFFICER').toUpperCase()}</Text>
               </View>
             </View>
 
@@ -595,7 +625,7 @@ export default function AttendanceScreen() {
               <Search color={colors.textMuted} size={18} style={{ marginRight: 10 }} />
               <TextInput
                 style={styles.searchInputText}
-                placeholder="Search logs..."
+                placeholder={t('search_logs_placeholder')}
                 placeholderTextColor={colors.placeholder}
                 value={searchLogs}
                 onChangeText={setSearchLogs}
@@ -613,7 +643,7 @@ export default function AttendanceScreen() {
                 style={[styles.filterPillBtn, logFilter === 'week' && styles.filterPillActive]}
               >
                 <Text style={[styles.filterPillText, logFilter === 'week' && styles.filterPillTextActive]}>
-                  Current Week
+                  {t('current_week')}
                 </Text>
               </TouchableOpacity>
 
@@ -626,7 +656,7 @@ export default function AttendanceScreen() {
                 style={[styles.filterPillBtn, logFilter === 'month' && styles.filterPillActive]}
               >
                 <Text style={[styles.filterPillText, logFilter === 'month' && styles.filterPillTextActive]}>
-                  Current Month
+                  {t('current_month')}
                 </Text>
               </TouchableOpacity>
 
@@ -639,7 +669,7 @@ export default function AttendanceScreen() {
                 style={[styles.filterPillBtn, logFilter === 'prev' && styles.filterPillActive]}
               >
                 <Text style={[styles.filterPillText, logFilter === 'prev' && styles.filterPillTextActive]}>
-                  Previous Month
+                  {t('previous_month')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -713,10 +743,10 @@ export default function AttendanceScreen() {
                 {selectedDate && (
                   <View style={styles.selectedDateBanner}>
                     <Text style={styles.selectedDateText}>
-                      Filtered by date: <Text style={{ color: '#3B82F6', fontWeight: '800' }}>{selectedDate}</Text>
+                      {t('filtered_by_date')} <Text style={{ color: '#3B82F6', fontWeight: '800' }}>{selectedDate}</Text>
                     </Text>
                     <TouchableOpacity onPress={() => setSelectedDate(null)}>
-                      <Text style={styles.clearFilterText}>Clear Filter</Text>
+                      <Text style={styles.clearFilterText}>{t('clear_filter')}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -727,7 +757,7 @@ export default function AttendanceScreen() {
             {filteredLogs.length === 0 ? (
               <View style={styles.emptyLogBox}>
                 <Clock color="#64748B" size={32} />
-                <Text style={styles.emptyLogText}>No attendance logs found.</Text>
+                <Text style={styles.emptyLogText}>{t('no_attendance_logs_found')}</Text>
               </View>
             ) : (
               filteredLogs.map((log) => (
@@ -792,8 +822,8 @@ export default function AttendanceScreen() {
                 <ArrowLeft color={colors.text} size={22} />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <Text style={styles.missedTitleText}>Missed Punches</Text>
-                <Text style={styles.missedSubText}>ATTENDANCE RECTIFICATION CENTER</Text>
+                <Text style={styles.missedTitleText}>{t('missed_punches')}</Text>
+                <Text style={styles.missedSubText}>{t('attendance_rectification_center')}</Text>
               </View>
             </View>
 
@@ -802,9 +832,9 @@ export default function AttendanceScreen() {
               <AlertTriangle color="#EF4444" size={22} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.warningBannerTitle}>
-                  Missed punch-out will mark you <Text style={{ color: '#EF4444', fontWeight: '800' }}>ABSENT.</Text>
+                  {t('missed_punch_warning_title')}
                 </Text>
-                <Text style={styles.warningBannerSub}>Submit a regularization request.</Text>
+                <Text style={styles.warningBannerSub}>{t('submit_regularization_request')}</Text>
               </View>
             </View>
 
@@ -819,7 +849,7 @@ export default function AttendanceScreen() {
                 style={[styles.rangePillBtn, missedFilter === 'weekly' && styles.rangePillActive]}
               >
                 <Text style={[styles.rangePillText, missedFilter === 'weekly' && styles.rangePillTextActive]}>
-                  WEEKLY
+                  {t('weekly_filter')}
                 </Text>
               </TouchableOpacity>
 
@@ -832,7 +862,7 @@ export default function AttendanceScreen() {
                 style={[styles.rangePillBtn, missedFilter === 'monthly' && styles.rangePillActive]}
               >
                 <Text style={[styles.rangePillText, missedFilter === 'monthly' && styles.rangePillTextActive]}>
-                  MONTHLY
+                  {t('monthly_filter')}
                 </Text>
               </TouchableOpacity>
 
@@ -845,7 +875,7 @@ export default function AttendanceScreen() {
                 style={[styles.rangePillBtn, missedFilter === 'custom' && styles.rangePillActive]}
               >
                 <Text style={[styles.rangePillText, missedFilter === 'custom' && styles.rangePillTextActive]}>
-                  CUSTOM RANGE
+                  {t('custom_range_filter')}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -2,10 +2,13 @@
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Platform, Text as RNText } from 'react-native';
-import { GestureObjects as Gesture } from '../handlers/gestures/gestureObjects';
 import { GestureDetector } from '../handlers/gestures/GestureDetector';
+import { GestureObjects as Gesture } from '../handlers/gestures/gestureObjects';
 import { jsx as _jsx } from "react/jsx-runtime";
-export const Text = props => {
+/**
+ * @deprecated `LegacyText` is deprecated. Since Gesture Handler 3, you should wrap `Text` with `GestureDetector`, `InterceptingGestureDetector`, or `VirtualGestureDetector`.
+ */
+export const LegacyText = props => {
   const {
     onPress,
     onLongPress,
@@ -55,5 +58,8 @@ export const Text = props => {
   });
 };
 
+/**
+ * @deprecated `LegacyText` is deprecated. Since Gesture Handler 3, you should wrap `Text` with `GestureDetector`, `InterceptingGestureDetector`, or `VirtualGestureDetector`.
+ */
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 //# sourceMappingURL=Text.js.map

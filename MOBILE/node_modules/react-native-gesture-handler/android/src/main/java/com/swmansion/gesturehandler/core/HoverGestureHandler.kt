@@ -7,10 +7,12 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import com.swmansion.gesturehandler.react.RNGestureHandlerRootHelper
-import com.swmansion.gesturehandler.react.eventbuilders.HoverGestureHandlerEventDataBuilder
+import com.swmansion.gesturehandler.react.events.eventbuilders.HoverGestureHandlerEventDataBuilder
 
 class HoverGestureHandler : GestureHandler() {
-  private var handler: Handler? = null
+  override val isContinuous = true
+
+  private val handler = Handler(Looper.getMainLooper())
   private var finishRunnable = Runnable { finish() }
   var stylusData: StylusData = StylusData()
     private set
@@ -83,8 +85,7 @@ class HoverGestureHandler : GestureHandler() {
 
   override fun onHandle(event: MotionEvent, sourceEvent: MotionEvent) {
     if (event.action == MotionEvent.ACTION_DOWN) {
-      handler?.removeCallbacksAndMessages(null)
-      handler = null
+      handler.removeCallbacksAndMessages(null)
     } else if (event.action == MotionEvent.ACTION_UP) {
       if (!isWithinBounds) {
         finish()
@@ -95,11 +96,9 @@ class HoverGestureHandler : GestureHandler() {
   override fun onHandleHover(event: MotionEvent, sourceEvent: MotionEvent) {
     when {
       event.action == MotionEvent.ACTION_HOVER_EXIT -> {
-        if (handler == null) {
-          handler = Handler(Looper.getMainLooper())
-        }
-
-        handler!!.postDelayed(finishRunnable, 4)
+        // Touching down synthesizes HOVER_EXIT right before ACTION_DOWN, so finish
+        // with a slight delay - the DOWN cancels it and hover survives the press.
+        handler.postDelayed(finishRunnable, 4)
       }
 
       !isWithinBounds -> {

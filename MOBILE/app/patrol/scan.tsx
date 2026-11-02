@@ -29,6 +29,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { verifyCheckpointQr } from '../../services/patrolService';
 
@@ -36,6 +37,7 @@ export default function PatrolScanScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isDark, colors } = useTheme();
+  const { t } = useLanguage();
   const params = useLocalSearchParams<{
     checkpointId: string;
     checkpointName: string;
@@ -65,7 +67,7 @@ export default function PatrolScanScreen() {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Location Permission', 'GPS location is required for checkpoint verification.');
+        Alert.alert(t('location_permission'), t('gps_required_for_verification'));
       }
     })();
   }, []);
@@ -111,11 +113,11 @@ export default function PatrolScanScreen() {
 
         // Verification success dialog
         Alert.alert(
-          'Verification Success ✓',
-          `Checkpoint '${checkpointName}' scanned & verified successfully!`,
+          t('verification_success_title'),
+          t('checkpoint_verified_msg', { checkpoint: checkpointName }),
           [
             {
-              text: 'Open Checklist',
+              text: t('open_checklist'),
               onPress: () => {
                 router.replace({
                   pathname: '/patrol/checklist',
@@ -140,10 +142,10 @@ export default function PatrolScanScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      const msg = e?.response?.data?.detail || e?.message || 'Invalid QR code. Please scan the designated checkpoint code.';
-      Alert.alert('Scan Failed', msg, [
+      const msg = e?.response?.data?.detail || e?.message || t('scan_failed_title');
+      Alert.alert(t('scan_failed_title'), msg, [
         {
-          text: 'Try Again',
+          text: t('try_again'),
           onPress: () => {
             setScanned(false);
             setValidating(false);
@@ -161,7 +163,7 @@ export default function PatrolScanScreen() {
 
   const handleManualSubmit = () => {
     if (!manualCode.trim()) {
-      Alert.alert('Input Required', 'Please enter a QR code or checkpoint ID.');
+      Alert.alert(t('required'), t('enter_checkpoint_code'));
       return;
     }
     setManualModalVisible(false);
@@ -180,15 +182,15 @@ export default function PatrolScanScreen() {
     return (
       <SafeAreaView style={[styles.centerContainer, { backgroundColor: colors.background }]}>
         <AlertTriangle color="#F59E0B" size={48} />
-        <Text style={[styles.permTitle, { color: colors.text }]}>Camera Access Required</Text>
+        <Text style={[styles.permTitle, { color: colors.text }]}>{t('camera_access_required')}</Text>
         <Text style={[styles.permSubtitle, { color: colors.textSecondary }]}>
-          We need camera access to scan physical checkpoint QR codes along the tour.
+          {t('camera_access_desc')}
         </Text>
         <TouchableOpacity style={styles.permButton} activeOpacity={0.8} onPress={requestPermission}>
-          <Text style={styles.permButtonText}>Grant Camera Permission</Text>
+          <Text style={styles.permButtonText}>{t('grant_camera_perm')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={{ marginTop: 16 }} onPress={() => router.back()}>
-          <Text style={{ color: colors.textSecondary }}>Go Back</Text>
+          <Text style={{ color: colors.textSecondary }}>{t('go_back')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -241,7 +243,7 @@ export default function PatrolScanScreen() {
         <View style={styles.tagBanner}>
           <Shield color="#60A5FA" size={14} />
           <Text style={styles.tagBannerText} numberOfLines={1}>
-            Align camera with checkpoint QR code
+            {t('scan_site_qr_subtitle')}
           </Text>
         </View>
       </SafeAreaView>
@@ -258,7 +260,7 @@ export default function PatrolScanScreen() {
           {validating && (
             <View style={styles.validatingOverlay}>
               <ActivityIndicator size="large" color="#3B82F6" />
-              <Text style={styles.validatingText}>Verifying Checkpoint & GPS...</Text>
+              <Text style={styles.validatingText}>{t('verifying_recording')}</Text>
             </View>
           )}
         </View>
@@ -277,7 +279,7 @@ export default function PatrolScanScreen() {
             }}
           >
             <Keyboard color="#FFFFFF" size={18} />
-            <Text style={styles.manualEntryText}>Manual Code Entry</Text>
+            <Text style={styles.manualEntryText}>{t('enter_qr_manually')}</Text>
           </TouchableOpacity>
 
           {/* Quick Test Fill (If configured) */}
@@ -304,14 +306,14 @@ export default function PatrolScanScreen() {
         <View style={styles.modalBg}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.modalTop}>
-              <Text style={[styles.modalCardTitle, { color: colors.text }]}>Manual Checkpoint Code</Text>
+              <Text style={[styles.modalCardTitle, { color: colors.text }]}>{t('enter_checkpoint_code')}</Text>
               <TouchableOpacity onPress={() => setManualModalVisible(false)}>
                 <X color={colors.textSecondary} size={20} />
               </TouchableOpacity>
             </View>
 
             <Text style={[styles.modalCardDesc, { color: colors.textSecondary }]}>
-              If the physical QR code is damaged, enter the printed code identifier:
+              {t('scan_site_qr_subtitle')}
             </Text>
 
             <TextInput
@@ -329,14 +331,14 @@ export default function PatrolScanScreen() {
                 style={styles.modalCancelBtn}
                 onPress={() => setManualModalVisible(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t('cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.modalSubmitBtn}
                 onPress={handleManualSubmit}
               >
-                <Text style={styles.modalSubmitText}>Verify & Proceed</Text>
+                <Text style={styles.modalSubmitText}>{t('submit_code_btn')}</Text>
               </TouchableOpacity>
             </View>
           </View>

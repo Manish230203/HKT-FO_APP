@@ -11,7 +11,7 @@ export const getBoundingClientRect = node => {
   throw new Error('Can not get boundingClientRect of ' + node || 'undefined');
 };
 const measureLayout = (node, callback) => {
-  const relativeNode = node === null || node === void 0 ? void 0 : node.parentNode;
+  const relativeNode = node?.parentNode;
   if (relativeNode) {
     setTimeout(() => {
       // @ts-expect-error TODO: handle it better

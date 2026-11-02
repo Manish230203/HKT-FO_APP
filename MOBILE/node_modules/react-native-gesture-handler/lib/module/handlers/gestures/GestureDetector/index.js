@@ -1,21 +1,19 @@
 "use strict";
 
 /* eslint-disable react/no-unused-prop-types */
-import React, { useContext, useEffect, useMemo, useRef } from 'react';
-import { Platform } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
 import findNodeHandle from '../../../findNodeHandle';
-import { isTestEnv } from '../../../utils';
-import GestureHandlerRootViewContext from '../../../GestureHandlerRootViewContext';
-import { useAnimatedGesture } from './useAnimatedGesture';
-import { attachHandlers } from './attachHandlers';
-import { needsToReattach } from './needsToReattach';
-import { dropHandlers } from './dropHandlers';
-import { useWebEventHandlers } from './utils';
-import { Wrap, AnimatedWrap } from './Wrap';
-import { useDetectorUpdater } from './useDetectorUpdater';
-import { useViewRefHandler } from './useViewRefHandler';
-import { useMountReactions } from './useMountReactions';
+import { resolveHostInstance } from '../../../hostInstance';
 import { useIsomorphicLayoutEffect } from '../../../useIsomorphicLayoutEffect';
+import { attachHandlers } from './attachHandlers';
+import { dropHandlers } from './dropHandlers';
+import { needsToReattach } from './needsToReattach';
+import { useAnimatedGesture } from './useAnimatedGesture';
+import { useDetectorUpdater } from './useDetectorUpdater';
+import { useMountReactions } from './useMountReactions';
+import { useViewRefHandler } from './useViewRefHandler';
+import { useWebEventHandlers } from './utils';
+import { AnimatedWrap, Wrap } from './Wrap';
 import { jsx as _jsx } from "react/jsx-runtime";
 function propagateDetectorConfig(props, gesture) {
   const keysToPropagate = ['userSelect', 'enableContextMenu', 'touchAction'];
@@ -46,10 +44,6 @@ function propagateDetectorConfig(props, gesture) {
  * @see https://docs.swmansion.com/react-native-gesture-handler/docs/gestures/gesture-detector
  */
 export const GestureDetector = props => {
-  const rootViewContext = useContext(GestureHandlerRootViewContext);
-  if (__DEV__ && !rootViewContext && !isTestEnv() && Platform.OS !== 'web') {
-    throw new Error('GestureDetector must be used as a descendant of GestureHandlerRootView. Otherwise the gestures will not be recognized. See https://docs.swmansion.com/react-native-gesture-handler/docs/fundamentals/installation for more details.');
-  }
   if (!props.gesture) {
     throw new Error('GestureDetector must have a gesture prop provided.');
   }
@@ -83,7 +77,7 @@ export const GestureDetector = props => {
   state.forceRebuildReanimatedEvent = false;
   useAnimatedGesture(preparedGesture, needsToRebuildReanimatedEvent);
   useIsomorphicLayoutEffect(() => {
-    const viewTag = findNodeHandle(state.viewRef);
+    const viewTag = findNodeHandle(resolveHostInstance(state.viewRef));
     preparedGesture.isMounted = true;
     attachHandlers({
       preparedGesture,

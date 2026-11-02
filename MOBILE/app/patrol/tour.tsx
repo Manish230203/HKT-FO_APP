@@ -33,6 +33,7 @@ import {
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
   getTourCheckpoints,
@@ -46,6 +47,7 @@ export default function PatrolTourProgressScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
+  const { t } = useLanguage();
   const params = useLocalSearchParams<{
     tourName: string;
     siteId?: string;
@@ -134,11 +136,11 @@ export default function PatrolTourProgressScreen() {
   const handleSubmitHandover = async () => {
     if (!targetCheckpoint) return;
     if (!selectedGuard) {
-      Alert.alert('Guard Required', 'Please select a guard to pass the baton to.');
+      Alert.alert(t('guard_required_title'), t('select_guard_msg'));
       return;
     }
     if (!handoverReason.trim()) {
-      Alert.alert('Reason Required', 'Please provide a reason for the handover.');
+      Alert.alert(t('reason_required_title'), t('handover_reason_required_msg'));
       return;
     }
 
@@ -167,8 +169,8 @@ export default function PatrolTourProgressScreen() {
       if (res && res.success) {
         setHandoverModalVisible(false);
         Alert.alert(
-          'Baton Handover Complete',
-          `Tour baton for '${targetCheckpoint.name}' has been passed to ${selectedGuard.name}.`,
+          t('baton_handover_complete_title'),
+          t('baton_passed_success_msg', { checkpoint: targetCheckpoint.name, guard: selectedGuard.name }),
           [
             {
               text: 'OK',
@@ -178,8 +180,8 @@ export default function PatrolTourProgressScreen() {
         );
       }
     } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || 'Failed to pass baton.';
-      Alert.alert('Handover Error', msg);
+      const msg = e?.response?.data?.detail || e?.message || t('handover_error_title');
+      Alert.alert(t('handover_error_title'), msg);
     } finally {
       setSubmittingHandover(false);
     }
@@ -187,7 +189,7 @@ export default function PatrolTourProgressScreen() {
 
   const darkNavyBg = isDark ? '#0A1128' : '#F4F7FA';
   const cardBg = isDark ? '#131C33' : '#FFFFFF';
-  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0';
   const textColor = isDark ? '#FFFFFF' : '#0F172A';
   const subTextColor = isDark ? '#94A3B8' : '#64748B';
 
@@ -203,7 +205,7 @@ export default function PatrolTourProgressScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: darkNavyBg }]} edges={['top']}>
       {/* Top Navigation */}
-      <View style={styles.headerBar}>
+      <View style={[styles.headerBar, { borderBottomColor: cardBorder }]}>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={() => router.back()}
@@ -230,9 +232,9 @@ export default function PatrolTourProgressScreen() {
         {/* Tour Progress Card */}
         <View style={[styles.progressCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           <View style={styles.progressHeaderRow}>
-            <Text style={[styles.progressHeading, { color: textColor }]}>Tour Progress</Text>
+            <Text style={[styles.progressHeading, { color: textColor }]}>{t('tour_progress')}</Text>
             <Text style={[styles.progressRatio, { color: allCompleted ? '#22C55E' : '#3B82F6' }]}>
-              {completedCount} of {totalCount} Checkpoints Done
+              {t('checkpoints_done_ratio', { completed: completedCount, total: totalCount })}
             </Text>
           </View>
 
@@ -252,16 +254,16 @@ export default function PatrolTourProgressScreen() {
           {allCompleted && (
             <View style={styles.completionBanner}>
               <Trophy color="#FBBF24" size={20} />
-              <Text style={styles.completionBannerText}>Tour Completed! All checkpoints verified.</Text>
+              <Text style={styles.completionBannerText}>{t('all_checkpoints_verified')}</Text>
             </View>
           )}
         </View>
 
         {/* Section Heading */}
         <View style={styles.checkpointsHeader}>
-          <Text style={[styles.checkpointsHeadingText, { color: textColor }]}>Sequential Checkpoints</Text>
+          <Text style={[styles.checkpointsHeadingText, { color: textColor }]}>{t('sequential_checkpoints')}</Text>
           <Text style={[styles.checkpointsSubtitleText, { color: subTextColor }]}>
-            Verify each checkpoint in sequence to unlock the next
+            {t('sequential_checkpoints_subtitle')}
           </Text>
         </View>
 
@@ -269,14 +271,14 @@ export default function PatrolTourProgressScreen() {
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text style={[styles.loadingText, { color: subTextColor }]}>Loading checkpoint sequence...</Text>
+            <Text style={[styles.loadingText, { color: subTextColor }]}>{t('loading_checkpoint_seq')}</Text>
           </View>
         ) : checkpoints.length === 0 ? (
           <View style={[styles.emptyBox, { backgroundColor: cardBg, borderColor: cardBorder }]}>
             <AlertTriangle color="#F59E0B" size={36} />
-            <Text style={[styles.emptyBoxTitle, { color: textColor }]}>No Checkpoints Found</Text>
+            <Text style={[styles.emptyBoxTitle, { color: textColor }]}>{t('no_checkpoints_found')}</Text>
             <Text style={[styles.emptyBoxSubtitle, { color: subTextColor }]}>
-              There are no checkpoints assigned to '{tourName}'.
+              {t('no_checkpoints_desc', { tourName })}
             </Text>
           </View>
         ) : (
@@ -358,15 +360,15 @@ export default function PatrolTourProgressScreen() {
                       {/* State Pill */}
                       {isCompleted ? (
                         <View style={styles.statePillCompleted}>
-                          <Text style={styles.statePillCompletedText}>COMPLETED</Text>
+                          <Text style={styles.statePillCompletedText}>{t('completed_caps')}</Text>
                         </View>
                       ) : isActive ? (
                         <View style={styles.statePillActive}>
-                          <Text style={styles.statePillActiveText}>ACTIVE</Text>
+                          <Text style={styles.statePillActiveText}>{t('active_caps')}</Text>
                         </View>
                       ) : (
                         <View style={styles.statePillLocked}>
-                          <Text style={styles.statePillLockedText}>LOCKED</Text>
+                          <Text style={styles.statePillLockedText}>{t('locked_caps')}</Text>
                         </View>
                       )}
                     </View>
@@ -376,11 +378,11 @@ export default function PatrolTourProgressScreen() {
                       <View style={styles.completedInfoBox}>
                         <View style={styles.verifiedRow}>
                           <ShieldCheck color="#22C55E" size={16} />
-                          <Text style={styles.verifiedText}>GPS VERIFIED (WITHIN RANGE)</Text>
+                          <Text style={styles.verifiedText}>{t('gps_verified_within_range')}</Text>
                         </View>
                         {cp.completion_time ? (
                           <Text style={[styles.completionTimeText, { color: subTextColor }]}>
-                            Verified at {cp.completion_time}
+                            {t('verified_at_time', { time: cp.completion_time })}
                           </Text>
                         ) : null}
                       </View>
@@ -395,7 +397,7 @@ export default function PatrolTourProgressScreen() {
                           style={styles.scanButton}
                         >
                           <QrCode color="#FFFFFF" size={18} />
-                          <Text style={styles.scanButtonText}>Scan Checkpoint</Text>
+                          <Text style={styles.scanButtonText}>{t('scan_checkpoint_btn')}</Text>
                         </TouchableOpacity>
 
                         {/* Baton Handover button */}
@@ -405,7 +407,7 @@ export default function PatrolTourProgressScreen() {
                           style={[styles.passBatonButton, { borderColor: cardBorder }]}
                         >
                           <Users color="#3B82F6" size={16} />
-                          <Text style={styles.passBatonButtonText}>Pass Baton / Handover</Text>
+                          <Text style={styles.passBatonButtonText}>{t('pass_baton_btn')}</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -415,7 +417,7 @@ export default function PatrolTourProgressScreen() {
                       <View style={styles.lockedInfoBox}>
                         <Lock color="#94A3B8" size={14} />
                         <Text style={[styles.lockedInfoText, { color: subTextColor }]}>
-                          Locked until previous checkpoint completed
+                          {t('locked_checkpoint_desc')}
                         </Text>
                       </View>
                     )}
@@ -440,7 +442,7 @@ export default function PatrolTourProgressScreen() {
           <View style={[styles.modalContent, { backgroundColor: cardBg }]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={[styles.modalTitle, { color: textColor }]}>Pass Tour Baton</Text>
+                <Text style={[styles.modalTitle, { color: textColor }]}>{t('pass_tour_baton_title')}</Text>
                 <Text style={[styles.modalSubtitle, { color: subTextColor }]}>
                   {targetCheckpoint?.name} • {tourName}
                 </Text>
@@ -456,7 +458,7 @@ export default function PatrolTourProgressScreen() {
             <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
               {/* Pass Baton Label */}
               <Text style={[styles.inputLabel, { color: textColor }]}>
-                Pass baton to another guard:
+                {t('pass_baton_to_guard')}
               </Text>
 
               {/* Guard Search Input */}
@@ -464,7 +466,7 @@ export default function PatrolTourProgressScreen() {
                 <Search color="#94A3B8" size={16} />
                 <TextInput
                   style={[styles.searchInput, { color: textColor }]}
-                  placeholder="Search by guard name or code..."
+                  placeholder={t('search_guard_placeholder')}
                   placeholderTextColor="#94A3B8"
                   value={guardSearch}
                   onChangeText={setGuardSearch}
@@ -512,7 +514,7 @@ export default function PatrolTourProgressScreen() {
 
               {/* Reason for Handover Input */}
               <Text style={[styles.inputLabel, { color: textColor, marginTop: 14 }]}>
-                Reason for Handover:
+                {t('reason_for_handover')}
               </Text>
               <TextInput
                 style={[
@@ -523,7 +525,7 @@ export default function PatrolTourProgressScreen() {
                     borderColor: cardBorder,
                   },
                 ]}
-                placeholder="E.g., Shift rotation, emergency response, scheduled relief..."
+                placeholder={t('handover_reason_placeholder')}
                 placeholderTextColor="#94A3B8"
                 multiline
                 numberOfLines={3}
@@ -540,7 +542,7 @@ export default function PatrolTourProgressScreen() {
                 style={[styles.continueMyselfButton, { borderColor: cardBorder }]}
               >
                 <Text style={[styles.continueMyselfText, { color: subTextColor }]}>
-                  CONTINUE TOUR MYSELF
+                  {t('continue_tour_myself')}
                 </Text>
               </TouchableOpacity>
 
@@ -555,7 +557,7 @@ export default function PatrolTourProgressScreen() {
                 ) : (
                   <>
                     <Send color="#FFFFFF" size={16} />
-                    <Text style={styles.confirmHandoverText}>PASS BATON / HANDOVER</Text>
+                    <Text style={styles.confirmHandoverText}>{t('confirm_pass_baton')}</Text>
                   </>
                 )}
               </TouchableOpacity>

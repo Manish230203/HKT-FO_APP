@@ -30,6 +30,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import {
   getCheckpointChecklist,
@@ -48,6 +49,7 @@ export default function CheckpointChecklistScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isDark } = useTheme();
+  const { t } = useLanguage();
   const params = useLocalSearchParams<{
     checkpointId: string;
     checkpointName: string;
@@ -96,7 +98,7 @@ export default function CheckpointChecklistScreen() {
         }
       } catch (e: any) {
         console.error('Error loading checklist questions:', e);
-        Alert.alert('Notice', 'Loaded standard checklist questions for this checkpoint.');
+        Alert.alert(t('notice'), t('loaded_standard_checklist'));
       } finally {
         setLoading(false);
       }
@@ -118,15 +120,15 @@ export default function CheckpointChecklistScreen() {
 
   const handlePickPhoto = async (qId: number) => {
     Alert.alert(
-      'Attach Photo',
-      'Choose camera or gallery for this question:',
+      t('attach_photo_title'),
+      t('choose_camera_gallery'),
       [
         {
-          text: 'Camera',
+          text: t('camera_option'),
           onPress: async () => {
             const perm = await ImagePicker.requestCameraPermissionsAsync();
             if (!perm.granted) {
-              Alert.alert('Permission Required', 'Camera permission is needed to capture checkpoint photo.');
+              Alert.alert(t('perm_required_title'), t('camera_perm_checkpoint_msg'));
               return;
             }
             const res = await ImagePicker.launchCameraAsync({
@@ -149,11 +151,11 @@ export default function CheckpointChecklistScreen() {
           },
         },
         {
-          text: 'Gallery',
+          text: t('gallery_option'),
           onPress: async () => {
             const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!perm.granted) {
-              Alert.alert('Permission Required', 'Gallery permission is needed to attach photo.');
+              Alert.alert(t('perm_required_title'), t('gallery_perm_checkpoint_msg'));
               return;
             }
             const res = await ImagePicker.launchImageLibraryAsync({
@@ -175,7 +177,7 @@ export default function CheckpointChecklistScreen() {
             }
           },
         },
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
       ]
     );
   };
@@ -194,12 +196,12 @@ export default function CheckpointChecklistScreen() {
   const handlePressSubmit = () => {
     // Confirmation dialog as explicitly specified in requirements
     Alert.alert(
-      'Confirm Submission',
-      `Are you sure you want to submit the checklist answers for checkpoint '${checkpointName}'?`,
+      t('confirm_submission'),
+      t('confirm_checklist_checkpoint_msg', { checkpoint: checkpointName }),
       [
-        { text: 'CANCEL', style: 'cancel' },
+        { text: t('cancel').toUpperCase(), style: 'cancel' },
         {
-          text: 'SUBMIT',
+          text: t('submit').toUpperCase(),
           onPress: executeSubmit,
         },
       ]
@@ -249,22 +251,22 @@ export default function CheckpointChecklistScreen() {
 
         if (res.tour_completed) {
           Alert.alert(
-            'Tour Completed! 🎉',
-            `Congratulations! All ${res.total_checkpoints} checkpoints for tour '${tourName}' have been completed and GPS-verified.`,
+            t('tour_completed_title'),
+            t('tour_completed_msg', { total: res.total_checkpoints, tour: tourName }),
             [
               {
-                text: 'View Tours',
+                text: t('view_tours'),
                 onPress: () => router.replace('/patrol'),
               },
             ]
           );
         } else {
           Alert.alert(
-            'Checklist Submitted ✓',
-            `Checklist for '${checkpointName}' submitted successfully. The next checkpoint has been unlocked!`,
+            t('checklist_submitted_title'),
+            t('checkpoint_submitted_msg', { checkpoint: checkpointName }),
             [
               {
-                text: 'Next Checkpoint',
+                text: t('next_checkpoint'),
                 onPress: () =>
                   router.replace({
                     pathname: '/patrol/tour',
@@ -279,8 +281,8 @@ export default function CheckpointChecklistScreen() {
         }
       }
     } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || 'Failed to submit checklist.';
-      Alert.alert('Submission Error', msg);
+      const msg = e?.response?.data?.detail || e?.message || t('failed_assign_visit');
+      Alert.alert(t('error'), msg);
     } finally {
       setSubmitting(false);
     }
@@ -288,7 +290,7 @@ export default function CheckpointChecklistScreen() {
 
   const darkNavyBg = isDark ? '#0A1128' : '#F4F7FA';
   const cardBg = isDark ? '#131C33' : '#FFFFFF';
-  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0';
   const textColor = isDark ? '#FFFFFF' : '#0F172A';
   const subTextColor = isDark ? '#94A3B8' : '#64748B';
 
@@ -299,7 +301,7 @@ export default function CheckpointChecklistScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header Bar */}
-        <View style={styles.headerBar}>
+        <View style={[styles.headerBar, { borderBottomColor: cardBorder }]}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -330,9 +332,9 @@ export default function CheckpointChecklistScreen() {
                 <ShieldCheck color="#22C55E" size={24} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.bannerTitle, { color: textColor }]}>QR Code Verified ✓</Text>
+                <Text style={[styles.bannerTitle, { color: textColor }]}>{t('qr_code_verified_banner') || 'QR Code Verified ✓'}</Text>
                 <Text style={[styles.bannerSubtitle, { color: subTextColor }]}>
-                  Please complete the following checklist questions to conclude this checkpoint.
+                  {t('complete_checklist_desc') || 'Please complete the following checklist questions to conclude this checkpoint.'}
                 </Text>
               </View>
             </View>
@@ -342,7 +344,7 @@ export default function CheckpointChecklistScreen() {
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#3B82F6" />
-              <Text style={[styles.loadingText, { color: subTextColor }]}>Loading checklist questions...</Text>
+              <Text style={[styles.loadingText, { color: subTextColor }]}>{t('loading_checklist_questions')}</Text>
             </View>
           ) : (
             questions.map((q, idx) => {
@@ -380,7 +382,7 @@ export default function CheckpointChecklistScreen() {
                           { color: isYes ? '#FFFFFF' : textColor },
                         ]}
                       >
-                        YES
+                        {t('yes')}
                       </Text>
                     </TouchableOpacity>
 
@@ -401,7 +403,7 @@ export default function CheckpointChecklistScreen() {
                           { color: isNo ? '#FFFFFF' : textColor },
                         ]}
                       >
-                        NO
+                        {t('no')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -413,14 +415,14 @@ export default function CheckpointChecklistScreen() {
                         <Image source={{ uri: currentAns.photoUri }} style={styles.thumbnailImage} />
                         <View style={{ flex: 1, marginLeft: 10 }}>
                           <Text style={[styles.photoAttachedText, { color: textColor }]}>
-                            Photo attached ✓
+                            {t('photo_attached')}
                           </Text>
                           <TouchableOpacity
                             onPress={() => handleRemovePhoto(q.question_id)}
                             style={styles.removePhotoBtn}
                           >
                             <Trash2 color="#EF4444" size={14} />
-                            <Text style={styles.removePhotoText}>Remove photo</Text>
+                            <Text style={styles.removePhotoText}>{t('remove_photo_action')}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -432,7 +434,7 @@ export default function CheckpointChecklistScreen() {
                       >
                         <Camera color="#3B82F6" size={16} />
                         <Text style={styles.attachPhotoBtnText}>
-                          {q.requires_photo ? 'Attach Photo (Required)' : 'Add Photo (Optional)'}
+                          {q.requires_photo ? t('attach_photo_required') : t('add_photo_optional')}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -458,7 +460,7 @@ export default function CheckpointChecklistScreen() {
             ) : (
               <>
                 <Send color="#FFFFFF" size={18} />
-                <Text style={styles.submitButtonText}>Submit Checklist</Text>
+                <Text style={styles.submitButtonText}>{t('submit_checklist')}</Text>
               </>
             )}
           </TouchableOpacity>

@@ -126,7 +126,7 @@ class MobileGPSTracker {
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         foregroundService: {
-          notificationTitle: 'VIGILO-OFFICER Active',
+          notificationTitle: 'VIGILO-O Active',
           notificationBody: 'Location tracking is active for officer verification.',
           notificationColor: '#00599B',
           killServiceOnDestroy: false,
@@ -141,15 +141,24 @@ class MobileGPSTracker {
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
         foregroundService: {
-          notificationTitle: 'VIGILO-OFFICER Active',
+          notificationTitle: 'VIGILO-O Active',
           notificationBody: 'Location tracking is active for officer verification.',
           notificationColor: '#00599B',
           killServiceOnDestroy: false,
         },
       };
 
-      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, config);
-      console.log(`Updated native background location task configuration. Checked-in: ${this.hasActiveVisit}`);
+      if (Platform.OS !== 'web') {
+        try {
+          const isTaskAvailable = await TaskManager.isAvailableAsync();
+          if (isTaskAvailable) {
+            await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, config);
+            console.log(`Updated native background location task configuration. Checked-in: ${this.hasActiveVisit}`);
+          }
+        } catch (taskErr: any) {
+          console.warn('Native background location updates not permitted in this runtime, relying on active JS timer tracking:', taskErr?.message || taskErr);
+        }
+      }
     } catch (e) {
       console.warn('Error updating native background location config:', e);
     }

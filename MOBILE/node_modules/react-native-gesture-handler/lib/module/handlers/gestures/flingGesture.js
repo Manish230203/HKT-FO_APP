@@ -1,6 +1,10 @@
 "use strict";
 
 import { BaseGesture } from './gesture';
+
+/**
+ * @deprecated `FlingGesture` is deprecated and will be removed in the future. Please use `useFlingGesture` instead.
+ */
 export class FlingGesture extends BaseGesture {
   config = {};
   constructor() {
@@ -29,4 +33,8 @@ export class FlingGesture extends BaseGesture {
     return this;
   }
 }
+
+/**
+ * @deprecated `FlingGestureType` is deprecated and will be removed in the future. Please use `FlingGesture` instead.
+ */
 //# sourceMappingURL=flingGesture.js.map

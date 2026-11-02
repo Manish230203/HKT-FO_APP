@@ -1,8 +1,8 @@
 import React from 'react';
-import { GestureType } from '../gesture';
-import { UserSelect, TouchAction } from '../../gestureHandlerCommon';
-import { ComposedGesture } from '../gestureComposition';
-interface GestureDetectorProps {
+import type { TouchAction, UserSelect } from '../../gestureHandlerCommon';
+import type { GestureType } from '../gesture';
+import type { ComposedGesture } from '../gestureComposition';
+export interface GestureDetectorProps {
     children?: React.ReactNode;
     /**
      * A gesture object containing the configuration and callbacks.
@@ -16,19 +16,19 @@ interface GestureDetectorProps {
      * This parameter allows to specify which `userSelect` property should be applied to underlying view.
      * Possible values are `"none" | "auto" | "text"`. Default value is set to `"none"`.
      */
-    userSelect?: UserSelect | undefined;
+    userSelect?: UserSelect;
     /**
      * #### Web only
      * Specifies whether context menu should be enabled after clicking on underlying view with right mouse button.
      * Default value is set to `false`.
      */
-    enableContextMenu?: boolean | undefined;
+    enableContextMenu?: boolean;
     /**
      * #### Web only
      * This parameter allows to specify which `touchAction` property should be applied to underlying view.
      * Supports all CSS touch-action values (e.g. `"none"`, `"pan-y"`). Default value is set to `"none"`.
      */
-    touchAction?: TouchAction | undefined;
+    touchAction?: TouchAction;
 }
 /**
  * `GestureDetector` is responsible for creating and updating native gesture handlers based on the config of provided gesture.
@@ -46,5 +46,4 @@ interface GestureDetectorProps {
  * @see https://docs.swmansion.com/react-native-gesture-handler/docs/gestures/gesture-detector
  */
 export declare const GestureDetector: (props: GestureDetectorProps) => React.JSX.Element;
-export {};
 //# sourceMappingURL=index.d.ts.map

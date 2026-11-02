@@ -34,10 +34,14 @@
 
 #if !TARGET_OS_OSX
 - (void)handleGesture:(UIGestureRecognizer *)recognizer;
-- (void)handleGesture:(UIGestureRecognizer *)recognizer fromReset:(BOOL)fromReset;
+- (void)handleGesture:(UIGestureRecognizer *)recognizer
+                fromReset:(BOOL)fromReset
+    fromManualStateChange:(BOOL)fromManualStateChange;
 #else
 - (void)handleGesture:(NSGestureRecognizer *)recognizer;
-- (void)handleGesture:(NSGestureRecognizer *)recognizer fromReset:(BOOL)fromReset;
+- (void)handleGesture:(NSGestureRecognizer *)recognizer
+                fromReset:(BOOL)fromReset
+    fromManualStateChange:(BOOL)fromManualStateChange;
 #endif
 
 @end
@@ -57,24 +61,25 @@
 
 - (void)handleGesture:(UIGestureRecognizer *)recognizer
 {
-  previousTime = CACurrentMediaTime();
-  [_gestureHandler handleGesture:recognizer fromReset:NO];
+  [self handleGesture:recognizer fromReset:NO fromManualStateChange:NO];
 }
 
-- (void)handleGesture:(UIGestureRecognizer *)recognizer fromReset:(BOOL)fromReset
+- (void)handleGesture:(UIGestureRecognizer *)recognizer
+                fromReset:(BOOL)fromReset
+    fromManualStateChange:(BOOL)fromManualStateChange
 {
   previousTime = CACurrentMediaTime();
-  [_gestureHandler handleGesture:recognizer fromReset:fromReset];
+  [_gestureHandler handleGesture:recognizer fromReset:fromReset fromManualStateChange:fromManualStateChange];
 }
 
 - (void)triggerAction
 {
-  [self handleGesture:self fromReset:NO];
+  [self handleGesture:self fromReset:NO fromManualStateChange:NO];
 }
 
 - (void)triggerActionFromReset
 {
-  [self handleGesture:self fromReset:YES];
+  [self handleGesture:self fromReset:YES fromManualStateChange:NO];
 }
 
 - (CGPoint)translationInView
@@ -89,6 +94,12 @@
 {
   [_gestureHandler setCurrentPointerTypeForEvent:event];
   [super touchesBegan:touches withEvent:event];
+
+  if (self.state == UIGestureRecognizerStatePossible && ![self.delegate gestureRecognizerShouldBegin:self]) {
+    self.state = UIGestureRecognizerStateFailed;
+    return;
+  }
+
   [_gestureHandler.pointerTracker touchesBegan:touches withEvent:event];
 
   self.state = UIGestureRecognizerStatePossible;
@@ -225,11 +236,15 @@
 
   recognizer.minimumPressDuration = 0.5;
   recognizer.allowableMovement = 10;
+
+#if !TARGET_OS_TV
+  recognizer.numberOfTouchesRequired = 1;
+#endif
 }
 
-- (void)configure:(NSDictionary *)config
+- (void)updateConfig:(NSDictionary *)config
 {
-  [super configure:config];
+  [super updateConfig:config];
   RNBetterLongPressGestureRecognizer *recognizer = (RNBetterLongPressGestureRecognizer *)_recognizer;
 
   id prop = config[@"minDurationMs"];
@@ -276,7 +291,7 @@
 
 - (RNGestureHandlerEventExtraData *)eventExtraData:(UIGestureRecognizer *)recognizer
 {
-  return [RNGestureHandlerEventExtraData forPosition:[recognizer locationInView:recognizer.view]
+  return [RNGestureHandlerEventExtraData forPosition:[recognizer locationInView:self.coordinateView]
                                 withAbsolutePosition:[recognizer locationInView:recognizer.view.window]
                                  withNumberOfTouches:recognizer.numberOfTouches
                                         withDuration:[(RNBetterLongPressGestureRecognizer *)recognizer getDuration]
@@ -287,7 +302,7 @@
 
 - (RNGestureHandlerEventExtraData *)eventExtraData:(NSGestureRecognizer *)recognizer
 {
-  return [RNGestureHandlerEventExtraData forPosition:[recognizer locationInView:recognizer.view]
+  return [RNGestureHandlerEventExtraData forPosition:[recognizer locationInView:self.coordinateView]
                                 withAbsolutePosition:[recognizer locationInView:recognizer.view.window.contentView]
                                  withNumberOfTouches:1
                                         withDuration:[(RNBetterLongPressGestureRecognizer *)recognizer getDuration]

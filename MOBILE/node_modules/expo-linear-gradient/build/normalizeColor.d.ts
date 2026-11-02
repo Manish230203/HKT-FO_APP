@@ -7,4 +7,3 @@
  */
 import type { ColorValue } from 'react-native';
 export declare function normalizeColor(color?: ColorValue, opacity?: number): void | string;
-//# sourceMappingURL=normalizeColor.d.ts.map
