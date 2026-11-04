@@ -266,15 +266,9 @@ export default function ChecklistFormScreen() {
         res?.message || `Site inspection checklist for ${siteName} has been successfully recorded.`,
         [
           {
-            text: t('field_officer_visits') || 'Visits',
+            text: t('completed_visits') || 'View Completed Report',
             onPress: () => {
               router.replace('/visits?tab=completed');
-            },
-          },
-          {
-            text: t('dashboard'),
-            onPress: () => {
-              router.replace('/(tabs)/dashboard');
             },
           },
         ]

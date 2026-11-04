@@ -11,7 +11,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import {
   ArrowLeft,
   Search,
@@ -96,29 +96,29 @@ export default function AssignedSitesScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#0A1128' : colors.background }]} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" />
+      {/* Hide Expo Router stack header to eliminate duplicate top bar & second back button */}
+      <Stack.Screen options={{ headerShown: false }} />
 
       {/* TOP NAVIGATION BAR */}
       <View style={styles.topBar}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={styles.backButton}
+          style={styles.navIconButton}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <ArrowLeft color="#FFFFFF" size={24} />
+          <ArrowLeft color="#FFFFFF" size={22} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Assigned Sites</Text>
           <View style={styles.officerBadgeRow}>
-            <View style={styles.officerAvatarCircle}>
-              <Shield color="#00D2FF" size={14} />
-            </View>
+            <Shield color="#00D2FF" size={12} />
             <Text style={styles.officerCodeText}>{officerCode}</Text>
           </View>
-          <Text style={styles.headerTitle}>Assigned Sites</Text>
         </View>
 
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} activeOpacity={0.7}>
+        <TouchableOpacity onPress={onRefresh} style={styles.navIconButton} activeOpacity={0.7}>
           <RefreshCw color="#94A3B8" size={18} />
         </TouchableOpacity>
       </View>
@@ -150,10 +150,10 @@ export default function AssignedSitesScreen() {
           <View style={styles.summaryBannerDivider} />
           <View style={styles.summaryBannerRight}>
             <Text style={styles.summaryDutyText}>
-              {summary.total_present} / {summary.total_required}
+              {summary.total_live_present ?? summary.total_present} / {summary.total_required} Live Present
             </Text>
             <Text style={styles.summaryDutySubText}>
-              Total Guards On Duty ({summary.overall_percentage}% Overall)
+              Deployed: {summary.total_deployed ?? summary.total_present} • ({summary.overall_percentage}% Present)
             </Text>
           </View>
         </View>
@@ -167,13 +167,15 @@ export default function AssignedSitesScreen() {
         ) : filteredSites.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Building2 color="#475569" size={48} />
-            <Text style={styles.emptyTitle}>No Sites Found</Text>
+            <Text style={styles.emptyTitle}>No Assigned Sites Found</Text>
             <Text style={styles.emptyDesc}>
-              {searchQuery ? 'No assigned sites match your search.' : 'No sites are currently assigned to your profile.'}
+              {searchQuery ? 'No assigned sites match your search.' : 'No sites are currently assigned to your employee code in the database.'}
             </Text>
           </View>
         ) : (
           filteredSites.map((item) => {
+            const livePresent = item.live_present ?? item.present;
+            const deployed = item.deployed ?? item.present;
             const isOptimal = item.shortage === 0;
             return (
               <TouchableOpacity
@@ -202,12 +204,19 @@ export default function AssignedSitesScreen() {
                     Client: {item.client_name}
                   </Text>
 
-                  {/* Badges Row */}
+                  {/* Badges Row (Option B: Both Deployed Strength & Live Present) */}
                   <View style={styles.badgeRow}>
-                    {/* Present Badge */}
-                    <View style={styles.presentBadge}>
-                      <Text style={styles.presentBadgeText}>
-                        {item.present} / {item.required} Present
+                    {/* Live Present Badge */}
+                    <View style={[styles.presentBadge, livePresent === 0 && styles.zeroPresentBadge]}>
+                      <Text style={[styles.presentBadgeText, livePresent === 0 && styles.zeroPresentBadgeText]}>
+                        {livePresent} / {item.required} Live Present
+                      </Text>
+                    </View>
+
+                    {/* Deployed Roster Strength Badge */}
+                    <View style={styles.deployedBadge}>
+                      <Text style={styles.deployedBadgeText}>
+                        {deployed} Deployed
                       </Text>
                     </View>
 
@@ -215,7 +224,7 @@ export default function AssignedSitesScreen() {
                     {isOptimal ? (
                       <View style={styles.optimalBadge}>
                         <CheckCircle2 color="#10B981" size={12} />
-                        <Text style={styles.optimalBadgeText}>100% Deployed</Text>
+                        <Text style={styles.optimalBadgeText}>Optimal</Text>
                       </View>
                     ) : (
                       <View style={styles.shortageBadge}>
@@ -224,13 +233,6 @@ export default function AssignedSitesScreen() {
                           Shortage: -{item.shortage}
                         </Text>
                       </View>
-                    )}
-
-                    {/* Deployment Percentage */}
-                    {!isOptimal && (
-                      <Text style={styles.deploymentPctText}>
-                        {item.deployment_percentage}% Deployed
-                      </Text>
                     )}
                   </View>
                 </View>
@@ -257,43 +259,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    minHeight: 56,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
   },
-  backButton: {
-    padding: 8,
+  navIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerCenter: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   officerBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-  officerAvatarCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0, 210, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   officerCodeText: {
-    color: '#94A3B8',
-    fontSize: 12,
+    color: '#38BDF8',
+    fontSize: 11,
     fontWeight: '600',
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  refreshButton: {
-    padding: 8,
   },
   scrollContent: {
     padding: 16,
@@ -302,7 +301,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0F1A36',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
@@ -435,6 +434,26 @@ const styles = StyleSheet.create({
   },
   presentBadgeText: {
     color: '#22C55E',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  zeroPresentBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  zeroPresentBadgeText: {
+    color: '#F87171',
+  },
+  deployedBadge: {
+    backgroundColor: 'rgba(0, 210, 255, 0.12)',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 210, 255, 0.35)',
+  },
+  deployedBadgeText: {
+    color: '#00D2FF',
     fontSize: 11,
     fontWeight: '700',
   },

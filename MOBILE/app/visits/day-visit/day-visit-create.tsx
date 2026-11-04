@@ -603,7 +603,7 @@ export default function CreateDayVisitReportScreen() {
       setAlertInfo({
         visible: true,
         title: t('day_visit_submitted') || 'Report Submitted',
-        message: 'Day Visit Report submitted successfully! Please proceed to Check-Out to complete your site visit.',
+        message: 'Day Visit Report submitted successfully! Redirecting to Completed Visits...',
         type: 'success',
       });
     } catch (e: any) {
@@ -1167,7 +1167,7 @@ export default function CreateDayVisitReportScreen() {
         type={alertInfo.type}
         onClose={() => {
           setAlertInfo({ ...alertInfo, visible: false });
-          if (alertInfo.type === 'success') router.replace('/(tabs)/dashboard');
+          if (alertInfo.type === 'success') router.replace('/visits?tab=completed');
         }}
       />
 

@@ -10,7 +10,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -106,16 +106,18 @@ export default function SiteManpowerScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#0A1128' : colors.background }]} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" />
+      {/* Hide Expo Router stack header to eliminate duplicate top bar & second back button */}
+      <Stack.Screen options={{ headerShown: false }} />
 
       {/* TOP NAVIGATION BAR */}
       <View style={styles.topBar}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={styles.backButton}
+          style={styles.navIconButton}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <ArrowLeft color="#FFFFFF" size={24} />
+          <ArrowLeft color="#FFFFFF" size={22} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -127,7 +129,7 @@ export default function SiteManpowerScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton} activeOpacity={0.7}>
+        <TouchableOpacity onPress={onRefresh} style={styles.navIconButton} activeOpacity={0.7}>
           <RefreshCw color="#94A3B8" size={18} />
         </TouchableOpacity>
       </View>
@@ -174,13 +176,13 @@ export default function SiteManpowerScreen() {
           </View>
         ) : (
           <>
-            {/* KPI METRIC CARDS (2x2 GRID) */}
+            {/* KPI METRIC CARDS (2x2 GRID - Option B: Roster Deployed & Live Punches) */}
             <View style={styles.sectionHeaderBox}>
               <Text style={styles.sectionHeaderText}>KPI Metric Cards</Text>
             </View>
 
             <View style={styles.kpiGrid}>
-              {/* Row 1 */}
+              {/* Row 1: Required & Deployed */}
               <View style={styles.kpiRow}>
                 {/* Required Card */}
                 <View style={styles.kpiCard}>
@@ -188,16 +190,30 @@ export default function SiteManpowerScreen() {
                   <Text style={styles.kpiValueWhite}>{kpi.required} Guards</Text>
                 </View>
 
-                {/* Present Card */}
-                <View style={[styles.kpiCard, styles.kpiCardPresent]}>
-                  <Text style={styles.kpiLabel}>Present:</Text>
-                  <Text style={styles.kpiValueGreen}>{kpi.present} Guards</Text>
+                {/* Deployed (Roster Strength) Card */}
+                <View style={[styles.kpiCard, styles.kpiCardDeployed]}>
+                  <Text style={styles.kpiLabel}>Deployed (Roster):</Text>
+                  <Text style={styles.kpiValueCyan}>{kpi.deployed ?? kpi.present} Guards</Text>
                 </View>
               </View>
 
-              {/* Row 2 */}
+              {/* Row 2: Live Present & Shortage */}
               <View style={styles.kpiRow}>
-                {/* Shortage Card */}
+                {/* Live Present (Today's Punches) Card */}
+                {(() => {
+                  const liveCount = kpi.live_present ?? kpi.present;
+                  const isZero = liveCount === 0 && kpi.required > 0;
+                  return (
+                    <View style={[styles.kpiCard, isZero ? styles.kpiCardZero : styles.kpiCardPresent]}>
+                      <Text style={styles.kpiLabel}>Live Present:</Text>
+                      <Text style={isZero ? styles.kpiValueRed : styles.kpiValueGreen}>
+                        {liveCount} Guards
+                      </Text>
+                    </View>
+                  );
+                })()}
+
+                {/* Shortage Card with Attendance Percentage */}
                 <View style={styles.kpiCard}>
                   <View style={styles.kpiHeaderRow}>
                     <Text style={styles.kpiLabel}>Shortage:</Text>
@@ -207,11 +223,7 @@ export default function SiteManpowerScreen() {
                       </Text>
                     </View>
                   </View>
-                </View>
-
-                {/* Deployment Card with Progress Bar */}
-                <View style={styles.kpiCard}>
-                  <Text style={styles.kpiValueCyan}>{kpi.deployment_percentage}% Deployed</Text>
+                  <Text style={styles.attendanceSubText}>{kpi.deployment_percentage}% Punched</Text>
                   <View style={styles.progressBarTrack}>
                     <View
                       style={[
@@ -238,7 +250,9 @@ export default function SiteManpowerScreen() {
               </View>
             ) : (
               designations.map((desig) => {
-                const isFull = desig.shortage === 0;
+                const liveCount = desig.live_present ?? desig.present;
+                const deployedCount = desig.deployed ?? desig.required;
+                const isFull = desig.shortage === 0 && liveCount >= desig.required;
                 return (
                   <View key={desig.key} style={styles.desigCard}>
                     <View style={styles.desigCardTop}>
@@ -256,21 +270,24 @@ export default function SiteManpowerScreen() {
                       {isFull ? (
                         <View style={styles.optimalStatusRow}>
                           <CheckCircle2 color="#10B981" size={16} />
-                          <Text style={styles.optimalStatusText}>100%</Text>
+                          <Text style={styles.optimalStatusText}>100% Present</Text>
                         </View>
                       ) : (
-                        <Text style={styles.desigPctText}>{desig.percentage}%</Text>
+                        <Text style={desig.percentage > 0 ? styles.desigPctText : styles.desigPctZeroText}>
+                          {desig.percentage}% Present
+                        </Text>
                       )}
                     </View>
 
-                    {/* Stats Sub-Row */}
+                    {/* Stats Sub-Row (Option B) */}
                     <Text style={styles.desigStatsText}>
-                      Required: <Text style={styles.boldWhite}>{desig.required}</Text>  |  
-                      Present: <Text style={styles.boldGreen}>{desig.present}</Text>  |  
-                      {isFull ? (
-                        <Text style={styles.boldGreen}> Optimal: 0</Text>
+                      Req: <Text style={styles.boldWhite}>{desig.required}</Text>  •  
+                      Dep: <Text style={styles.boldCyan}>{deployedCount}</Text>  •  
+                      Live: <Text style={liveCount > 0 ? styles.boldGreen : styles.boldRed}>{liveCount}</Text>  •  
+                      {desig.shortage === 0 ? (
+                        <Text style={styles.boldGreen}>Optimal</Text>
                       ) : (
-                        <Text style={styles.boldAmber}> Shortage: -{desig.shortage}</Text>
+                        <Text style={styles.boldAmber}>Shortage: -{desig.shortage}</Text>
                       )}
                     </Text>
 
@@ -281,7 +298,7 @@ export default function SiteManpowerScreen() {
                           styles.desigProgressFill,
                           {
                             width: `${Math.min(100, Math.max(0, desig.percentage))}%`,
-                            backgroundColor: isFull ? '#10B981' : '#00D2FF',
+                            backgroundColor: isFull ? '#10B981' : (desig.percentage > 0 ? '#00D2FF' : '#EF4444'),
                           },
                         ]}
                       />
@@ -306,16 +323,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    minHeight: 56,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
   },
-  backButton: {
-    padding: 8,
+  navIconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerCenter: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     marginHorizontal: 8,
   },
   siteHeaderTitle: {
@@ -330,9 +354,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
     textAlign: 'center',
-  },
-  refreshButton: {
-    padding: 8,
   },
   scrollContent: {
     padding: 16,
@@ -410,6 +431,12 @@ const styles = StyleSheet.create({
   kpiCardPresent: {
     borderColor: 'rgba(34, 197, 94, 0.3)',
   },
+  kpiCardDeployed: {
+    borderColor: 'rgba(0, 210, 255, 0.3)',
+  },
+  kpiCardZero: {
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
   kpiLabel: {
     color: '#94A3B8',
     fontSize: 12,
@@ -426,11 +453,22 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
   },
+  kpiValueRed: {
+    color: '#F87171',
+    fontSize: 17,
+    fontWeight: '800',
+  },
   kpiValueCyan: {
     color: '#00D2FF',
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '800',
-    marginBottom: 6,
+  },
+  attendanceSubText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 3,
+    marginBottom: 2,
   },
   kpiHeaderRow: {
     flexDirection: 'row',
@@ -524,6 +562,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  desigPctZeroText: {
+    color: '#F87171',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   desigStatsText: {
     color: '#94A3B8',
     fontSize: 12,
@@ -533,12 +576,20 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
   },
+  boldCyan: {
+    color: '#00D2FF',
+    fontWeight: '700',
+  },
   boldGreen: {
     color: '#22C55E',
     fontWeight: '700',
   },
   boldAmber: {
     color: '#F59E0B',
+    fontWeight: '700',
+  },
+  boldRed: {
+    color: '#F87171',
     fontWeight: '700',
   },
   desigProgressTrack: {

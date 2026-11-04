@@ -105,6 +105,14 @@ function ThemedNavigation() {
                 name="patrol/checklist"
                 options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
+              <Stack.Screen
+                name="guard-attendance/index"
+                options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="guard-attendance/[siteId]"
+                options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
+              />
             </Stack>
 
     </LocationGuard>

@@ -596,7 +596,7 @@ export default function CreateNightVisitReportScreen() {
       setAlertInfo({
         visible: true,
         title: t('night_visit_submitted') || 'Report Submitted',
-        message: 'Night Round Report submitted successfully! Please proceed to Check-Out to complete your site visit.',
+        message: 'Night Round Report submitted successfully! Redirecting to Completed Visits...',
         type: 'success',
       });
     } catch (e: any) {
@@ -1167,7 +1167,7 @@ export default function CreateNightVisitReportScreen() {
         type={alertInfo.type}
         onClose={() => {
           setAlertInfo({ ...alertInfo, visible: false });
-          if (alertInfo.type === 'success') router.replace('/(tabs)/dashboard');
+          if (alertInfo.type === 'success') router.replace('/visits?tab=completed');
         }}
       />
 

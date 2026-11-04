@@ -233,12 +233,12 @@ export default function TourSummaryScreen() {
 
       Alert.alert(
         t('tour_completed_title') || 'Tour Completed! 🎉',
-        'Your site tour checklist and photos have been submitted successfully!\n\nIn Visits, tap "Check-Out" on this site to complete your duty session.',
+        'Your site tour checklist and photos have been submitted successfully! View your generated report in Completed Visits.',
         [
           {
-            text: t('ok') || 'Go to Visits',
+            text: t('completed_visits') || 'View Completed Report',
             onPress: () => {
-              router.replace('/visits');
+              router.replace('/visits?tab=completed');
             },
           },
         ]

@@ -288,7 +288,7 @@ export default function CreateGeneralVisitScreen() {
       setAlertInfo({
         visible: true,
         title: t('general_visit_submitted') || 'Report Submitted',
-        message: 'General Visit Report submitted successfully! Please proceed to Check-Out to complete your site visit.',
+        message: 'General Visit Report submitted successfully! Redirecting to Completed Visits...',
         type: 'success',
       });
     } catch (e: any) {
@@ -307,7 +307,7 @@ export default function CreateGeneralVisitScreen() {
   const handleAlertDismiss = () => {
     setAlertInfo((prev) => ({ ...prev, visible: false }));
     if (alertInfo.type === 'success') {
-      router.replace('/visits');
+      router.replace('/visits?tab=completed');
     }
   };
 

@@ -9,6 +9,8 @@ export interface AssignedSiteItem {
   client_name: string;
   branch_name?: string;
   required: number;
+  deployed?: number;
+  live_present?: number;
   present: number;
   shortage: number;
   deployment_percentage: number;
@@ -17,8 +19,10 @@ export interface AssignedSiteItem {
 
 export interface AssignedSitesSummary {
   total_sites: number;
-  total_present: number;
   total_required: number;
+  total_deployed?: number;
+  total_live_present?: number;
+  total_present: number;
   total_shortage: number;
   overall_percentage: number;
 }
@@ -41,6 +45,8 @@ export interface SiteDesignationBreakdown {
   key: string;
   title: string;
   required: number;
+  deployed?: number;
+  live_present?: number;
   present: number;
   shortage: number;
   percentage: number;
@@ -49,6 +55,8 @@ export interface SiteDesignationBreakdown {
 
 export interface SiteManpowerKPI {
   required: number;
+  deployed?: number;
+  live_present?: number;
   present: number;
   shortage: number;
   deployment_percentage: number;

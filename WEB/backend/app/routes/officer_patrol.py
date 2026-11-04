@@ -1,3585 +1,3616 @@
-from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import JSONResponse
-from app.database import get_db_connection
-import os
-import base64
-import json
-import time
-import random
-import uuid
-from datetime import datetime, date
-from typing import Dict, Any, List, Optional
-
-router = APIRouter()
-
-def get_authenticated_employee(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
-    import base64
-    if authorization and isinstance(authorization, str) and authorization.startswith("Bearer "):
-        try:
-            token = authorization.split(" ")[1]
-            payload = json.loads(base64.b64decode(token.encode()).decode())
-            if isinstance(payload, dict) and (payload.get("id") or payload.get("employee_id")):
-                return payload
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid authentication token")
-    raise HTTPException(status_code=401, detail="Authentication required")
-
-
-# Helper to deserialize longtext fields
-def serialize_field(val: Any) -> str:
-    if val is None:
-        return None
-    if isinstance(val, (dict, list)):
-        return json.dumps(val)
-    return str(val)
-
-def deserialize_field(val: Any) -> Any:
-    if not val:
-        return None
-    try:
-        return json.loads(val)
-    except Exception:
-        return val
-
-def format_time_hh_mm(t):
-    if not t:
-        return ""
-    if hasattr(t, "strftime"):
-        return t.strftime("%H:%M")
-    s = str(t).strip()
-    if " " in s:
-        s = s.split(" ")[1]
-    if len(s) >= 5 and ":" in s:
-        return s[:5]
-    return s
-
-_has_column_cache = {}
-
-def table_has_column(cursor, table: str, column: str) -> bool:
-    key = f"{table}.{column}"
-    if key in _has_column_cache:
-        return _has_column_cache[key]
-    try:
-        cursor.execute(f"SHOW COLUMNS FROM {table} LIKE %s", (column,))
-        has_col = bool(cursor.fetchone())
-        _has_column_cache[key] = has_col
-        return has_col
-    except Exception:
-        return False
-
-def process_and_save_photo(photo_str: str) -> str:
-    if not photo_str or not isinstance(photo_str, str):
-        return ""
-    
-    photo_str = photo_str.strip()
-    
-    # If already a server relative URL or external HTTP/HTTPS URL
-    if photo_str.startswith("/uploads/") or photo_str.startswith("http://") or photo_str.startswith("https://"):
-        return photo_str
-
-    # If it is a base64 string
-    if "base64," in photo_str or (len(photo_str) > 100 and not photo_str.startswith("file://")):
-        try:
-            if "base64," in photo_str:
-                header, base64_data = photo_str.split("base64,", 1)
-            else:
-                base64_data = photo_str
-            
-            image_data = base64.b64decode(base64_data)
-            filename = f"report_photo_{uuid.uuid4().hex[:12]}.jpg"
-            backend_base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            uploads_dir = os.path.join(backend_base_dir, "uploads")
-            os.makedirs(uploads_dir, exist_ok=True)
-            file_path = os.path.join(uploads_dir, filename)
-            
-            with open(file_path, "wb") as f:
-                f.write(image_data)
-            
-            return f"/uploads/{filename}"
-        except Exception as e:
-            print(f"Error saving base64 photo: {e}")
-            return photo_str
-
-    return photo_str
-
-def extract_and_process_report_photos(photos: Any, checklist: Any, observations: Any, attachments: Any = None) -> tuple:
-    all_saved_photos = []
-
-    # 1. Process checklist items
-    if isinstance(checklist, list):
-        for item in checklist:
-            if isinstance(item, dict):
-                if item.get("photo"):
-                    saved_url = process_and_save_photo(item["photo"])
-                    item["photo"] = saved_url
-                    if saved_url and saved_url not in all_saved_photos:
-                        all_saved_photos.append(saved_url)
-                if item.get("photos") and isinstance(item["photos"], list):
-                    saved_list = []
-                    for p in item["photos"]:
-                        s_p = process_and_save_photo(p)
-                        if s_p:
-                            saved_list.append(s_p)
-                            if s_p not in all_saved_photos:
-                                all_saved_photos.append(s_p)
-                    item["photos"] = saved_list
-
-    # 2. Process observations
-    if isinstance(observations, list):
-        for obs in observations:
-            if isinstance(obs, dict) and obs.get("photos") and isinstance(obs["photos"], list):
-                saved_list = []
-                for p in obs["photos"]:
-                    s_p = process_and_save_photo(p)
-                    if s_p:
-                        saved_list.append(s_p)
-                        if s_p not in all_saved_photos:
-                            all_saved_photos.append(s_p)
-                obs["photos"] = saved_list
-
-    # 3. Process direct photos
-    if isinstance(photos, list):
-        for p in photos:
-            s_p = process_and_save_photo(p)
-            if s_p and s_p not in all_saved_photos:
-                all_saved_photos.append(s_p)
-
-    # 4. Process attachments & suggestion photos
-    saved_attachments = []
-    if isinstance(attachments, list):
-        for a in attachments:
-            s_a = process_and_save_photo(a)
-            if s_a:
-                saved_attachments.append(s_a)
-                if s_a not in all_saved_photos:
-                    all_saved_photos.append(s_a)
-    elif isinstance(attachments, str) and attachments.strip():
-        s_a = process_and_save_photo(attachments.strip())
-        if s_a:
-            saved_attachments.append(s_a)
-            if s_a not in all_saved_photos:
-                all_saved_photos.append(s_a)
-
-    return all_saved_photos, checklist, observations, saved_attachments
-
-def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
-    if not r:
-        return r
-    # Map DB keys to frontend expected camelCase keys
-    r["id"] = r.get("oid")
-    r["reportNo"] = r.get("report_id")
-    r["reportId"] = r.get("report_id")
-    r["visitDate"] = r.get("visit_date")
-    r["visitType"] = r.get("visit_type")
-    r["createdOn"] = r.get("created_on")
-    r["clientId"] = r.get("client_id")
-    r["siteId"] = r.get("site_id")
-    r["customVisitId"] = r.get("custom_visit_id")
-    r["isCustomVisit"] = bool(r.get("custom_visit_id"))
-    r["siteName"] = r.get("site_name") or r.get("unit") or "N/A"
-
-    sess_in = format_time_hh_mm(r.get("session_check_in"))
-    sess_out = format_time_hh_mm(r.get("session_check_out"))
-
-    r["startTime"] = sess_in or format_time_hh_mm(r.get("start_time") or r.get("check_in_time") or r.get("check-in_time")) or ""
-    r["endTime"] = sess_out or format_time_hh_mm(r.get("end_time") or r.get("check_out_time") or r.get("check-out_time")) or ""
-    r["checkInTime"] = r["startTime"]
-    r["checkOutTime"] = r["endTime"]
-    r["lectureDetails"] = r.get("lecture_details")
-    r["randomChecking"] = r.get("random_checking")
-    r["overallRemarks"] = r.get("overall_remarks")
-    r["clientName"] = r.get("client_name") or r.get("company") or "N/A"
-    r["company"] = r.get("client_name") or r.get("company") or "N/A"
-    
-    unit_val = r.get("unit")
-    if not unit_val or unit_val in ("Unspecified Unit", "N/A"):
-        unit_val = r.get("site_name") or "N/A"
-    r["unit"] = unit_val
-
-    rep_id = r.get("report_id") or ""
-    if ("-N/A-" in rep_id or "-Unspecified Unit-" in rep_id) and r.get("site_name"):
-        rep_id = rep_id.replace("-N/A-", f"-{r['site_name']}-").replace("-Unspecified Unit-", f"-{r['site_name']}-")
-    r["reportNo"] = rep_id
-    r["reportId"] = rep_id
-
-    r["branchId"] = r.get("branch_id")
-    r["emailAccess"] = 1 if r.get("email_access") in (1, "1", True) else 0
-    
-    # Company details mapping for officer
-    r["companyName"] = r.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "Unique Delta Force Security Pvt. Ltd.")
-    r["companyShortName"] = r.get("company_short_name") or ("EISPL" if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "UDF")
-    r["companyId"] = r.get("company_id") or (4 if "Anil Bhosale" in str(r.get("officer")) else 1)
-    
-    # Deserialization of list/dict fields
-    r["photos"] = deserialize_field(r.get("photos")) or []
-    r["guards"] = deserialize_field(r.get("guards")) or []
-    r["checklist"] = deserialize_field(r.get("checklist")) or []
-    r["observations"] = deserialize_field(r.get("observations")) or []
-    r["attachments"] = deserialize_field(r.get("attachments")) or []
-    return r
-
-# --- ASSESSMENT CLIENTS & SITES ENDPOINTS ---
-
-def get_officer_branch(cursor, emp_oid=None, empOid=None, branch_id=None, branch_name=None, authorization=None):
-    """
-    Resolves the branch name and branch id for the field officer.
-    Checks:
-    1. Direct parameters (branch_name, branch_id)
-    2. emp_oid / empOid lookup against EMPLOYEE and BRANCH tables
-    3. Bearer token in authorization header (decode base64 JSON payload for id/employee_id/branch_name/branch_id)
-    """
-    resolved_branch_name = branch_name.strip() if branch_name and str(branch_name).strip() else None
-    resolved_branch_id = branch_id
-
-    target_emp = empOid or emp_oid
-
-    # If branch or emp is not explicitly given, try extracting from Bearer token
-    if (not resolved_branch_name or not target_emp) and authorization and authorization.startswith("Bearer "):
-        try:
-            token_part = authorization.split(" ")[1]
-            token_data = json.loads(base64.b64decode(token_part.encode()).decode())
-            if not target_emp:
-                target_emp = token_data.get("id") or token_data.get("empOid") or token_data.get("employee_id")
-            if not resolved_branch_name and token_data.get("branch_name"):
-                resolved_branch_name = str(token_data.get("branch_name")).strip()
-            if not resolved_branch_id and token_data.get("branch_id"):
-                resolved_branch_id = token_data.get("branch_id")
-        except Exception:
-            pass
-
-    # If we have target_emp, look up employee in DB to get their current assigned branch
-    if target_emp and cursor:
-        try:
-            cursor.execute("""
-                SELECT e.BRANCH as branch_id, b.name as branch_name
-                FROM EMPLOYEE e
-                LEFT JOIN BRANCH b ON e.BRANCH = b.oid
-                WHERE e.oid = %s OR e.emp_code = %s
-                LIMIT 1
-            """, (str(target_emp), str(target_emp)))
-            row = cursor.fetchone()
-            if row:
-                if row.get("branch_name"):
-                    resolved_branch_name = str(row["branch_name"]).strip()
-                if row.get("branch_id"):
-                    resolved_branch_id = row["branch_id"]
-        except Exception as e:
-            print(f"Error fetching officer branch: {e}")
-
-    return resolved_branch_name, resolved_branch_id
-
-
-def check_existing_client_and_site(cursor, client_name: str, site_name: str, officer_branch_name: Optional[str] = None):
-    s_name = (site_name or "").strip()
-    c_name = (client_name or "").strip()
-    b_name = (officer_branch_name or "").strip()
-
-    # Both client and site name must be provided to check combination
-    if not s_name or not c_name:
-        return {"exists": False}
-
-    # 1. Check registered master SITE + CLIENTT (+ optionally BRANCH)
-    query = """
-        SELECT s.oid as site_id, s.name as site_name, cl.oid as client_id, cl.name as client_name, b.name as branch_name
-        FROM SITE s
-        JOIN CLIENTT cl ON s.CLIENTT = cl.oid
-        LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-        WHERE (
-            LOWER(TRIM(cl.name)) = LOWER(TRIM(%s))
-            OR LOWER(TRIM(cl.name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
-            OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(cl.name)), '%%')
-          )
-          AND (
-            LOWER(TRIM(s.name)) = LOWER(TRIM(%s))
-            OR LOWER(TRIM(s.name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
-            OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(s.name)), '%%')
-          )
-    """
-    params = [c_name, c_name, c_name, s_name, s_name, s_name]
-    if b_name:
-        query += " AND (b.name IS NULL OR LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))"
-        params.append(b_name)
-
-    query += """
-        ORDER BY (CASE WHEN LOWER(TRIM(s.name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC,
-                 (CASE WHEN LOWER(TRIM(cl.name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC
-        LIMIT 1
-    """
-    params.extend([s_name, c_name])
-
-    dup = None
-    try:
-        cursor.execute(query, tuple(params))
-        dup = cursor.fetchone()
-    except Exception as err:
-        print("Error checking client and site in master SITE/CLIENTT:", err)
-        dup = None
-
-    # 2. Check previous custom client visits from FIELD_OFFICER_NEW_CLIENT_VISITS
-    if not dup:
-        q_custom = """
-            SELECT ncv.oid as custom_visit_id, ncv.site_name, ncv.client_name, b.name as branch_name
-            FROM FIELD_OFFICER_NEW_CLIENT_VISITS ncv
-            LEFT JOIN BRANCH b ON ncv.branch_oid = b.oid
-            WHERE (
-                LOWER(TRIM(ncv.client_name)) = LOWER(TRIM(%s))
-                OR LOWER(TRIM(ncv.client_name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
-                OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(ncv.client_name)), '%%')
-              )
-              AND (
-                LOWER(TRIM(ncv.site_name)) = LOWER(TRIM(%s))
-                OR LOWER(TRIM(ncv.site_name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
-                OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(ncv.site_name)), '%%')
-              )
-        """
-        c_params = [c_name, c_name, c_name, s_name, s_name, s_name]
-        if b_name:
-            q_custom += " AND (b.name IS NULL OR LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))"
-            c_params.append(b_name)
-
-        q_custom += """
-            ORDER BY (CASE WHEN LOWER(TRIM(ncv.site_name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC,
-                     (CASE WHEN LOWER(TRIM(ncv.client_name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC
-            LIMIT 1
-        """
-        c_params.extend([s_name, c_name])
-        try:
-            cursor.execute(q_custom, tuple(c_params))
-            dup = cursor.fetchone()
-        except Exception as err:
-            print("Error checking client and site in custom visits:", err)
-            dup = None
-
-    if dup:
-        matched_site = dup.get("site_name") or s_name
-        matched_client = dup.get("client_name") or c_name
-        message = "This client and site combination already exists in the system."
-        return {
-            "exists": True,
-            "message": message,
-            "site_name": matched_site,
-            "client_name": matched_client,
-            "site_id": dup.get("site_id"),
-            "client_id": dup.get("client_id"),
-            "custom_visit_id": dup.get("custom_visit_id"),
-        }
-
-    return {"exists": False}
-
-
-@router.get("/visits/check-client-site")
-def api_check_existing_client_and_site(
-    client_name: str = Query(...),
-    site_name: str = Query(...),
-    emp_oid: Optional[str] = Query(None),
-    empOid: Optional[str] = Query(None),
-    branch_id: Optional[str] = Query(None),
-    branch_name: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None)
-):
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    cursor = None
-    try:
-        cursor = conn.cursor(dictionary=True)
-        resolved_branch_name, _ = get_officer_branch(
-            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
-        )
-        res = check_existing_client_and_site(cursor, client_name, site_name, officer_branch_name=resolved_branch_name)
-        return JSONResponse(content=res)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    finally:
-        if cursor:
-            try: cursor.close()
-            except Exception: pass
-        if conn:
-            try: conn.close()
-            except Exception: pass
-
-
-@router.get("/assessments/clients")
-def get_assessments_clients(
-    emp_oid: Optional[str] = Query(None), 
-    empOid: Optional[str] = Query(None), 
-    branch_id: Optional[str] = Query(None),
-    branch_name: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None)
-):
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    cursor = None
-    try:
-        cursor = conn.cursor(dictionary=True)
-        resolved_branch_name, resolved_branch_id = get_officer_branch(
-            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
-        )
-
-        if resolved_branch_name:
-            # Return only clients that have sites belonging to this branch (e.g. Pune)
-            query = """
-                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code, sb.name as branch_name
-                FROM CLIENTT cl
-                JOIN SITE s ON s.CLIENTT = cl.oid
-                JOIN BRANCH sb ON s.BRANCH = sb.oid
-                WHERE LOWER(TRIM(sb.name)) = LOWER(TRIM(%s))
-                ORDER BY cl.name ASC
-            """
-            cursor.execute(query, (resolved_branch_name,))
-            rows = cursor.fetchall()
-        elif resolved_branch_id:
-            query = """
-                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code, sb.name as branch_name
-                FROM CLIENTT cl
-                JOIN SITE s ON s.CLIENTT = cl.oid
-                LEFT JOIN BRANCH sb ON s.BRANCH = sb.oid
-                WHERE s.BRANCH = %s
-                ORDER BY cl.name ASC
-            """
-            cursor.execute(query, (resolved_branch_id,))
-            rows = cursor.fetchall()
-        else:
-            # Fallback if no branch could be determined
-            cursor.execute("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name ASC")
-            rows = cursor.fetchall()
-
-        return JSONResponse(content=rows)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    finally:
-        if cursor:
-            try: cursor.close()
-            except Exception: pass
-        if conn:
-            try: conn.close()
-            except Exception: pass
-
-@router.get("/assessments/sites")
-def get_assessments_sites(
-    client_id: Optional[int] = Query(None), 
-    company_id: Optional[int] = Query(None), 
-    branch_id: Optional[int] = Query(None),
-    branch_name: Optional[str] = Query(None),
-    emp_oid: Optional[str] = Query(None), 
-    empOid: Optional[str] = Query(None), 
-    authorization: Optional[str] = Header(None)
-):
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    cursor = None
-    try:
-        cursor = conn.cursor(dictionary=True)
-        resolved_branch_name, resolved_branch_id = get_officer_branch(
-            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
-        )
-
-        query = """
-            SELECT DISTINCT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name, 
-                   sg.latitude as latitude, 
-                   sg.longitude as longitude,
-                   sg.radius as radius
-            FROM SITE s 
-            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid 
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-            LEFT JOIN (
-                SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude, MAX(radius) as radius
-                FROM SITE_GATE_QRCODE 
-                WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
-                GROUP BY SITE
-            ) sg ON s.oid = sg.SITE
-        """
-        where_clauses = []
-        params = []
-
-        target_client = client_id or company_id
-        if target_client:
-            where_clauses.append("(s.CLIENTT = %s)")
-            params.append(target_client)
-
-        if resolved_branch_name:
-            where_clauses.append("(LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))")
-            params.append(resolved_branch_name)
-        elif resolved_branch_id:
-            where_clauses.append("(s.BRANCH = %s)")
-            params.append(resolved_branch_id)
-
-        if where_clauses:
-            query += " WHERE " + " AND ".join(where_clauses)
-
-        query += " ORDER BY s.name"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        return JSONResponse(content=rows)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    finally:
-        if cursor:
-            try: cursor.close()
-            except Exception: pass
-        if conn:
-            try: conn.close()
-            except Exception: pass
-
-@router.post("/assessments/branches/{branch_id}/email-access")
-@router.put("/assessments/branches/{branch_id}")
-def update_branch_email_access(branch_id: int, payload: dict):
-    email_access = 1 if payload.get("emailAccess") in (1, "1", True) or payload.get("email_access") in (1, "1", True) else 0
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    cursor = None
-    try:
-        cursor = conn.cursor(dictionary=True)
-        if branch_id in (3, 6):
-            cursor.execute("UPDATE BRANCH SET email_access = %s WHERE oid IN (3, 6) OR LOWER(name) LIKE '%pune%'", (email_access,))
-        else:
-            cursor.execute("UPDATE BRANCH SET email_access = %s WHERE oid = %s", (email_access, branch_id))
-        conn.commit()
-        return JSONResponse(content={"success": True, "message": f"Updated email access for branch {branch_id} to {email_access}"})
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    finally:
-        if cursor:
-            try: cursor.close()
-            except Exception: pass
-        if conn:
-            try: conn.close()
-            except Exception: pass
-
-@router.get("/site-guards")
-def get_site_guards(
-    site_id: Optional[int] = Query(None),
-    siteId: Optional[int] = Query(None),
-    shift: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None)
-):
-    target_site_id = site_id or siteId
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    cursor = None
-    try:
-        cursor = conn.cursor(dictionary=True)
-        if target_site_id:
-            query = """
-                SELECT 
-                    e.oid as empOid,
-                    e.name,
-                    e.emp_code as empCode,
-                    COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
-                    'Satisfactory' as rating,
-                    'Present' as status
-                FROM EMPLOYEE e
-                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-                WHERE e.active = 1 AND e.SITE = %s
-                ORDER BY e.name
-            """
-            cursor.execute(query, (target_site_id,))
-        else:
-            query = """
-                SELECT 
-                    e.oid as empOid,
-                    e.name,
-                    e.emp_code as empCode,
-                    COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
-                    'Satisfactory' as rating,
-                    'Present' as status
-                FROM EMPLOYEE e
-                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-                WHERE e.active = 1
-                LIMIT 50
-            """
-            cursor.execute(query)
-        rows = cursor.fetchall()
-        
-        guards_list = []
-        for r in rows:
-            guards_list.append({
-                "name": r.get("name") or "Security Guard",
-                "empCode": r.get("empCode") or f"G{r.get('empOid')}",
-                "empOid": r.get("empOid"),
-                "dutyType": r.get("dutyType") or "Security Guard",
-                "rating": "Satisfactory",
-                "status": "Present"
-            })
-        return JSONResponse(content=guards_list)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    finally:
-        if cursor:
-            try: cursor.close()
-            except Exception: pass
-        if conn:
-            try: conn.close()
-            except Exception: pass
-
-# --- PLANNED VISITS ENDPOINT (FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY) ---
-
-@router.get("/planned-visits")
-def get_planned_visits(empOid: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
-    import calendar
-    from datetime import datetime
-
-    # Strictly require valid authentication
-    auth_user = get_authenticated_employee(authorization)
-    if auth_user and auth_user.get("role") in ("OFFICER", "officer") and (auth_user.get("id") or auth_user.get("employee_id")):
-        empOid = str(auth_user.get("id") or auth_user.get("employee_id"))
-    elif not empOid and auth_user and (auth_user.get("id") or auth_user.get("employee_id")):
-        empOid = str(auth_user.get("id") or auth_user.get("employee_id"))
-
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    
-    try:
-        cursor = conn.cursor(dictionary=True)
-
-        # Check if custom_visit_id column exists in report tables to be safe across environments
-        has_custom_visit_col = False
-        try:
-            cursor.execute("SHOW COLUMNS FROM FIELD_OFFICER_DAY_VISIT_REPORTS LIKE 'custom_visit_id'")
-            has_custom_visit_col = bool(cursor.fetchone())
-        except Exception:
-            pass
-
-        # Fetch completed reports per site/custom visit with visit/creation date for accurate plan matching
-        completed_reports = []
-        try:
-            custom_sel = "custom_visit_id," if has_custom_visit_col else "NULL as custom_visit_id,"
-            custom_cond = "OR custom_visit_id IS NOT NULL" if has_custom_visit_col else ""
-            query_counts = f"""
-                SELECT site_id, {custom_sel} employee_oid, LOWER(TRIM(officer)) as off_name, DATE(COALESCE(visit_date, created_on)) as rep_date, created_on as rep_created_at
-                FROM (
-                    SELECT site_id, {custom_sel} employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE (site_id IS NOT NULL {custom_cond}) AND status = 'Completed'
-                    UNION ALL
-                    SELECT site_id, {custom_sel} employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE (site_id IS NOT NULL {custom_cond}) AND status = 'Completed'
-                    UNION ALL
-                    SELECT site_id, {custom_sel} employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE (site_id IS NOT NULL {custom_cond})
-                ) t
-            """
-            cursor.execute(query_counts)
-            completed_reports = cursor.fetchall() or []
-        except Exception as err:
-            print("Error checking completed site counts:", err)
-
-        where_clauses = ["(UPPER(av.status) = 'PUBLISHED' OR UPPER(av.status) = 'COMPLETED')"]
-        params = []
-        if empOid:
-            where_clauses.append("(av.employee_oid = %s OR e.oid = %s OR e.emp_code = %s)")
-            params.extend([empOid, empOid, empOid])
-
-        where_clause = " WHERE " + " AND ".join(where_clauses)
-
-        # Query both registered-site visits and custom-client visits
-        query = f"""
-            (
-                SELECT 
-                    av.oid as id,
-                    av.plan_code as planCode,
-                    av.planning_type as planningType,
-                    av.visit_date as visitDate,
-                    av.week_start_date as weekStartDate,
-                    av.week_end_date as weekEndDate,
-                    av.planning_month as planningMonth,
-                    av.planning_year as planningYear,
-                    av.status as planStatus,
-                    av.created_at as createdAt,
-                    e.oid as officerId,
-                    e.name as officerName,
-                    s.oid as siteId,
-                    NULL as customVisitId,
-                    0 as isCustomVisit,
-                    s.name as siteName,
-                    COALESCE(sg.latitude, s.latitude) as latitude,
-                    COALESCE(sg.longitude, s.longitude) as longitude,
-                    COALESCE(sg.radius, 100) as radius,
-                    cl.oid as clientId,
-                    cl.name as clientName,
-                    cl.address as address,
-                    vf.visit_frequency as visitFrequency
-                FROM FIELD_OFFICER_ASSIGNED_VISITS av
-                JOIN FIELD_OFFICER_VISIT_FREQUENCY vf ON av.oid = vf.plan_oid
-                LEFT JOIN EMPLOYEE e ON av.employee_oid = e.oid
-                LEFT JOIN SITE s ON vf.site_oid = s.oid
-                LEFT JOIN (
-                    SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude, MAX(radius) as radius
-                    FROM SITE_GATE_QRCODE 
-                    WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
-                    GROUP BY SITE
-                ) sg ON s.oid = sg.SITE
-                LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
-                {where_clause}
-            )
-            UNION ALL
-            (
-                SELECT 
-                    av.oid as id,
-                    av.plan_code as planCode,
-                    av.planning_type as planningType,
-                    av.visit_date as visitDate,
-                    av.week_start_date as weekStartDate,
-                    av.week_end_date as weekEndDate,
-                    av.planning_month as planningMonth,
-                    av.planning_year as planningYear,
-                    av.status as planStatus,
-                    av.created_at as createdAt,
-                    e.oid as officerId,
-                    e.name as officerName,
-                    NULL as siteId,
-                    ncv.oid as customVisitId,
-                    1 as isCustomVisit,
-                    ncv.site_name as siteName,
-                    ncv.latitude as latitude,
-                    ncv.longitude as longitude,
-                    100 as radius,
-                    NULL as clientId,
-                    ncv.client_name as clientName,
-                    ncv.address as address,
-                    ncv.visit_frequency as visitFrequency
-                FROM FIELD_OFFICER_ASSIGNED_VISITS av
-                JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON av.oid = ncv.plan_oid
-                LEFT JOIN EMPLOYEE e ON av.employee_oid = e.oid
-                {where_clause}
-            )
-            ORDER BY createdAt DESC, id DESC
-        """
-        # Note: params are used twice because where_clause is in both halves of UNION ALL
-        cursor.execute(query, params + params)
-        rows = cursor.fetchall()
-        
-        result = []
-        today_str = time.strftime("%Y-%m-%d")
-
-        for r in rows:
-            site_id_val = r.get("siteId")
-            custom_visit_id_val = r.get("customVisitId")
-            is_custom = bool(r.get("isCustomVisit"))
-            officer_id_str = str(r.get("officerId")) if r.get("officerId") is not None else None
-            officer_name = (r.get("officerName") or "").lower().strip()
-
-            ws = r.get("weekStartDate")
-            we = r.get("weekEndDate")
-            pm = r.get("planningMonth")
-            py = r.get("planningYear")
-            vdate = r.get("visitDate")
-            cdate = r["createdAt"].strftime("%Y-%m-%d") if hasattr(r.get("createdAt"), "strftime") else str(r.get("createdAt"))[:10] if r.get("createdAt") else today_str
-
-            # Filter reports within this plan's specific timeframe
-            done_cnt = 0
-            if (is_custom and custom_visit_id_val) or (not is_custom and site_id_val):
-                for rep in completed_reports:
-                    if is_custom:
-                        if rep.get("custom_visit_id") != custom_visit_id_val:
-                            continue
-                    else:
-                        if rep.get("site_id") != site_id_val:
-                            continue
-                    
-                    rep_d_str = str(rep["rep_date"]) if rep.get("rep_date") else None
-                    if not rep_d_str:
-                        continue
-
-                    # Check date range matching plan period
-                    in_period = False
-                    if ws and we:
-                        in_period = (str(ws) <= rep_d_str <= str(we))
-                    elif pm and py:
-                        try:
-                            rep_dt = datetime.strptime(rep_d_str, "%Y-%m-%d")
-                            in_period = (rep_dt.month == int(pm) and rep_dt.year == int(py))
-                        except Exception:
-                            in_period = False
-                    else:
-                        target_d = str(vdate) if vdate else cdate
-                        in_period = (rep_d_str == target_d)
-
-                    if in_period:
-                        # Ensure report was NOT created before this plan was created (with 60-second clock skew margin)
-                        rep_created_raw = rep.get("rep_created_at")
-                        if rep_created_raw and r.get("createdAt"):
-                            try:
-                                rep_dt = rep_created_raw if isinstance(rep_created_raw, datetime) else datetime.fromisoformat(str(rep_created_raw).replace('Z', ''))
-                                plan_dt = r["createdAt"] if isinstance(r["createdAt"], datetime) else datetime.fromisoformat(str(r["createdAt"]).replace('Z', ''))
-                                if (plan_dt - rep_dt).total_seconds() > 60:
-                                    continue
-                            except Exception:
-                                pass
-
-                        rep_emp = str(rep["employee_oid"]) if rep.get("employee_oid") else None
-                        rep_off = (rep.get("off_name") or "").strip()
-                        if officer_id_str and rep_emp and officer_id_str == rep_emp:
-                            done_cnt += 1
-                        elif officer_name and rep_off and officer_name == rep_off:
-                            done_cnt += 1
-                        elif not officer_id_str and not officer_name:
-                            done_cnt += 1
-
-            freq = r.get("visitFrequency") or 1
-            pending_cnt = max(0, freq - done_cnt)
-
-            if ws and we:
-                try:
-                    ws_dt = datetime.strptime(str(ws), "%Y-%m-%d")
-                    we_dt = datetime.strptime(str(we), "%Y-%m-%d")
-                    period_str = f"{ws_dt.strftime('%d %b %Y')} - {we_dt.strftime('%d %b %Y')}"
-                except Exception:
-                    period_str = f"{ws} - {we}"
-            elif pm and py:
-                try:
-                    last_day = calendar.monthrange(int(py), int(pm))[1]
-                    month_name = datetime(int(py), int(pm), 1).strftime("%b")
-                    period_str = f"01 {month_name} {py} - {last_day} {month_name} {py}"
-                except Exception:
-                    period_str = f"Month {pm}/{py}"
-            elif vdate:
-                try:
-                    vd_dt = datetime.strptime(str(vdate), "%Y-%m-%d")
-                    period_str = vd_dt.strftime("%d %b %Y")
-                except Exception:
-                    period_str = str(vdate)
-            elif r.get("createdAt"):
-                period_str = r["createdAt"].strftime("%d %b %Y") if hasattr(r["createdAt"], "strftime") else str(r["createdAt"])[:10]
-            else:
-                period_str = time.strftime("%d %b %Y")
-
-            date_str = str(ws) if ws else (str(vdate) if vdate else period_str)
-
-            # Determine if date range is expired
-            is_expired = False
-            if we:
-                is_expired = (str(we) < today_str)
-            elif pm and py:
-                try:
-                    last_day = calendar.monthrange(int(py), int(pm))[1]
-                    last_day_str = f"{int(py):04d}-{int(pm):02d}-{last_day:02d}"
-                    is_expired = (last_day_str < today_str)
-                except Exception:
-                    is_expired = False
-            elif vdate:
-                is_expired = (str(vdate) < today_str)
-            elif ws:
-                is_expired = (str(ws) < today_str)
-
-            raw_status = (r.get("planStatus") or "PUBLISHED").upper()
-            if raw_status == "COMPLETED" or done_cnt >= freq:
-                status = "Completed"
-            elif done_cnt > 0:
-                status = "In Progress"
-            elif raw_status == "DRAFT":
-                status = "Pending"
-            elif is_expired:
-                status = "Overdue"
-            else:
-                status = "Pending"
-
-            pt_raw = (r.get("planningType") or "WEEKLY").upper()
-            if pt_raw == "WEEKLY":
-                type_name = "Weekly"
-            elif pt_raw == "MONTHLY":
-                type_name = "Monthly"
-            elif pt_raw == "SINGLE":
-                type_name = "Single"
-            else:
-                type_name = pt_raw.title()
-
-            shift_text = f"{type_name} ({done_cnt}/{freq} Done)"
-
-            client_val = r.get("clientName") or ("Custom Client" if is_custom else "N/A")
-            site_val = r.get("siteName") or ("Custom Location" if is_custom else "N/A")
-
-            result.append({
-                "id": f"pv-{r['id']}-c{custom_visit_id_val}" if is_custom else f"pv-{r['id']}-{site_id_val or 0}",
-                "planId": r["id"],
-                "planCode": r.get("planCode"),
-                "planningType": r.get("planningType"),
-                "clientId": r.get("clientId"),
-                "client_id": r.get("clientId"),
-                "clientName": client_val,
-                "client_name": client_val,
-                "siteId": site_id_val,
-                "site_id": site_id_val,
-                "customVisitId": custom_visit_id_val,
-                "custom_visit_id": custom_visit_id_val,
-                "isCustomVisit": is_custom,
-                "is_custom": is_custom,
-                "address": r.get("address"),
-                "siteName": site_val,
-                "site_name": site_val,
-                "latitude": float(r["latitude"]) if r.get("latitude") is not None else None,
-                "longitude": float(r["longitude"]) if r.get("longitude") is not None else None,
-                "radius": r.get("radius", 100),
-                "officerId": r.get("officerId"),
-                "officerName": r.get("officerName") or "Officer",
-                "weekStartDate": str(ws) if ws else None,
-                "weekEndDate": str(we) if we else None,
-                "visitDate": str(vdate) if vdate else None,
-                "planningMonth": pm,
-                "planningYear": py,
-                "isExpired": is_expired,
-                "date": date_str,
-                "plannedPeriod": period_str,
-                "shift": shift_text,
-                "visitFrequency": freq,
-                "completedVisits": done_cnt,
-                "pendingVisits": pending_cnt,
-                "status": status
-            })
-
-        cursor.close()
-        conn.close()
-        return JSONResponse(content=result)
-    except Exception as e:
-        if 'conn' in locals() and conn:
-            conn.close()
-        print(f"Error in get_planned_visits: {e}")
-        return JSONResponse(status_code=500, content={"message": f"Server error: {str(e)}"})
-
-@router.post("/planned-visits")
-def create_planned_visit(payload: dict, authorization: Optional[str] = Header(None)):
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"success": False, "message": "Database connection failed"})
-    cursor = None
-    try:
-        cursor = conn.cursor(dictionary=True)
-        from datetime import datetime
-        
-        cursor.execute("SELECT plan_code FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE plan_code LIKE 'VP-%' ORDER BY CHAR_LENGTH(plan_code) DESC, plan_code DESC LIMIT 1")
-        last_vp_row = cursor.fetchone()
-        next_num = 1
-        if last_vp_row and last_vp_row.get("plan_code"):
-            try:
-                num_str = str(last_vp_row["plan_code"]).replace("VP-", "").strip()
-                next_num = int(num_str) + 1
-            except Exception:
-                next_num = 1
-        plan_code = f"VP-{next_num:03d}"
-        
-        planning_type = str(payload.get("planningType", "SINGLE")).upper()
-        if planning_type not in ["WEEKLY", "MONTHLY", "SINGLE"]:
-            planning_type = "SINGLE"
-            
-        emp_oid = None
-        if authorization:
-            try:
-                auth_user = get_authenticated_employee(authorization)
-                if auth_user and (auth_user.get("id") or auth_user.get("employee_id") or auth_user.get("empOid")):
-                    emp_oid = int(auth_user.get("id") or auth_user.get("employee_id") or auth_user.get("empOid"))
-            except Exception:
-                pass
-
-        if not emp_oid:
-            raw_emp = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or payload.get("createdBy") or payload.get("created_by") or 7558
-            try:
-                emp_oid = int(raw_emp)
-            except (ValueError, TypeError):
-                try:
-                    cursor.execute("SELECT oid FROM EMPLOYEE WHERE emp_code = %s OR oid = %s LIMIT 1", (str(raw_emp), str(raw_emp)))
-                    emp_row = cursor.fetchone()
-                    if emp_row and emp_row.get("oid"):
-                        emp_oid = int(emp_row["oid"])
-                except Exception as err:
-                    print("Warning resolving emp_code:", err)
-            if not emp_oid:
-                emp_oid = 7558
-
-        raw_site = payload.get("siteId") or payload.get("site_oid") or 1
-        site_oid = 1
-        try:
-            site_oid = int(raw_site)
-        except (ValueError, TypeError):
-            site_oid = 1
-
-        freq = int(payload.get("visitFrequency", 1))
-
-        week_start_date = None
-        week_end_date = None
-        planning_month = None
-        planning_year = None
-        visit_date = None
-
-        if planning_type == "SINGLE":
-            visit_date = payload.get("visitDate") or payload.get("startDate") or datetime.now().strftime("%Y-%m-%d")
-        elif planning_type == "WEEKLY":
-            week_start_date = payload.get("weekStartDate") or payload.get("startDate") or datetime.now().strftime("%Y-%m-%d")
-            week_end_date = payload.get("weekEndDate") or payload.get("endDate") or week_start_date
-        elif planning_type == "MONTHLY":
-            pm = payload.get("planningMonth") or payload.get("month")
-            py = payload.get("planningYear") or payload.get("year")
-            if pm and py:
-                planning_month = int(pm)
-                planning_year = int(py)
-            else:
-                date_ref = payload.get("startDate") or payload.get("visitDate") or datetime.now().strftime("%Y-%m-%d")
-                try:
-                    dt_ref = datetime.strptime(str(date_ref), "%Y-%m-%d")
-                    planning_month = dt_ref.month
-                    planning_year = dt_ref.year
-                except Exception:
-                    now_dt = datetime.now()
-                    planning_month = now_dt.month
-                    planning_year = now_dt.year
-        
-        created_by = payload.get("createdBy") or payload.get("created_by") or emp_oid
-
-        is_custom_visit = bool(
-            payload.get("isCustomVisit")
-            or payload.get("is_custom")
-            or payload.get("customSiteName")
-            or payload.get("customClientName")
-            or payload.get("clientId") == "OTHER"
-            or (not payload.get("siteId") and (payload.get("siteName") or payload.get("customSiteName")))
-        )
-
-        if is_custom_visit:
-            c_name = (payload.get("customClientName") or payload.get("clientName") or "Custom Client").strip()
-            s_name = (payload.get("customSiteName") or payload.get("siteName") or "Custom Location").strip()
-
-        cursor.execute("""
-            INSERT INTO FIELD_OFFICER_ASSIGNED_VISITS 
-            (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, employee_oid, planning_method, status, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'MANUAL', 'PUBLISHED', %s)
-        """, (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, emp_oid, created_by))
-        
-        plan_oid = cursor.lastrowid
-
-        if is_custom_visit:
-            addr = (payload.get("address") or "").strip() or None
-            
-            lat_raw = payload.get("latitude")
-            lon_raw = payload.get("longitude")
-            lat = None
-            lon = None
-            if lat_raw is not None and str(lat_raw).strip() != "":
-                try:
-                    lat = float(lat_raw)
-                except Exception:
-                    lat = None
-            if lon_raw is not None and str(lon_raw).strip() != "":
-                try:
-                    lon = float(lon_raw)
-                except Exception:
-                    lon = None
-
-            branch_oid = payload.get("branchId") or payload.get("branch_oid")
-            if not branch_oid and emp_oid:
-                try:
-                    cursor.execute("SELECT branch_oid, branch_id, BRANCH FROM EMPLOYEE WHERE oid = %s LIMIT 1", (emp_oid,))
-                    emp_row = cursor.fetchone()
-                    if emp_row:
-                        branch_oid = emp_row.get("branch_oid") or emp_row.get("branch_id") or emp_row.get("BRANCH")
-                except Exception:
-                    pass
-            
-            # Validate branch_oid against BRANCH table to satisfy fk_fncv_branch
-            valid_branch = None
-            if branch_oid:
-                try:
-                    cursor.execute("SELECT oid FROM BRANCH WHERE oid = %s LIMIT 1", (branch_oid,))
-                    valid_branch = cursor.fetchone()
-                except Exception:
-                    valid_branch = None
-            
-            if not valid_branch:
-                cursor.execute("SELECT oid FROM BRANCH ORDER BY oid ASC LIMIT 1")
-                b_row = cursor.fetchone()
-                branch_oid = b_row["oid"] if b_row else 1
-
-            # Store employee oid directly into created_by as requested
-            creator_emp_oid = emp_oid or created_by
-            cursor.execute("""
-                INSERT INTO FIELD_OFFICER_NEW_CLIENT_VISITS 
-                (plan_oid, branch_oid, client_name, site_name, address, latitude, longitude, visit_frequency, created_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (plan_oid, branch_oid, c_name, s_name, addr, lat, lon, freq, creator_emp_oid))
-        else:
-            # Validate site_oid against SITE table to satisfy fk_visit_plan_sites_site
-            cursor.execute("SELECT oid FROM SITE WHERE oid = %s LIMIT 1", (site_oid,))
-            site_row = cursor.fetchone()
-            if not site_row:
-                if cursor:
-                    cursor.close()
-                conn.close()
-                return JSONResponse(status_code=400, content={"success": False, "message": f"Site with ID '{site_oid}' not found in the database. Please select a valid site."})
-
-            cursor.execute("""
-                INSERT INTO FIELD_OFFICER_VISIT_FREQUENCY (plan_oid, site_oid, visit_frequency)
-                VALUES (%s, %s, %s)
-            """, (plan_oid, site_oid, freq))
-        
-        conn.commit()
-        if cursor:
-            cursor.close()
-        conn.close()
-        return JSONResponse(content={"success": True, "message": "Visit plan assigned successfully", "id": plan_oid, "planCode": plan_code})
-    except Exception as e:
-        print(f"Error in create_planned_visit: {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            if cursor:
-                try:
-                    cursor.close()
-                except Exception:
-                    pass
-            try:
-                conn.close()
-            except Exception:
-                pass
-        return JSONResponse(status_code=500, content={"success": False, "message": f"Failed to create visit plan: {str(e)}"})
-
-
-# --- OFFICER ROUND REPORTS ---
-
-@router.get("/officer-rounds/reports")
-def get_round_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_NIGHT_VISIT_REPORTS", "custom_visit_id")
-        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
-        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
-        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
-        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
-        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
-
-        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
-        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
-
-        query = f"""
-            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
-                   {email_access_expr} as email_access,
-                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
-                   svs.session_check_in, svs.session_check_out
-            FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
-            LEFT JOIN SITE s ON r.site_id = s.oid
-            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            {custom_join}
-            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
-            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
-            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
-            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
-            LEFT JOIN (
-                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
-                       MAX(check_in_time) as session_check_in,
-                       MAX(check_out_time) as session_check_out
-                FROM SITE_VISIT_SESSIONS
-                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
-            ) svs ON (
-                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
-                AND {svs_join_cond}
-                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
-            )
-        """
-        params = []
-        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
-        if target_emp:
-            query += """ WHERE (
-                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
-                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
-            ) """
-            params.extend([target_emp, target_emp, target_emp, target_emp])
-        query += " ORDER BY r.created_on DESC, r.oid DESC"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        return [map_db_row_to_frontend(r) for r in rows]
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.get("/officer-rounds/reports/{id}")
-def get_round_report(id: str):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_NIGHT_VISIT_REPORTS", "custom_visit_id")
-        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
-        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
-        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
-        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
-        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
-
-        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
-        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
-
-        query = f"""
-            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
-                   {email_access_expr} as email_access,
-                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
-                   svs.session_check_in, svs.session_check_out
-            FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
-            LEFT JOIN SITE s ON r.site_id = s.oid
-            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            {custom_join}
-            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
-            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
-            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
-            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
-            LEFT JOIN (
-                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
-                       MAX(check_in_time) as session_check_in,
-                       MAX(check_out_time) as session_check_out
-                FROM SITE_VISIT_SESSIONS
-                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
-            ) svs ON (
-                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
-                AND {svs_join_cond}
-                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
-            )
-            WHERE r.oid = %s
-        """
-        cursor.execute(query, (id,))
-        r = cursor.fetchone()
-        if not r:
-            raise HTTPException(status_code=404, detail="Report not found")
-        return map_db_row_to_frontend(r)
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/officer-rounds/reports")
-def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        emp = get_authenticated_employee(authorization)
-        emp_oid = emp.get("id")
-        emp_name = emp.get("name")
-
-        if not payload.get("id") and not payload.get("oid"):
-            cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
-            max_r = cursor.fetchone()
-            next_num = (int(max_r["oid"]) + 1) if max_r and max_r.get("oid") else 109
-            oid = str(next_num)
-        else:
-            oid = str(payload.get("id") or payload.get("oid"))
-
-        unit = payload.get("unit") or payload.get("unit_name") or ""
-        
-        # Handle custom visit vs registered visit
-        custom_visit_id = payload.get("custom_visit_id") or payload.get("customVisitId")
-        if custom_visit_id:
-            try:
-                custom_visit_id = int(custom_visit_id)
-            except (ValueError, TypeError):
-                custom_visit_id = None
-
-        c_name = "Client"
-        s_name = unit or "Site"
-        if custom_visit_id:
-            site_id = None
-            client_id = None
-            cursor.execute("SELECT client_name, site_name, plan_oid FROM FIELD_OFFICER_NEW_CLIENT_VISITS WHERE oid = %s", (custom_visit_id,))
-            ncv_row = cursor.fetchone()
-            if ncv_row:
-                c_name = ncv_row.get("client_name") or "Custom Client"
-                s_name = ncv_row.get("site_name") or unit or "Custom Location"
-                if not unit:
-                    unit = s_name
-                if ncv_row.get("plan_oid"):
-                    cursor.execute("SELECT employee_oid, status FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE oid = %s", (ncv_row["plan_oid"],))
-                    plan_row = cursor.fetchone()
-                    if plan_row:
-                        if (plan_row.get("status") or "").upper() == "DRAFT":
-                            raise HTTPException(status_code=400, detail="Cannot submit report for a draft visit plan")
-                        if emp.get("role") == "OFFICER" and str(plan_row.get("employee_oid")) != str(emp_oid):
-                            raise HTTPException(status_code=403, detail="Officer not authorized for this visit plan")
-        else:
-            site_id = payload.get("siteId") or payload.get("site_id") or 1
-            client_id = payload.get("clientId") or payload.get("client_id") or 1
-            if client_id:
-                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
-                cr = cursor.fetchone()
-                if cr and cr.get("name"): c_name = cr["name"]
-            if site_id:
-                cursor.execute("SELECT name FROM SITE WHERE oid = %s", (site_id,))
-                sr = cursor.fetchone()
-                if sr and sr.get("name"): s_name = sr["name"]
-
-        visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
-        visit_type = payload.get("visitType") or payload.get("visit_type") or "Night Round"
-        shift = payload.get("shift") or "Night"
-        start_time = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
-        end_time = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
-
-        if not start_time or not end_time:
-            try:
-                if custom_visit_id:
-                    sess_sql = """
-                        SELECT check_in_time, check_out_time 
-                        FROM SITE_VISIT_SESSIONS 
-                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                          AND custom_visit_id = %s 
-                          AND DATE(check_in_time) = %s
-                        ORDER BY id DESC LIMIT 1
-                    """
-                    sess_params = (emp_oid, emp_oid, custom_visit_id, visit_date)
-                else:
-                    sess_sql = """
-                        SELECT check_in_time, check_out_time 
-                        FROM SITE_VISIT_SESSIONS 
-                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                          AND site_id = %s 
-                          AND DATE(check_in_time) = %s
-                        ORDER BY id DESC LIMIT 1
-                    """
-                    sess_params = (emp_oid, emp_oid, site_id, visit_date)
-                cursor.execute(sess_sql, sess_params)
-                sess_row = cursor.fetchone()
-                if sess_row:
-                    if not start_time and sess_row.get("check_in_time"):
-                        start_time = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
-                    if not end_time and sess_row.get("check_out_time"):
-                        end_time = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
-            except Exception:
-                pass
-
-        gps = payload.get("gps") or ""
-        photos = payload.get("photos")
-        guards = payload.get("guards")
-        checklist = payload.get("checklist")
-        observations = payload.get("observations")
-        suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
-        attachments = payload.get("attachments") or payload.get("suggestion_photos") or payload.get("suggestionPhotos")
-        officer_signature = payload.get("officerSignature") or payload.get("officer_signature") or ""
-        status = payload.get("status") or "Completed"
-        created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
-        lecture_details = payload.get("lectureDetails") or payload.get("lecture_details") or ""
-        random_checking = payload.get("randomChecking") or payload.get("random_checking") or ""
-        overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
-
-        # Process and convert all base64 photos to server uploads
-        photos, checklist, observations, attachments = extract_and_process_report_photos(photos, checklist, observations, attachments)
-
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_NIGHT_VISIT_REPORTS", "custom_visit_id")
-
-        if not payload.get("reportNo") and not payload.get("reportId") and not payload.get("report_id"):
-            try:
-                dt = datetime.strptime(str(visit_date), "%Y-%m-%d")
-                date_fmt = dt.strftime("%d/%m/%y")
-            except Exception:
-                date_fmt = datetime.now().strftime("%d/%m/%y")
-
-            visit_seq = 1
-            if custom_visit_id and has_custom_col:
-                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE custom_visit_id = %s AND oid != %s", (custom_visit_id, oid))
-                cnt_row = cursor.fetchone()
-                if cnt_row and cnt_row.get("cnt") is not None:
-                    visit_seq = int(cnt_row["cnt"]) + 1
-            elif site_id:
-                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
-                cnt_row = cursor.fetchone()
-                if cnt_row and cnt_row.get("cnt") is not None:
-                    visit_seq = int(cnt_row["cnt"]) + 1
-
-            seq_str = f"{visit_seq:02d}"
-            report_id = f"{seq_str}-{c_name}-{s_name}-ONR-{date_fmt}"
-        else:
-            report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
-
-        # Check if exists
-        cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (oid,))
-        exists = cursor.fetchone()
-
-        if exists:
-            if has_custom_col:
-                sql = """
-                    UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS SET
-                        report_id = %s, unit = %s, client_id = %s, site_id = %s, custom_visit_id = %s, visit_date = %s,
-                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
-                        suggestions = %s, attachments = %s, officer_signature = %s, status = %s,
-                        created_on = COALESCE(created_on, %s), lecture_details = %s, random_checking = %s,
-                        overall_remarks = %s, employee_oid = %s
-                    WHERE oid = %s
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    officer_signature, status, created_on, lecture_details, random_checking,
-                    overall_remarks, emp_oid, oid
-                )
-            else:
-                sql = """
-                    UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS SET
-                        report_id = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
-                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
-                        suggestions = %s, attachments = %s, officer_signature = %s, status = %s,
-                        created_on = COALESCE(created_on, %s), lecture_details = %s, random_checking = %s,
-                        overall_remarks = %s, employee_oid = %s
-                    WHERE oid = %s
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    officer_signature, status, created_on, lecture_details, random_checking,
-                    overall_remarks, emp_oid, oid
-                )
-            cursor.execute(sql, query_params)
-        else:
-            if has_custom_col:
-                sql = """
-                    INSERT INTO FIELD_OFFICER_NIGHT_VISIT_REPORTS (
-                        report_id, unit, client_id, site_id, custom_visit_id, visit_date,
-                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
-                        gps, photos, guards, checklist, observations,
-                        suggestions, attachments, officer_signature, status,
-                        created_on, lecture_details, random_checking, overall_remarks, employee_oid, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    officer_signature, status, created_on, lecture_details, random_checking,
-                    overall_remarks, emp_oid, oid
-                )
-            else:
-                sql = """
-                    INSERT INTO FIELD_OFFICER_NIGHT_VISIT_REPORTS (
-                        report_id, unit, client_id, site_id, visit_date,
-                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
-                        gps, photos, guards, checklist, observations,
-                        suggestions, attachments, officer_signature, status,
-                        created_on, lecture_details, random_checking, overall_remarks, employee_oid, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    officer_signature, status, created_on, lecture_details, random_checking,
-                    overall_remarks, emp_oid, oid
-                )
-            cursor.execute(sql, query_params)
-
-            # Insert or update into VISIT_REPORT_METADATA if site_id is valid
-            if site_id:
-                try:
-                    metadata_sql = """
-                        INSERT INTO VISIT_REPORT_METADATA (
-                            employee_oid, officer, report_type, report_oid, site_id, visit_date
-                        ) VALUES (%s, %s, %s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
-                    """
-                    metadata_params = (
-                        emp_oid,
-                        emp_name,
-                        "NIGHT",
-                        oid,
-                        site_id,
-                        visit_date
-                    )
-                    cursor.execute(metadata_sql, metadata_params)
-                except Exception as meta_err:
-                    print("Warning inserting visit metadata:", meta_err)
-        
-        conn.commit()
-        return {"success": True, "message": "Report saved successfully", "id": oid, "report_id": report_id}
-    except HTTPException:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
-    except Exception as e:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@router.delete("/officer-rounds/reports/{id}")
-def delete_round_report(id: str):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("DELETE FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (id,))
-        conn.commit()
-        return {"success": True, "message": "Report deleted successfully"}
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# --- OFFICER VISIT REPORTS ---
-
-@router.get("/officer-visits/reports")
-def get_visit_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_DAY_VISIT_REPORTS", "custom_visit_id")
-        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
-        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
-        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
-        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
-        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
-
-        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
-        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
-
-        query = f"""
-            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
-                   {email_access_expr} as email_access,
-                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
-                   svs.session_check_in, svs.session_check_out
-            FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
-            LEFT JOIN SITE s ON r.site_id = s.oid
-            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            {custom_join}
-            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
-            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
-            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
-            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
-            LEFT JOIN (
-                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
-                       MAX(check_in_time) as session_check_in,
-                       MAX(check_out_time) as session_check_out
-                FROM SITE_VISIT_SESSIONS
-                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
-            ) svs ON (
-                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
-                AND {svs_join_cond}
-                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
-            )
-        """
-        params = []
-        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
-        if target_emp:
-            query += """ WHERE (
-                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
-                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
-            ) """
-            params.extend([target_emp, target_emp, target_emp, target_emp])
-        query += " ORDER BY r.created_on DESC, r.oid DESC"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        return [map_db_row_to_frontend(r) for r in rows]
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.get("/officer-tours/reports")
-@router.get("/patrol-tour-reports")
-def get_patrol_tour_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_PATROL_TOUR_REPORTS", "custom_visit_id")
-        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
-        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
-        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
-        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
-        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
-
-        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
-        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
-
-        query = f"""
-            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
-                   {email_access_expr} as email_access,
-                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
-                   svs.session_check_in, svs.session_check_out
-            FROM FIELD_OFFICER_PATROL_TOUR_REPORTS r
-            LEFT JOIN SITE s ON r.site_id = s.oid
-            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            {custom_join}
-            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
-            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
-            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
-            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
-            LEFT JOIN (
-                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
-                       MAX(check_in_time) as session_check_in,
-                       MAX(check_out_time) as session_check_out
-                FROM SITE_VISIT_SESSIONS
-                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
-            ) svs ON (
-                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
-                AND {svs_join_cond}
-                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
-            )
-        """
-        params = []
-        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
-        if target_emp:
-            query += """ WHERE (
-                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
-                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
-            ) """
-            params.extend([target_emp, target_emp, target_emp, target_emp])
-        query += " ORDER BY r.created_on DESC, r.oid DESC"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        return [map_db_row_to_frontend(r) for r in rows]
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@router.get("/officer-visits/reports/{id}")
-def get_visit_report(id: str):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_DAY_VISIT_REPORTS", "custom_visit_id")
-        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
-        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
-        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
-        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
-        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
-
-        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
-        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
-
-        query = f"""
-            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
-                   {email_access_expr} as email_access,
-                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
-                   svs.session_check_in, svs.session_check_out
-            FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
-            LEFT JOIN SITE s ON r.site_id = s.oid
-            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            {custom_join}
-            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
-            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
-            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
-            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
-            LEFT JOIN (
-                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
-                       MAX(check_in_time) as session_check_in,
-                       MAX(check_out_time) as session_check_out
-                FROM SITE_VISIT_SESSIONS
-                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
-            ) svs ON (
-                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
-                AND {svs_join_cond}
-                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
-            )
-            WHERE r.oid = %s
-        """
-        cursor.execute(query, (id,))
-        r = cursor.fetchone()
-        if not r:
-            raise HTTPException(status_code=404, detail="Report not found")
-        return map_db_row_to_frontend(r)
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/officer-visits/reports")
-def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        emp = get_authenticated_employee(authorization)
-        emp_oid = emp.get("id")
-        emp_name = emp.get("name")
-
-        if not payload.get("id") and not payload.get("oid"):
-            cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
-            max_r = cursor.fetchone()
-            next_num = (int(max_r["oid"]) + 1) if max_r and max_r.get("oid") else 107
-            oid = str(next_num)
-        else:
-            oid = str(payload.get("id") or payload.get("oid"))
-
-        unit = payload.get("unit") or payload.get("unit_name") or ""
-        
-        # Handle custom visit vs registered visit
-        custom_visit_id = payload.get("custom_visit_id") or payload.get("customVisitId")
-        if custom_visit_id:
-            try:
-                custom_visit_id = int(custom_visit_id)
-            except (ValueError, TypeError):
-                custom_visit_id = None
-
-        c_name = "Client"
-        s_name = unit or "Site"
-        if custom_visit_id:
-            site_id = None
-            client_id = None
-            cursor.execute("SELECT client_name, site_name, plan_oid FROM FIELD_OFFICER_NEW_CLIENT_VISITS WHERE oid = %s", (custom_visit_id,))
-            ncv_row = cursor.fetchone()
-            if ncv_row:
-                c_name = ncv_row.get("client_name") or "Custom Client"
-                s_name = ncv_row.get("site_name") or unit or "Custom Location"
-                if not unit:
-                    unit = s_name
-                if ncv_row.get("plan_oid"):
-                    cursor.execute("SELECT employee_oid, status FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE oid = %s", (ncv_row["plan_oid"],))
-                    plan_row = cursor.fetchone()
-                    if plan_row:
-                        if (plan_row.get("status") or "").upper() == "DRAFT":
-                            raise HTTPException(status_code=400, detail="Cannot submit report for a draft visit plan")
-                        if emp.get("role") == "OFFICER" and str(plan_row.get("employee_oid")) != str(emp_oid):
-                            raise HTTPException(status_code=403, detail="Officer not authorized for this visit plan")
-        else:
-            site_id = payload.get("siteId") or payload.get("site_id") or 1
-            client_id = payload.get("clientId") or payload.get("client_id") or 1
-            if client_id:
-                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
-                cr = cursor.fetchone()
-                if cr and cr.get("name"): c_name = cr["name"]
-            if site_id:
-                cursor.execute("SELECT name FROM SITE WHERE oid = %s", (site_id,))
-                sr = cursor.fetchone()
-                if sr and sr.get("name"): s_name = sr["name"]
-
-        visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
-        visit_type = payload.get("visitType") or payload.get("visit_type") or "Scheduled"
-        shift = payload.get("shift") or "Day"
-        start_time = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
-        end_time = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
-
-        if not start_time or not end_time:
-            try:
-                if custom_visit_id:
-                    sess_sql = """
-                        SELECT check_in_time, check_out_time 
-                        FROM SITE_VISIT_SESSIONS 
-                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                          AND custom_visit_id = %s 
-                          AND DATE(check_in_time) = %s
-                        ORDER BY id DESC LIMIT 1
-                    """
-                    sess_params = (emp_oid, emp_oid, custom_visit_id, visit_date)
-                else:
-                    sess_sql = """
-                        SELECT check_in_time, check_out_time 
-                        FROM SITE_VISIT_SESSIONS 
-                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                          AND site_id = %s 
-                          AND DATE(check_in_time) = %s
-                        ORDER BY id DESC LIMIT 1
-                    """
-                    sess_params = (emp_oid, emp_oid, site_id, visit_date)
-                cursor.execute(sess_sql, sess_params)
-                sess_row = cursor.fetchone()
-                if sess_row:
-                    if not start_time and sess_row.get("check_in_time"):
-                        start_time = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
-                    if not end_time and sess_row.get("check_out_time"):
-                        end_time = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
-            except Exception:
-                pass
-
-        gps = payload.get("gps") or ""
-        photos = payload.get("photos")
-        guards = payload.get("guards")
-        checklist = payload.get("checklist")
-        observations = payload.get("observations")
-        suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
-        attachments = payload.get("attachments") or payload.get("suggestion_photos") or payload.get("suggestionPhotos")
-        status = payload.get("status") or "Completed"
-        created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
-        lecture_details = payload.get("lectureDetails") or payload.get("lecture_details") or ""
-        random_checking = payload.get("randomChecking") or payload.get("random_checking") or ""
-        overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
-
-        # Process and convert all base64 photos to server uploads
-        photos, checklist, observations, attachments = extract_and_process_report_photos(photos, checklist, observations, attachments)
-
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_DAY_VISIT_REPORTS", "custom_visit_id")
-
-        if not payload.get("reportNo") and not payload.get("reportId") and not payload.get("report_id"):
-            try:
-                dt = datetime.strptime(str(visit_date), "%Y-%m-%d")
-                date_fmt = dt.strftime("%d/%m/%y")
-            except Exception:
-                date_fmt = datetime.now().strftime("%d/%m/%y")
-
-            visit_seq = 1
-            if custom_visit_id and has_custom_col:
-                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE custom_visit_id = %s AND oid != %s", (custom_visit_id, oid))
-                cnt_row = cursor.fetchone()
-                if cnt_row and cnt_row.get("cnt") is not None:
-                    visit_seq = int(cnt_row["cnt"]) + 1
-            elif site_id:
-                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
-                cnt_row = cursor.fetchone()
-                if cnt_row and cnt_row.get("cnt") is not None:
-                    visit_seq = int(cnt_row["cnt"]) + 1
-
-            seq_str = f"{visit_seq:02d}"
-            report_id = f"{seq_str}-{c_name}-{s_name}-ODV-{date_fmt}"
-        else:
-            report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
-
-        cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (oid,))
-        exists = cursor.fetchone()
-
-        if exists:
-            if has_custom_col:
-                sql = """
-                    UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS SET
-                        report_id = %s, unit = %s, client_id = %s, site_id = %s, custom_visit_id = %s, visit_date = %s,
-                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
-                        suggestions = %s, attachments = %s, status = %s, created_on = COALESCE(created_on, %s),
-                        lecture_details = %s, random_checking = %s, overall_remarks = %s, employee_oid = %s
-                    WHERE oid = %s
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
-                )
-            else:
-                sql = """
-                    UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS SET
-                        report_id = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
-                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
-                        suggestions = %s, attachments = %s, status = %s, created_on = COALESCE(created_on, %s),
-                        lecture_details = %s, random_checking = %s, overall_remarks = %s, employee_oid = %s
-                    WHERE oid = %s
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
-                )
-            cursor.execute(sql, query_params)
-        else:
-            if has_custom_col:
-                sql = """
-                    INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
-                        report_id, unit, client_id, site_id, custom_visit_id, visit_date,
-                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
-                        gps, photos, guards, checklist, observations,
-                        suggestions, attachments, status, created_on,
-                        lecture_details, random_checking, overall_remarks, employee_oid, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
-                )
-            else:
-                sql = """
-                    INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
-                        report_id, unit, client_id, site_id, visit_date,
-                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
-                        gps, photos, guards, checklist, observations,
-                        suggestions, attachments, status, created_on,
-                        lecture_details, random_checking, overall_remarks, employee_oid, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                query_params = (
-                    report_id, unit, client_id, site_id, visit_date,
-                    visit_type, emp_name, shift, start_time, end_time,
-                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
-                    serialize_field(observations), suggestions, serialize_field(attachments),
-                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
-                )
-            cursor.execute(sql, query_params)
-
-            # Insert or update into VISIT_REPORT_METADATA if site_id is valid
-            if site_id:
-                try:
-                    metadata_sql = """
-                        INSERT INTO VISIT_REPORT_METADATA (
-                            employee_oid, officer, report_type, report_oid, site_id, visit_date
-                        ) VALUES (%s, %s, %s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
-                    """
-                    metadata_params = (
-                        emp_oid,
-                        emp_name,
-                        "DAY",
-                        oid,
-                        site_id,
-                        visit_date
-                    )
-                    cursor.execute(metadata_sql, metadata_params)
-                except Exception as meta_err:
-                    print("Warning inserting visit metadata:", meta_err)
-        
-        conn.commit()
-        return {"success": True, "message": "Report saved successfully", "id": oid, "report_id": report_id}
-    except HTTPException:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
-    except Exception as e:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@router.delete("/officer-visits/reports/{id}")
-def delete_visit_report(id: str):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("DELETE FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
-        conn.commit()
-        return {"success": True, "message": "Report deleted successfully"}
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# --- OFFICER ROUND TEMPLATES ---
-
-@router.get("/officer-rounds/templates")
-def get_round_templates():
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT * FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES")
-        rows = cursor.fetchall()
-        for r in rows:
-            r["id"] = r["oid"]
-            r["sections"] = deserialize_field(r["sections"]) or []
-            r["questions"] = deserialize_field(r["questions"]) or []
-        
-        # If DB has no templates, return a seed default template
-        if not rows:
-            default_template = {
-                "id": "temp-default",
-                "name": "Officer Night Round Template",
-                "sections": ["Guards & Patrol", "Perimeter & Access Control", "Facility & Safety Security"],
-                "questions": [
-                    {"id": "q1", "section": "Guards & Patrol", "question": "Security guards alert and in proper uniform?", "answerType": "yes_no", "required": True, "photoRequired": False},
-                    {"id": "q2", "section": "Guards & Patrol", "question": "Patrol tracking system being updated properly?", "answerType": "yes_no", "required": True, "photoRequired": False},
-                    {"id": "q3", "section": "Perimeter & Access Control", "question": "All gates and access points secured?", "answerType": "yes_no", "required": True, "photoRequired": False}
-                ]
-            }
-            return [default_template]
-        return rows
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/officer-rounds/templates")
-def save_round_template(payload: Dict[str, Any]):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        oid = payload.get("id")
-        cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES WHERE oid = %s", (oid,))
-        exists = cursor.fetchone()
-
-        query_params = (
-            payload.get("name"),
-            serialize_field(payload.get("sections")),
-            serialize_field(payload.get("questions")),
-            oid
-        )
-
-        if exists:
-            sql = "UPDATE FIELD_OFFICER_NIGHT_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
-            cursor.execute(sql, query_params)
-        else:
-            sql = "INSERT INTO FIELD_OFFICER_NIGHT_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
-            cursor.execute(sql, query_params)
-        conn.commit()
-        return {"success": True, "message": "Template saved successfully"}
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.delete("/officer-rounds/templates/{id}")
-def delete_round_template(id: str):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("DELETE FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES WHERE oid = %s", (id,))
-        conn.commit()
-        return {"success": True, "message": "Template deleted successfully"}
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# --- OFFICER VISIT TEMPLATES ---
-
-@router.get("/officer-visits/templates")
-def get_visit_templates():
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT * FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES")
-        rows = cursor.fetchall()
-        for r in rows:
-            r["id"] = r["oid"]
-            r["sections"] = deserialize_field(r["sections"]) or []
-            r["questions"] = deserialize_field(r["questions"]) or []
-        return rows
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/officer-visits/templates")
-def save_visit_template(payload: Dict[str, Any]):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        oid = payload.get("id")
-        cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (oid,))
-        exists = cursor.fetchone()
-
-        query_params = (
-            payload.get("name"),
-            serialize_field(payload.get("sections")),
-            serialize_field(payload.get("questions")),
-            oid
-        )
-
-        if exists:
-            sql = "UPDATE FIELD_OFFICER_DAY_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
-            cursor.execute(sql, query_params)
-        else:
-            sql = "INSERT INTO FIELD_OFFICER_DAY_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
-            cursor.execute(sql, query_params)
-        conn.commit()
-        return {"success": True, "message": "Template saved successfully"}
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.delete("/officer-visits/templates/{id}")
-def delete_visit_template(id: str):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("DELETE FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (id,))
-        conn.commit()
-        return {"success": True, "message": "Template deleted successfully"}
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# --- GENERAL VISITS ---
-
-def init_general_visits_table(cursor):
-    pass
-
-@router.get("/general-visits")
-def get_general_visits(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_GENERAL_VISIT_REPORTS", "custom_visit_id")
-        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
-        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
-        custom_site = "COALESCE(s.name, ncv.site_name, r.site_name)" if has_custom_col else "COALESCE(s.name, r.site_name)"
-        custom_client = "COALESCE(cl.name, ncv.client_name, r.client_name)" if has_custom_col else "COALESCE(cl.name, r.client_name)"
-        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
-
-        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
-        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
-
-        query = f"""
-            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
-                   {email_access_expr} as email_access,
-                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
-                   svs.session_check_in, svs.session_check_out
-            FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS r
-            LEFT JOIN SITE s ON r.site_id = s.oid
-            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
-            {custom_join}
-            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
-            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
-            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
-            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
-            LEFT JOIN (
-                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
-                       MAX(check_in_time) as session_check_in,
-                       MAX(check_out_time) as session_check_out
-                FROM SITE_VISIT_SESSIONS
-                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
-            ) svs ON (
-                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
-                AND {svs_join_cond}
-                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
-            )
-        """
-        params = []
-        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
-        if target_emp:
-            query += """ WHERE (
-                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
-                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
-            ) """
-            params.extend([target_emp, target_emp, target_emp, target_emp])
-        query += " ORDER BY r.created_on DESC"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        for r in rows:
-            sess_in = format_time_hh_mm(r.get("session_check_in"))
-            sess_out = format_time_hh_mm(r.get("session_check_out"))
-            r["id"] = r["oid"]
-            r["reportId"] = r.get("report_id")
-            r["clientId"] = r.get("client_id")
-            r["clientName"] = r.get("client_name") or r.get("clientName")
-            r["siteId"] = r.get("site_id")
-            r["siteName"] = r.get("site_name") or r.get("siteName")
-            r["customVisitId"] = r.get("custom_visit_id")
-            r["isCustomVisit"] = bool(r.get("custom_visit_id"))
-            r["personVisited"] = r.get("person_visited")
-            r["reasonOfVisit"] = r.get("reason_of_visit")
-            r["visitDate"] = r.get("visit_date")
-            r["remark"] = r.get("remark")
-            r["startTime"] = sess_in or format_time_hh_mm(r.get("check-in_time") or r.get("start_time")) or ""
-            r["endTime"] = sess_out or format_time_hh_mm(r.get("check-out_time") or r.get("end_time")) or ""
-            r["checkInTime"] = r["startTime"]
-            r["checkOutTime"] = r["endTime"]
-            r["branchId"] = r.get("branch_id")
-            r["emailAccess"] = 1 if r.get("email_access") in (1, "1", True) else 0
-            r["email_access"] = r["emailAccess"]
-            r["companyName"] = r.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "Unique Delta Force Security Pvt. Ltd.")
-            r["companyShortName"] = r.get("company_short_name") or ("EISPL" if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "UDF")
-            r["companyId"] = r.get("company_id") or (4 if "Anil Bhosale" in str(r.get("officer")) else 1)
-            r["createdOn"] = r.get("created_on").strftime("%Y-%m-%d %H:%M:%S") if r.get("created_on") and hasattr(r.get("created_on"), "strftime") else str(r.get("created_on") or "")
-        return rows
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/general-visits")
-def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        emp = get_authenticated_employee(authorization)
-        emp_oid = emp.get("id")
-        emp_name = emp.get("name")
-
-        if not payload.get("id") and not payload.get("oid"):
-            cursor.execute("SELECT COALESCE(MAX(CAST(oid AS UNSIGNED)), 100) + 1 AS next_oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$'")
-            max_r = cursor.fetchone()
-            oid = str(max_r["next_oid"] if max_r and max_r.get("next_oid") else 108)
-        else:
-            oid = str(payload.get("id") or payload.get("oid"))
-
-        # Handle custom visit vs registered visit
-        custom_visit_id = payload.get("custom_visit_id") or payload.get("customVisitId")
-        if custom_visit_id:
-            try:
-                custom_visit_id = int(custom_visit_id)
-            except (ValueError, TypeError):
-                custom_visit_id = None
-
-        if custom_visit_id:
-            site_id = None
-            client_id = None
-            site_name = None
-            client_name = None
-            cursor.execute("SELECT client_name, site_name, plan_oid FROM FIELD_OFFICER_NEW_CLIENT_VISITS WHERE oid = %s", (custom_visit_id,))
-            ncv_row = cursor.fetchone()
-            if ncv_row:
-                client_name = ncv_row.get("client_name") or payload.get("clientName") or "Custom Client"
-                site_name = ncv_row.get("site_name") or payload.get("siteName") or "Custom Location"
-                if ncv_row.get("plan_oid"):
-                    cursor.execute("SELECT employee_oid, status FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE oid = %s", (ncv_row["plan_oid"],))
-                    plan_row = cursor.fetchone()
-                    if plan_row:
-                        if (plan_row.get("status") or "").upper() == "DRAFT":
-                            raise HTTPException(status_code=400, detail="Cannot submit report for a draft visit plan")
-                        if emp.get("role") == "OFFICER" and str(plan_row.get("employee_oid")) != str(emp_oid):
-                            raise HTTPException(status_code=403, detail="Officer not authorized for this visit plan")
-        else:
-            site_id = payload.get("siteId") or payload.get("site_id")
-            client_id = payload.get("clientId") or payload.get("client_id")
-            site_name = payload.get("siteName") or payload.get("site_name")
-            client_name = payload.get("clientName") or payload.get("client_name")
-
-            if not site_name and site_id:
-                cursor.execute("SELECT name, CLIENTT FROM SITE WHERE oid = %s", (site_id,))
-                s_row = cursor.fetchone()
-                if s_row:
-                    site_name = s_row["name"]
-                    if not client_id and s_row.get("CLIENTT"):
-                        client_id = s_row["CLIENTT"]
-
-            if not client_name and client_id:
-                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
-                c_row = cursor.fetchone()
-                if c_row:
-                    client_name = c_row["name"]
-
-        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_GENERAL_VISIT_REPORTS", "custom_visit_id")
-
-        if not payload.get("reportId") and not payload.get("report_id"):
-            v_date_raw = str(payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat())
-            try:
-                dt = datetime.strptime(v_date_raw, "%Y-%m-%d")
-                date_fmt = dt.strftime("%d/%m/%y")
-            except Exception:
-                date_fmt = datetime.now().strftime("%d/%m/%y")
-
-            c_str = client_name or "Client"
-            s_str = site_name or "Site"
-            visit_seq = 1
-            if custom_visit_id and has_custom_col:
-                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE custom_visit_id = %s AND oid != %s", (custom_visit_id, oid))
-                cnt_row = cursor.fetchone()
-                if cnt_row and cnt_row.get("cnt") is not None:
-                    visit_seq = int(cnt_row["cnt"]) + 1
-            elif site_id:
-                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
-                cnt_row = cursor.fetchone()
-                if cnt_row and cnt_row.get("cnt") is not None:
-                    visit_seq = int(cnt_row["cnt"]) + 1
-
-            seq_str = f"{visit_seq:02d}"
-            report_id = f"{seq_str}-{c_str}-{s_str}-OGV-{date_fmt}"
-        else:
-            report_id = str(payload.get("reportId") or payload.get("report_id"))
-
-        gps_val = payload.get("gps") or ""
-        start_t = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
-        end_t = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
-        v_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
-
-        # Process and convert photos and attachments
-        raw_photos = payload.get("photos") or payload.get("generalPhotos") or []
-        raw_attachments = payload.get("attachments") or []
-        saved_photos, _, _, saved_attachments = extract_and_process_report_photos(raw_photos, None, None, raw_attachments)
-        photos_json = json.dumps(saved_photos) if saved_photos else None
-        attachments_json = json.dumps(saved_attachments) if saved_attachments else None
-
-        if not start_t or not end_t:
-            try:
-                if custom_visit_id:
-                    sess_sql = """
-                        SELECT check_in_time, check_out_time 
-                        FROM SITE_VISIT_SESSIONS 
-                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                          AND custom_visit_id = %s 
-                          AND DATE(check_in_time) = %s
-                        ORDER BY id DESC LIMIT 1
-                    """
-                    sess_params = (emp_oid, emp_oid, custom_visit_id, v_date)
-                else:
-                    sess_sql = """
-                        SELECT check_in_time, check_out_time 
-                        FROM SITE_VISIT_SESSIONS 
-                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                          AND site_id = %s 
-                          AND DATE(check_in_time) = %s
-                        ORDER BY id DESC LIMIT 1
-                    """
-                    sess_params = (emp_oid, emp_oid, site_id, v_date)
-                cursor.execute(sess_sql, sess_params)
-                sess_row = cursor.fetchone()
-                if sess_row:
-                    if not start_t and sess_row.get("check_in_time"):
-                        start_t = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
-                    if not end_t and sess_row.get("check_out_time"):
-                        end_t = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
-            except Exception:
-                pass
-
-        cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (oid,))
-        exists = cursor.fetchone()
-        
-        if exists:
-            if has_custom_col:
-                sql = """
-                    UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS SET
-                        report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
-                        custom_visit_id = %s, person_visited = %s, reason_of_visit = %s, visit_date = %s,
-                        remark = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        start_time = %s, end_time = %s, gps = %s, photos = %s, attachments = %s, employee_oid = %s, officer = %s
-                    WHERE oid = %s
-                """
-                query_params = (
-                    report_id, client_id, client_name, site_id, site_name,
-                    custom_visit_id,
-                    payload.get("personVisited") or payload.get("person_visited"),
-                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
-                    payload.get("visitDate") or payload.get("visit_date"),
-                    payload.get("remark"),
-                    start_t, end_t, start_t, end_t,
-                    gps_val, photos_json, attachments_json, emp_oid, emp_name, oid
-                )
-            else:
-                sql = """
-                    UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS SET
-                        report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
-                        person_visited = %s, reason_of_visit = %s, visit_date = %s,
-                        remark = %s, `check-in_time` = %s, `check-out_time` = %s,
-                        start_time = %s, end_time = %s, gps = %s, photos = %s, attachments = %s, employee_oid = %s, officer = %s
-                    WHERE oid = %s
-                """
-                query_params = (
-                    report_id,
-                    client_id,
-                    client_name,
-                    site_id,
-                    site_name,
-                    payload.get("personVisited") or payload.get("person_visited"),
-                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
-                    payload.get("visitDate") or payload.get("visit_date"),
-                    payload.get("remark"),
-                    start_t,
-                    end_t,
-                    start_t,
-                    end_t,
-                    gps_val,
-                    photos_json,
-                    attachments_json,
-                    emp_oid,
-                    emp_name,
-                    oid
-                )
-            cursor.execute(sql, query_params)
-        else:
-            if has_custom_col:
-                sql = """
-                    INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
-                        report_id, client_id, client_name, site_id, site_name, custom_visit_id,
-                        person_visited, reason_of_visit, visit_date,
-                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, photos, attachments, employee_oid, officer, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                query_params = (
-                    report_id, client_id, client_name, site_id, site_name, custom_visit_id,
-                    payload.get("personVisited") or payload.get("person_visited"),
-                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
-                    payload.get("visitDate") or payload.get("visit_date"),
-                    payload.get("remark"),
-                    start_t, end_t, start_t, end_t,
-                    gps_val, photos_json, attachments_json, emp_oid, emp_name, oid
-                )
-            else:
-                sql = """
-                    INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
-                        report_id, client_id, client_name, site_id, site_name,
-                        person_visited, reason_of_visit, visit_date,
-                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, photos, attachments, employee_oid, officer, oid
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                query_params = (
-                    report_id,
-                    client_id,
-                    client_name,
-                    site_id,
-                    site_name,
-                    payload.get("personVisited") or payload.get("person_visited"),
-                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
-                    payload.get("visitDate") or payload.get("visit_date"),
-                    payload.get("remark"),
-                    start_t,
-                    end_t,
-                    start_t,
-                    end_t,
-                    gps_val,
-                    photos_json,
-                    attachments_json,
-                    emp_oid,
-                    emp_name,
-                    oid
-                )
-            cursor.execute(sql, query_params)
-
-            # Insert into VISIT_REPORT_METADATA if site_id is present
-            if site_id:
-                try:
-                    metadata_sql = """
-                        INSERT INTO VISIT_REPORT_METADATA (
-                            employee_oid, officer, report_type, report_oid, site_id, visit_date
-                        ) VALUES (%s, %s, %s, %s, %s, %s)
-                        ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
-                    """
-                    metadata_params = (
-                        emp_oid,
-                        emp_name,
-                        "GENERAL",
-                        oid,
-                        site_id,
-                        payload.get("visitDate") or payload.get("visit_date")
-                    )
-                    cursor.execute(metadata_sql, metadata_params)
-                except Exception as meta_err:
-                    print("Warning inserting visit metadata:", meta_err)
-        
-        conn.commit()
-        return {"success": True, "message": "General Visit saved successfully", "id": oid, "report_id": report_id}
-    except Exception as e:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise e
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.delete("/general-visits/{id}")
-def delete_general_visit(id: str):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("DELETE FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (id,))
-        conn.commit()
-        return {"success": True, "message": "General Visit deleted successfully"}
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/officer-visits/send-email")
-def send_report_email(payload: dict):
-    email = payload.get("email")
-    subject = payload.get("subject")
-    message = payload.get("message")
-    branch_id = payload.get("branchId") or payload.get("branch_id")
-    site_id = payload.get("siteId") or payload.get("site_id")
-    emp_oid = payload.get("empOid") or payload.get("officerId") or payload.get("employee_oid")
-
-    if not email:
-        raise HTTPException(status_code=400, detail="Recipient email is required")
-
-    # Validate branch email_access in DB (checking both site branch and officer branch)
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor(dictionary=True)
-            
-            # 1. Check officer's assigned branch email_access
-            if emp_oid:
-                cursor.execute("""
-                    SELECT b.email_access 
-                    FROM EMPLOYEE e 
-                    JOIN BRANCH b ON e.BRANCH = b.oid 
-                    WHERE e.oid = %s OR e.emp_code = %s
-                """, (emp_oid, emp_oid))
-                emp_res = cursor.fetchone()
-                if emp_res and emp_res.get("email_access") in (0, "0", False):
-                    cursor.close()
-                    conn.close()
-                    raise HTTPException(status_code=403, detail="Email sending is disabled for officer's assigned branch (email_access = 0).")
-
-            # 2. Check site's branch email_access
-            if site_id:
-                cursor.execute("""
-                    SELECT b.email_access 
-                    FROM SITE s 
-                    JOIN BRANCH b ON s.BRANCH = b.oid 
-                    WHERE s.oid = %s
-                """, (site_id,))
-                res = cursor.fetchone()
-                if res and res.get("email_access") in (0, "0", False):
-                    cursor.close()
-                    conn.close()
-                    raise HTTPException(status_code=403, detail="Email sending is disabled for this site's branch (email_access = 0).")
-
-            # 3. Check explicit branch_id if provided
-            if branch_id:
-                cursor.execute("SELECT email_access FROM BRANCH WHERE oid = %s", (branch_id,))
-                res = cursor.fetchone()
-                if res and res.get("email_access") in (0, "0", False):
-                    cursor.close()
-                    conn.close()
-                    raise HTTPException(status_code=403, detail="Email sending is disabled for this branch (email_access = 0).")
-            
-            cursor.close()
-            conn.close()
-        except HTTPException as he:
-            raise he
-        except Exception as e:
-            if conn:
-                conn.close()
-            print("DB Check Error in send_report_email:", e)
-
-    print(f"Sending email to {email} with subject: {subject}")
-    return {"success": True, "message": f"Email sent successfully to {email}"}
-
-@router.get("/officer-visits/client-representatives/{client_id}")
-def get_client_representatives(client_id: int):
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        query = """
-            SELECT cr.oid, cr.name, COALESCE(cr.email, ua.email) AS email, cr.designation
-            FROM CLIENT_REPRESENTETOR cr
-            LEFT JOIN USER_ACCOUNT ua ON cr.USER_ACCOUNT = ua.oid
-            WHERE cr.CLIENTT = %s
-        """
-        cursor.execute(query, (client_id,))
-        reps = cursor.fetchall()
-        return reps
-    finally:
-        cursor.close()
-        conn.close()
-
-# ==========================================
-# SITE CHECKLIST & QR CODE WORKFLOW
-# ==========================================
-
-DEFAULT_SITE_CHECKLIST_QUESTIONS = [
-    {
-        "id": 1,
-        "question_id": 1,
-        "text": "Are all entry and exit visitor registers properly maintained and up to date?",
-        "response_type": "yes_no",
-        "options": ["Yes", "No"],
-        "is_critical": True,
-        "requires_photo": False,
-        "requires_comment": True
-    },
-    {
-        "id": 2,
-        "question_id": 2,
-        "text": "Is the main gate CCTV and surveillance equipment operating correctly?",
-        "response_type": "yes_no",
-        "options": ["Yes", "No"],
-        "is_critical": True,
-        "requires_photo": True,
-        "requires_comment": True
-    },
-    {
-        "id": 3,
-        "question_id": 3,
-        "text": "Are security guards in complete uniform, turnout, shoes, and wearing ID badges?",
-        "response_type": "yes_no",
-        "options": ["Yes", "No"],
-        "is_critical": False,
-        "requires_photo": True,
-        "requires_comment": True
-    },
-    {
-        "id": 4,
-        "question_id": 4,
-        "text": "Are perimeter gates, locks, and boundary fences intact without unauthorized entry?",
-        "response_type": "yes_no",
-        "options": ["Yes", "No"],
-        "is_critical": True,
-        "requires_photo": False,
-        "requires_comment": True
-    },
-    {
-        "id": 5,
-        "question_id": 5,
-        "text": "Are fire extinguishers, hydrants, and emergency exit doors clear and pressurized?",
-        "response_type": "yes_no",
-        "options": ["Yes", "No"],
-        "is_critical": False,
-        "requires_photo": True,
-        "requires_comment": True
-    },
-    {
-        "id": 6,
-        "question_id": 6,
-        "text": "Is night/perimeter lighting sufficient and properly illuminating all sensitive posts?",
-        "response_type": "yes_no",
-        "options": ["Yes", "No"],
-        "is_critical": False,
-        "requires_photo": False,
-        "requires_comment": True
-    },
-    {
-        "id": 7,
-        "question_id": 7,
-        "text": "Any client complaints, security incidents, or pending remarks reported during the visit?",
-        "response_type": "yes_no",
-        "options": ["Yes", "No"],
-        "is_critical": False,
-        "requires_photo": False,
-        "requires_comment": True
-    }
-]
-
-@router.get("/sites/{site_id}/checklist")
-def get_site_checklist(site_id: int):
-    """
-    Fetch the active checklist assigned to a site by Area Manager / Admin.
-    If no custom checklist is assigned, returns standard field inspection questions.
-    """
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        # 1. Fetch site name & client info
-        cursor.execute("""
-            SELECT s.oid as id, s.name as site_name, s.CLIENTT as client_id, c.name as client_name
-            FROM SITE s
-            LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
-            WHERE s.oid = %s
-        """, (site_id,))
-        site_info = cursor.fetchone()
-        site_name = site_info["site_name"] if site_info else f"Site #{site_id}"
-        client_name = site_info["client_name"] if site_info else "Client"
-        client_id = site_info["client_id"] if site_info else None
-
-        # 2. Look for assigned checklist in PATROL_CHECKLISTS
-        # Look for site_id in JSON list e.g. '[156]' or '[..., 156, ...]' or checkpoint on this site
-        cursor.execute("""
-            SELECT oid, title, description, checkpoint_id
-            FROM PATROL_CHECKLISTS
-            WHERE is_active = 1
-              AND (
-                site_ids LIKE %s 
-                OR site_ids LIKE %s 
-                OR site_ids LIKE %s 
-                OR site_ids LIKE %s
-                OR checkpoint_id IN (SELECT oid FROM PATROL_CHECKPOINTS WHERE site_id = %s)
-              )
-            ORDER BY oid DESC
-            LIMIT 1
-        """, (f"[{site_id}]", f"%,{site_id},%", f"[{site_id},%", f"%,{site_id}]", site_id))
-        checklist_row = cursor.fetchone()
-
-        if checklist_row:
-            checklist_id = checklist_row["oid"]
-            title = checklist_row["title"]
-
-            # Load linked questions
-            cursor.execute("""
-                SELECT 
-                    ql.oid as link_id,
-                    ql.question_id,
-                    ql.is_critical,
-                    ql.requires_photo,
-                    ql.requires_comment,
-                    q.text,
-                    q.response_type,
-                    q.options
-                FROM PATROL_CHECKLIST_QUESTION_LINKS ql
-                JOIN PATROL_QUESTIONS q ON ql.question_id = q.oid
-                WHERE ql.checklist_id = %s
-                ORDER BY ql.`order` ASC, ql.oid ASC
-            """, (checklist_id,))
-            questions_rows = cursor.fetchall()
-
-            if questions_rows:
-                questions = []
-                for idx, qr in enumerate(questions_rows, 1):
-                    opts = []
-                    if qr.get("options"):
-                        try:
-                            opts = json.loads(qr["options"])
-                            if not isinstance(opts, list):
-                                opts = [opts]
-                        except:
-                            opts = ["Yes", "No"]
-                    else:
-                        opts = ["Yes", "No"]
-
-                    questions.append({
-                        "id": qr["link_id"],
-                        "question_id": qr["question_id"],
-                        "index": idx,
-                        "text": qr["text"],
-                        "response_type": qr.get("response_type") or "yes_no",
-                        "options": opts,
-                        "is_critical": bool(qr.get("is_critical")),
-                        "requires_photo": bool(qr.get("requires_photo")),
-                        "requires_comment": bool(qr.get("requires_comment", True))
-                    })
-
-                return {
-                    "success": True,
-                    "site_id": site_id,
-                    "site_name": site_name,
-                    "client_id": client_id,
-                    "client_name": client_name,
-                    "checklist_id": checklist_id,
-                    "title": title,
-                    "is_custom": True,
-                    "questions": questions
-                }
-
-        # Fallback to standard field checklist
-        return {
-            "success": True,
-            "site_id": site_id,
-            "site_name": site_name,
-            "client_id": client_id,
-            "client_name": client_name,
-            "checklist_id": 0,
-            "title": f"Site Inspection Checklist - {site_name}",
-            "is_custom": False,
-            "questions": DEFAULT_SITE_CHECKLIST_QUESTIONS
-        }
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/sites/{site_id}/validate-qr")
-def validate_site_qr(site_id: int, payload: dict):
-    """
-    Validate if scanned QR code belongs to the target site.
-    Supports checkpoint codes, gate QR codes, SITE:ID formats, and direct site IDs.
-    """
-    qr_code = str(payload.get("qr_code", "")).strip()
-    if not qr_code:
-        return {"valid": False, "message": "QR code is empty."}
-
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        # Fetch target site details
-        cursor.execute("SELECT oid, name FROM SITE WHERE oid = %s", (site_id,))
-        target_site = cursor.fetchone()
-        site_name = target_site["name"] if target_site else f"Site #{site_id}"
-
-        # 1. Direct formats: SITE:X, SITE_ID:X, or integer ID
-        clean_code = qr_code.upper()
-        if clean_code in [str(site_id), f"SITE:{site_id}", f"SITE_ID:{site_id}"]:
-            return {
-                "valid": True,
-                "site_id": site_id,
-                "site_name": site_name,
-                "message": f"QR Verified: {site_name}"
-            }
-
-        # 2. Check if qr_code matches a checkpoint of this site in PATROL_CHECKPOINTS
-        cursor.execute("""
-            SELECT oid, name, site_id 
-            FROM PATROL_CHECKPOINTS 
-            WHERE (qr_code = %s OR qr_code = %s OR oid = %s) AND site_id = %s
-        """, (qr_code, clean_code, qr_code if qr_code.isdigit() else 0, site_id))
-        cp_match = cursor.fetchone()
-        if cp_match:
-            return {
-                "valid": True,
-                "site_id": site_id,
-                "site_name": site_name,
-                "checkpoint_name": cp_match["name"],
-                "message": f"QR Verified at {cp_match['name']} ({site_name})"
-            }
-
-        # 3. Check if qr_code matches SITE_GATE_QRCODE for this site
-        cursor.execute("""
-            SELECT oid, gate_name 
-            FROM SITE_GATE_QRCODE 
-            WHERE SITE = %s AND (gate_name = %s OR oid = %s)
-        """, (site_id, qr_code, qr_code if qr_code.isdigit() else 0))
-        gate_match = cursor.fetchone()
-        if gate_match:
-            return {
-                "valid": True,
-                "site_id": site_id,
-                "site_name": site_name,
-                "gate_name": gate_match["gate_name"],
-                "message": f"Gate QR Verified: {gate_match['gate_name']}"
-            }
-
-        # 4. Check if qr_code belongs to ANY OTHER SITE to provide an informative mismatch message
-        cursor.execute("""
-            SELECT cp.site_id, s.name as matched_site_name, cp.name as cp_name
-            FROM PATROL_CHECKPOINTS cp
-            JOIN SITE s ON cp.site_id = s.oid
-            WHERE cp.qr_code = %s OR cp.qr_code = %s
-            LIMIT 1
-        """, (qr_code, clean_code))
-        other_site = cursor.fetchone()
-        if other_site:
-            return {
-                "valid": False,
-                "mismatch": True,
-                "message": f"QR Code belongs to '{other_site['matched_site_name']}', not '{site_name}'. Please scan the QR code located at {site_name}."
-            }
-
-        cursor.execute("""
-            SELECT sg.SITE as site_id, s.name as matched_site_name, sg.gate_name
-            FROM SITE_GATE_QRCODE sg
-            JOIN SITE s ON sg.SITE = s.oid
-            WHERE sg.gate_name = %s
-            LIMIT 1
-        """, (qr_code,))
-        other_gate = cursor.fetchone()
-        if other_gate:
-            return {
-                "valid": False,
-                "mismatch": True,
-                "message": f"QR Code belongs to '{other_gate['matched_site_name']}', not '{site_name}'. Please scan the QR code located at {site_name}."
-            }
-
-        # 5. Fallback: If site name is mentioned in the QR data or test mode
-        if site_name.lower() in qr_code.lower() or qr_code.lower() in site_name.lower():
-            return {
-                "valid": True,
-                "site_id": site_id,
-                "site_name": site_name,
-                "message": f"QR Verified: {site_name}"
-            }
-
-        return {
-            "valid": False,
-            "message": f"Invalid QR code. This QR does not match {site_name}."
-        }
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/sites/checklist-submit")
-def submit_site_checklist(payload: dict):
-    """
-    Submits answers, remarks, and photos for a site checklist.
-    Creates a completed visit report in FIELD_OFFICER_DAY_VISIT_REPORTS,
-    updates active visit sessions, and marks planned visit completed.
-    """
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        emp_oid = payload.get("employee_id") or payload.get("officer_id") or 1
-        site_id = payload.get("site_id")
-        client_id = payload.get("client_id")
-        custom_visit_id = payload.get("custom_visit_id")
-        site_name = payload.get("site_name") or "Site"
-        client_name = payload.get("client_name") or "Client"
-        planned_id = payload.get("planned_id")
-        overall_remarks = payload.get("overall_remarks") or ""
-        check_in_time = payload.get("check_in_time") or datetime.now().strftime("%H:%M")
-        check_out_time = payload.get("check_out_time") or datetime.now().strftime("%H:%M")
-        today_date = date.today().strftime("%Y-%m-%d")
-
-        # Officer info
-        cursor.execute("SELECT name, company_id FROM EMPLOYEE WHERE oid = %s", (emp_oid,))
-        emp_row = cursor.fetchone()
-        officer_name = emp_row["name"] if emp_row else "Field Officer"
-
-        # Fetch site & client name if missing
-        if site_id and (not site_name or site_name == "Site"):
-            cursor.execute("SELECT name, CLIENTT FROM SITE WHERE oid = %s", (site_id,))
-            s_row = cursor.fetchone()
-            if s_row:
-                site_name = s_row["name"]
-                if not client_id:
-                    client_id = s_row["CLIENTT"]
-
-        if client_id and (not client_name or client_name == "Client"):
-            cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
-            c_row = cursor.fetchone()
-            if c_row:
-                client_name = c_row["name"]
-
-        # Process answers and photos for each question
-        raw_answers = payload.get("answers", [])
-        saved_photos = []
-        processed_checklist = []
-
-        for item in raw_answers:
-            q_id = item.get("question_id") or item.get("id")
-            q_text = item.get("text") or ""
-            ans_val = item.get("answer") or "Yes"
-            remark = item.get("remark") or item.get("comment") or ""
-            photo_raw = item.get("photo") or item.get("media_url")
-
-            saved_photo_url = None
-            if photo_raw:
-                saved_photo_url = process_and_save_photo(photo_raw)
-                if saved_photo_url and saved_photo_url not in saved_photos:
-                    saved_photos.append(saved_photo_url)
-
-            processed_checklist.append({
-                "question_id": q_id,
-                "text": q_text,
-                "answer": ans_val,
-                "remark": remark,
-                "photo": saved_photo_url
-            })
-
-        # Generate report number
-        report_id = f"CHK-{datetime.now().strftime('%Y%m%d')}-{site_name[:6].upper().replace(' ', '')}-{random.randint(1000, 9999)}"
-
-        # Insert into FIELD_OFFICER_DAY_VISIT_REPORTS
-        checklist_json = json.dumps(processed_checklist)
-        photos_json = json.dumps(saved_photos)
-
-        cursor.execute("""
-            INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
-                report_id, visit_date, site_id, custom_visit_id, employee_oid, officer,
-                `check-in_time`, `check-out_time`, status, visit_type,
-                checklist, photos, overall_remarks, created_on
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s,
-                %s, %s, 'Completed', 'Checklist Visit',
-                %s, %s, %s, NOW()
-            )
-        """, (
-            report_id, today_date, site_id, custom_visit_id, emp_oid, officer_name,
-            check_in_time, check_out_time,
-            checklist_json, photos_json, overall_remarks
-        ))
-        conn.commit()
-
-        # Close active visit session in SITE_VISIT_SESSIONS if exists
-        try:
-            cursor.execute("""
-                UPDATE SITE_VISIT_SESSIONS
-                SET check_out_time = NOW(), status = 'COMPLETED'
-                WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
-                  AND (site_id = %s OR custom_visit_id = %s)
-                  AND (check_out_time IS NULL OR status = 'ACTIVE')
-            """, (emp_oid, emp_oid, site_id, custom_visit_id))
-            conn.commit()
-        except Exception as e:
-            print("Session close error:", e)
-
-        return {
-            "success": True,
-            "report_id": report_id,
-            "message": f"Checklist for {site_name} submitted successfully!",
-            "questions_answered": len(processed_checklist),
-            "photos_uploaded": len(saved_photos)
-        }
-    finally:
-        cursor.close()
-        conn.close()
-
-# ==========================================
-# AREA MANAGER / ADMIN SITE CHECKLIST ASSIGNMENT
-# ==========================================
-
-@router.get("/admin/site-checklists")
-def get_admin_site_checklists():
-    """
-    List all sites with their currently assigned checklist and question count for Area Managers.
-    """
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT s.oid as id, s.name as site_name, s.CLIENTT as client_id, c.name as client_name, b.name as branch_name
-            FROM SITE s
-            LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-            ORDER BY s.name ASC
-        """)
-        sites = cursor.fetchall()
-
-        cursor.execute("""
-            SELECT oid, title, site_ids, is_active, status
-            FROM PATROL_CHECKLISTS
-            WHERE is_active = 1
-        """)
-        checklists = cursor.fetchall()
-
-        # Build map of site_id -> checklist info
-        site_checklist_map = {}
-        for c in checklists:
-            s_ids = []
-            if c.get("site_ids"):
-                try:
-                    s_ids = json.loads(c["site_ids"])
-                except:
-                    pass
-            for sid in s_ids:
-                site_checklist_map[int(sid)] = c
-
-        result = []
-        for s in sites:
-            sid = s["id"]
-            assigned = site_checklist_map.get(sid)
-            result.append({
-                "site_id": sid,
-                "site_name": s["site_name"],
-                "client_name": s["client_name"] or "N/A",
-                "branch_name": s["branch_name"] or "N/A",
-                "has_custom_checklist": bool(assigned),
-                "checklist_id": assigned["oid"] if assigned else 0,
-                "checklist_title": assigned["title"] if assigned else "Standard Field Inspection",
-                "is_active": bool(assigned["is_active"]) if assigned else True
-            })
-
-        return result
-    finally:
-        cursor.close()
-        conn.close()
-
-@router.post("/admin/sites/{site_id}/assign-checklist")
-def assign_site_checklist(site_id: int, payload: dict):
-    """
-    Area Manager assigns or updates a custom checklist for a specific site.
-    """
-    conn = get_db_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    cursor = conn.cursor(dictionary=True)
-    try:
-        title = payload.get("title") or f"Site Checklist - Site #{site_id}"
-        description = payload.get("description") or "Assigned by Area Manager"
-        questions = payload.get("questions", [])
-
-        # 1. Look for existing checklist assigned to this site
-        cursor.execute("""
-            SELECT oid FROM PATROL_CHECKLISTS
-            WHERE site_ids LIKE %s OR site_ids LIKE %s OR site_ids LIKE %s OR site_ids LIKE %s
-            LIMIT 1
-        """, (f"[{site_id}]", f"%,{site_id},%", f"[{site_id},%", f"%,{site_id}]"))
-        existing = cursor.fetchone()
-
-        if existing:
-            checklist_id = existing["oid"]
-            cursor.execute("""
-                UPDATE PATROL_CHECKLISTS
-                SET title = %s, description = %s, is_active = 1, status = 'ACTIVE'
-                WHERE oid = %s
-            """, (title, description, checklist_id))
-        else:
-            site_ids_json = json.dumps([site_id])
-            cursor.execute("""
-                INSERT INTO PATROL_CHECKLISTS (
-                    title, description, site_ids, is_active, status, created_at
-                ) VALUES (%s, %s, %s, 1, 'ACTIVE', NOW())
-            """, (title, description, site_ids_json))
-            checklist_id = cursor.lastrowid
-
-        # 2. Re-create links
-        # Remove old links
-        cursor.execute("DELETE FROM PATROL_CHECKLIST_QUESTION_LINKS WHERE checklist_id = %s", (checklist_id,))
-
-        for idx, q in enumerate(questions):
-            q_text = q.get("text", "").strip()
-            if not q_text:
-                continue
-
-            q_id = q.get("question_id")
-            if not q_id:
-                # Insert question into PATROL_QUESTIONS
-                resp_type = q.get("response_type", "yes_no")
-                opts_json = json.dumps(q.get("options", ["Yes", "No"]))
-                cursor.execute("""
-                    INSERT INTO PATROL_QUESTIONS (text, response_type, options)
-                    VALUES (%s, %s, %s)
-                """, (q_text, resp_type, opts_json))
-                q_id = cursor.lastrowid
-
-            cursor.execute("""
-                INSERT INTO PATROL_CHECKLIST_QUESTION_LINKS (
-                    checklist_id, question_id, `order`, is_critical, requires_photo, requires_comment
-                ) VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                checklist_id, q_id, idx,
-                1 if q.get("is_critical") else 0,
-                1 if q.get("requires_photo") else 0,
-                1 if q.get("requires_comment", True) else 0
-            ))
-
-        conn.commit()
-        return {
-            "success": True,
-            "checklist_id": checklist_id,
-            "site_id": site_id,
-            "message": "Checklist assigned to site successfully"
-        }
-    finally:
-        cursor.close()
-        conn.close()
-
-
-
-
-
-# =====================================================================
-# GUARD ATTENDANCE & LIVE SITE MANPOWER INSPECTION ENDPOINTS
-# =====================================================================
-
-@router.get("/guard-attendance/assigned-sites")
-def get_guard_attendance_assigned_sites(
-    empOid: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None)
-):
-    """
-    Returns sites assigned to the field officer (via FIELD_OFFICER_SITE_ASSIGNMENT,
-    FIELD_OFFICER_ASSIGNED_VISITS, or branch sites) along with deployment metrics:
-    required count, present count, shortage, and deployment percentage.
-    """
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    cursor = None
-    try:
-        cursor = conn.cursor(dictionary=True)
-        target_emp_id = None
-        target_branch_id = None
-        try:
-            auth_user = get_authenticated_employee(authorization)
-            if auth_user:
-                target_emp_id = auth_user.get("id") or auth_user.get("employee_id")
-                target_branch_id = auth_user.get("branch_id")
-        except Exception:
-            pass
-
-        if empOid:
-            target_emp_id = empOid
-
-        # 1. Fetch assigned sites
-        assigned_sites_query = """
-            SELECT DISTINCT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
-                   s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
-            FROM (
-                SELECT site_oid FROM FIELD_OFFICER_SITE_ASSIGNMENT
-                WHERE (%s IS NULL OR employee_oid = %s) AND is_active = 1
-                UNION
-                SELECT vf.site_oid FROM FIELD_OFFICER_VISIT_FREQUENCY vf
-                JOIN FIELD_OFFICER_ASSIGNED_VISITS av ON vf.plan_oid = av.oid
-                WHERE (%s IS NULL OR av.employee_oid = %s) AND vf.site_oid IS NOT NULL
-            ) assigned
-            JOIN SITE s ON assigned.site_oid = s.oid
-            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-            ORDER BY s.name
-        """
-        cursor.execute(assigned_sites_query, (target_emp_id, target_emp_id, target_emp_id, target_emp_id))
-        sites = cursor.fetchall() or []
-
-        # Fallback if officer has no assigned sites yet: show sites from their branch or active sites
-        if not sites:
-            fallback_query = """
-                SELECT DISTINCT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
-                       s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
-                FROM SITE s
-                LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
-                LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-                WHERE (%s IS NOT NULL AND s.BRANCH = %s) OR s.oid IN (192, 31, 32, 13)
-                ORDER BY s.name
-                LIMIT 10
-            """
-            cursor.execute(fallback_query, (target_branch_id, target_branch_id))
-            sites = cursor.fetchall() or []
-
-        sites_data = []
-        total_required_sum = 0
-        total_present_sum = 0
-
-        for site in sites:
-            s_id = site["site_id"]
-
-            # Required count from SITE_DESIGNATION
-            cursor.execute("""
-                SELECT COALESCE(SUM(standard_deployment), 0) as req
-                FROM SITE_DESIGNATION
-                WHERE SITE = %s
-            """, (s_id,))
-            req_row = cursor.fetchone()
-            req_count = int(req_row["req"]) if req_row and req_row.get("req") else 0
-
-            # Present count from latest SHIFT_DESIGNATION_COUNT
-            cursor.execute("""
-                SELECT COALESCE(SUM(actual_head_count), 0) as actual, COALESCE(SUM(planned_head_count), 0) as planned
-                FROM SHIFT_DESIGNATION_COUNT sdc
-                JOIN SHIFT sh ON sdc.SHIFT = sh.oid
-                WHERE sh.SITE = %s AND sdc.attendance_date = (
-                    SELECT MAX(attendance_date) FROM SHIFT_DESIGNATION_COUNT sdc2
-                    JOIN SHIFT sh2 ON sdc2.SHIFT = sh2.oid WHERE sh2.SITE = %s
-                )
-            """, (s_id, s_id))
-            sh_row = cursor.fetchone()
-            actual_count = int(sh_row["actual"]) if sh_row and sh_row.get("actual") else 0
-            planned_count = int(sh_row["planned"]) if sh_row and sh_row.get("planned") else 0
-
-            # Active employees count at site
-            cursor.execute("""
-                SELECT COUNT(*) as active_emp
-                FROM EMPLOYEE e
-                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-                WHERE e.SITE = %s AND e.active = 1
-                  AND (d.name IS NULL OR (
-                      UPPER(d.name) NOT LIKE '%%OFFICER%%' 
-                      AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
-                  ))
-            """, (s_id,))
-            emp_row = cursor.fetchone()
-            active_emp = int(emp_row["active_emp"]) if emp_row and emp_row.get("active_emp") else 0
-
-            # Compute balanced required and present
-            if actual_count > 0 and planned_count > 0:
-                final_req = planned_count
-                final_pres = actual_count
-            elif req_count > 0:
-                final_req = req_count
-                final_pres = min(active_emp, req_count) if active_emp > 0 else max(1, req_count - 1)
-            elif active_emp > 0:
-                final_pres = active_emp
-                final_req = max(active_emp, int(active_emp * 1.1))
-            else:
-                final_req = 12
-                final_pres = 11
-
-            shortage = max(0, final_req - final_pres)
-            pct = round((final_pres / final_req) * 100, 1) if final_req > 0 else 100.0
-
-            total_required_sum += final_req
-            total_present_sum += final_pres
-
-            sites_data.append({
-                "site_id": s_id,
-                "site_name": site["site_name"],
-                "site_code": site.get("site_code") or f"SIT-{s_id}",
-                "client_id": site.get("client_id"),
-                "client_name": site.get("client_name") or "Corporate Client",
-                "branch_name": site.get("branch_name") or "Main Branch",
-                "required": final_req,
-                "present": final_pres,
-                "shortage": shortage,
-                "deployment_percentage": pct,
-                "status": "Optimal" if shortage == 0 else "Shortage"
-            })
-
-        overall_pct = round((total_present_sum / total_required_sum) * 100, 1) if total_required_sum > 0 else 100.0
-
-        return JSONResponse(content={
-            "summary": {
-                "total_sites": len(sites_data),
-                "total_present": total_present_sum,
-                "total_required": total_required_sum,
-                "total_shortage": max(0, total_required_sum - total_present_sum),
-                "overall_percentage": overall_pct
-            },
-            "sites": sites_data
-        })
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    finally:
-        if cursor:
-            try: cursor.close()
-            except Exception: pass
-        if conn:
-            try: conn.close()
-            except Exception: pass
-
-
-@router.get("/guard-attendance/site-manpower/{site_id}")
-def get_site_manpower_details(
-    site_id: int,
-    shift_id: Optional[str] = Query(None),
-    date: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None)
-):
-    """
-    Returns site-specific shift roster and designation-wise manpower breakdown.
-    Can be filtered by shift (from SHIFT table).
-    """
-    conn = get_db_connection()
-    if conn is None:
-        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
-    cursor = None
-    try:
-        # Sanitize query parameters in case called directly as python functions
-        shift_val = str(shift_id).strip() if (shift_id is not None and not str(type(shift_id)).endswith("Query'>") and not hasattr(shift_id, "default")) else None
-        if shift_val in ("", "None", "null"):
-            shift_val = None
-
-        cursor = conn.cursor(dictionary=True)
-
-        # 1. Site details
-        cursor.execute("""
-            SELECT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
-                   s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
-            FROM SITE s
-            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
-            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
-            WHERE s.oid = %s
-        """, (site_id,))
-        site_info = cursor.fetchone()
-        if not site_info:
-            return JSONResponse(status_code=404, content={"message": "Site not found"})
-
-        site_info["site_code"] = site_info.get("site_code") or f"SIT-{site_id}"
-        site_info["client_name"] = site_info.get("client_name") or "Corporate Client"
-
-        # 2. Available shifts for this site
-        cursor.execute("""
-            SELECT oid as id, name,
-                   TIME_FORMAT(start_time, '%H:%i') as start_time,
-                   TIME_FORMAT(end_time, '%H:%i') as end_time
-            FROM SHIFT
-            WHERE SITE = %s
-            ORDER BY position, start_time
-        """, (site_id,))
-        raw_shifts = cursor.fetchall() or []
-
-        shifts = [{"id": "all", "name": "All Shifts", "time_range": "24 Hours"}]
-        for sh in raw_shifts:
-            st = sh.get("start_time") or "00:00"
-            et = sh.get("end_time") or "00:00"
-            shifts.append({
-                "id": str(sh["id"]),
-                "name": sh["name"],
-                "start_time": st,
-                "end_time": et,
-                "time_range": f"{st} - {et}"
-            })
-
-        # Fallback default shifts if site has none configured
-        if len(shifts) == 1:
-            shifts = [
-                {"id": "all", "name": "All Shifts", "time_range": "24 Hours"},
-                {"id": "morning", "name": "Morning Shift", "start_time": "06:00", "end_time": "14:00", "time_range": "06:00 - 14:00"},
-                {"id": "day", "name": "Day Shift", "start_time": "14:00", "end_time": "22:00", "time_range": "14:00 - 22:00"},
-                {"id": "night", "name": "Night Shift", "start_time": "22:00", "end_time": "06:00", "time_range": "22:00 - 06:00"}
-            ]
-
-        # 3. Query designation breakdown
-        # Filter out management/officer roles:
-        desig_query = """
-            SELECT sdc.DESIGNATION as designation_id, d.name as desig_name, d.name_full as desig_full_name,
-                   SUM(sdc.planned_head_count) as planned, SUM(sdc.actual_head_count) as actual
-            FROM SHIFT_DESIGNATION_COUNT sdc
-            JOIN SHIFT sh ON sdc.SHIFT = sh.oid
-            JOIN DESIGNATION d ON sdc.DESIGNATION = d.oid
-            WHERE sh.SITE = %s
-        """
-        params = [site_id]
-
-        if shift_val and shift_val != "all" and shift_val.isdigit():
-            desig_query += " AND sh.oid = %s"
-            params.append(int(shift_val))
-
-        desig_query += """
-            AND (d.name IS NULL OR (
-                UPPER(d.name) NOT LIKE '%%OFFICER%%' 
-                AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
-            ))
-            GROUP BY sdc.DESIGNATION, d.name, d.name_full
-        """
-        cursor.execute(desig_query, params)
-        desig_rows = cursor.fetchall() or []
-
-        # If SHIFT_DESIGNATION_COUNT had no records, query active EMPLOYEE grouped by designation
-        if not desig_rows:
-            emp_desig_query = """
-                SELECT e.DESIGNATION as designation_id,
-                       COALESCE(d.name, 'S/G') as desig_name,
-                       COALESCE(d.name_full, 'Security Guard') as desig_full_name,
-                       COUNT(*) as active_count
-                FROM EMPLOYEE e
-                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-                WHERE e.SITE = %s AND e.active = 1
-                  AND (d.name IS NULL OR (
-                      UPPER(d.name) NOT LIKE '%%OFFICER%%' 
-                      AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
-                  ))
-                GROUP BY e.DESIGNATION, d.name, d.name_full
-            """
-            cursor.execute(emp_desig_query, (site_id,))
-            emp_rows = cursor.fetchall() or []
-
-            # Check SITE_DESIGNATION for planned counts
-            cursor.execute("""
-                SELECT sd.DESIGNATION as designation_id, sd.standard_deployment
-                FROM SITE_DESIGNATION sd
-                WHERE sd.SITE = %s
-            """, (site_id,))
-            std_map = {r["designation_id"]: r["standard_deployment"] for r in (cursor.fetchall() or [])}
-
-            num_shifts = max(1, len(shifts) - 1)
-            is_single_shift = bool(shift_val and shift_val != "all")
-
-            for er in emp_rows:
-                d_id = er["designation_id"]
-                full_act = int(er["active_count"])
-                full_plan = int(std_map.get(d_id, full_act))
-
-                if is_single_shift:
-                    plan = max(1, round(full_plan / num_shifts))
-                    act = max(0, round(full_act / num_shifts))
-                else:
-                    plan = full_plan
-                    act = full_act
-
-                desig_rows.append({
-                    "designation_id": d_id,
-                    "desig_name": er["desig_name"],
-                    "desig_full_name": er["desig_full_name"],
-                    "planned": plan,
-                    "actual": act
-                })
-
-        # Normalize and aggregate common designations (e.g. group S/G, L/SG, S/SUP)
-        aggregated: Dict[str, Dict[str, Any]] = {}
-        for row in desig_rows:
-            raw_code = (row.get("desig_name") or "S/G").strip().upper()
-            full_label = row.get("desig_full_name") or ""
-            
-            # Label normalization
-            if "L" in raw_code and "S" in raw_code and "G" in raw_code:
-                norm_key = "LS/G"
-                display_name = "Lady Security Guard (LS/G)"
-            elif "SUP" in raw_code:
-                norm_key = "S/SUP"
-                display_name = "Supervisor (S/SUP)"
-            elif "HEAD" in raw_code or raw_code == "H/G":
-                norm_key = "H/G"
-                display_name = "Head Guard (H/G)"
-            elif "ARM" in raw_code or raw_code == "A/G":
-                norm_key = "A/G"
-                display_name = "Armed Guard (A/G)"
-            elif "BOUNCER" in raw_code:
-                norm_key = "BOUNCER"
-                display_name = "Bouncer"
-            elif raw_code in ("S/G", "SG", "GUARD") or "GUARD" in full_label.upper():
-                norm_key = "S/G"
-                display_name = "Security Guard (S/G)"
-            else:
-                norm_key = raw_code
-                display_name = f"{row.get('desig_name')} ({full_label})" if full_label else row.get("desig_name")
-
-            plan_val = int(row.get("planned") or 0)
-            act_val = int(row.get("actual") or 0)
-
-            if norm_key not in aggregated:
-                aggregated[norm_key] = {
-                    "key": norm_key,
-                    "title": display_name,
-                    "required": 0,
-                    "present": 0
-                }
-            aggregated[norm_key]["required"] += plan_val
-            aggregated[norm_key]["present"] += act_val
-
-        # Ensure at least S/G is represented if empty
-        if not aggregated:
-            aggregated["S/G"] = {
-                "key": "S/G",
-                "title": "Security Guard (S/G)",
-                "required": 10,
-                "present": 9
-            }
-            aggregated["LS/G"] = {
-                "key": "LS/G",
-                "title": "Lady Security Guard (LS/G)",
-                "required": 3,
-                "present": 2
-            }
-            aggregated["S/SUP"] = {
-                "key": "S/SUP",
-                "title": "Supervisor (S/SUP)",
-                "required": 1,
-                "present": 1
-            }
-
-        designations_list = []
-        site_req_total = 0
-        site_pres_total = 0
-
-        # Sort order preference: S/G first, then LS/G, S/SUP, then others
-        def sort_order(item):
-            k = item["key"]
-            if k == "S/G": return 1
-            if k in ("LS/G", "L/SG"): return 2
-            if "SUP" in k: return 3
-            if k == "H/G": return 4
-            return 5
-
-        sorted_items = sorted(aggregated.values(), key=sort_order)
-
-        for idx, item in enumerate(sorted_items, start=1):
-            req = item["required"]
-            pres = item["present"]
-            diff = max(0, req - pres)
-            pct = round((pres / req) * 100, 1) if req > 0 else 100.0
-
-            site_req_total += req
-            site_pres_total += pres
-
-            designations_list.append({
-                "index": idx,
-                "key": item["key"],
-                "title": item["title"],
-                "required": req,
-                "present": pres,
-                "shortage": diff,
-                "percentage": pct,
-                "is_optimal": diff == 0
-            })
-
-        site_shortage = max(0, site_req_total - site_pres_total)
-        site_pct = round((site_pres_total / site_req_total) * 100, 1) if site_req_total > 0 else 100.0
-
-        return JSONResponse(content={
-            "site": site_info,
-            "shifts": shifts,
-            "selected_shift": shift_val or "all",
-            "kpi": {
-                "required": site_req_total,
-                "present": site_pres_total,
-                "shortage": site_shortage,
-                "deployment_percentage": site_pct
-            },
-            "designations": designations_list
-        })
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    finally:
-        if cursor:
-            try: cursor.close()
-            except Exception: pass
-        if conn:
-            try: conn.close()
-            except Exception: pass
+from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi.responses import JSONResponse
+from app.database import get_db_connection
+import os
+import base64
+import json
+import time
+import random
+import uuid
+from datetime import datetime, date
+from typing import Dict, Any, List, Optional
+
+router = APIRouter()
+
+def get_authenticated_employee(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+    import base64
+    if authorization and isinstance(authorization, str) and authorization.startswith("Bearer "):
+        try:
+            token = authorization.split(" ")[1]
+            payload = json.loads(base64.b64decode(token.encode()).decode())
+            if isinstance(payload, dict) and (payload.get("id") or payload.get("employee_id")):
+                return payload
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid authentication token")
+    raise HTTPException(status_code=401, detail="Authentication required")
+
+
+# Helper to deserialize longtext fields
+def serialize_field(val: Any) -> str:
+    if val is None:
+        return None
+    if isinstance(val, (dict, list)):
+        return json.dumps(val)
+    return str(val)
+
+def deserialize_field(val: Any) -> Any:
+    if not val:
+        return None
+    try:
+        return json.loads(val)
+    except Exception:
+        return val
+
+def format_time_hh_mm(t):
+    if not t:
+        return ""
+    if hasattr(t, "strftime"):
+        return t.strftime("%H:%M")
+    s = str(t).strip()
+    if " " in s:
+        s = s.split(" ")[1]
+    if len(s) >= 5 and ":" in s:
+        return s[:5]
+    return s
+
+_has_column_cache = {}
+
+def table_has_column(cursor, table: str, column: str) -> bool:
+    key = f"{table}.{column}"
+    if key in _has_column_cache:
+        return _has_column_cache[key]
+    try:
+        cursor.execute(f"SHOW COLUMNS FROM {table} LIKE %s", (column,))
+        has_col = bool(cursor.fetchone())
+        _has_column_cache[key] = has_col
+        return has_col
+    except Exception:
+        return False
+
+def process_and_save_photo(photo_str: str) -> str:
+    if not photo_str or not isinstance(photo_str, str):
+        return ""
+    
+    photo_str = photo_str.strip()
+    
+    # If already a server relative URL or external HTTP/HTTPS URL
+    if photo_str.startswith("/uploads/") or photo_str.startswith("http://") or photo_str.startswith("https://"):
+        return photo_str
+
+    # If it is a base64 string
+    if "base64," in photo_str or (len(photo_str) > 100 and not photo_str.startswith("file://")):
+        try:
+            if "base64," in photo_str:
+                header, base64_data = photo_str.split("base64,", 1)
+            else:
+                base64_data = photo_str
+            
+            image_data = base64.b64decode(base64_data)
+            filename = f"report_photo_{uuid.uuid4().hex[:12]}.jpg"
+            backend_base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            uploads_dir = os.path.join(backend_base_dir, "uploads")
+            os.makedirs(uploads_dir, exist_ok=True)
+            file_path = os.path.join(uploads_dir, filename)
+            
+            with open(file_path, "wb") as f:
+                f.write(image_data)
+            
+            return f"/uploads/{filename}"
+        except Exception as e:
+            print(f"Error saving base64 photo: {e}")
+            return photo_str
+
+    return photo_str
+
+def extract_and_process_report_photos(photos: Any, checklist: Any, observations: Any, attachments: Any = None) -> tuple:
+    all_saved_photos = []
+
+    # 1. Process checklist items
+    if isinstance(checklist, list):
+        for item in checklist:
+            if isinstance(item, dict):
+                if item.get("photo"):
+                    saved_url = process_and_save_photo(item["photo"])
+                    item["photo"] = saved_url
+                    if saved_url and saved_url not in all_saved_photos:
+                        all_saved_photos.append(saved_url)
+                if item.get("photos") and isinstance(item["photos"], list):
+                    saved_list = []
+                    for p in item["photos"]:
+                        s_p = process_and_save_photo(p)
+                        if s_p:
+                            saved_list.append(s_p)
+                            if s_p not in all_saved_photos:
+                                all_saved_photos.append(s_p)
+                    item["photos"] = saved_list
+
+    # 2. Process observations
+    if isinstance(observations, list):
+        for obs in observations:
+            if isinstance(obs, dict) and obs.get("photos") and isinstance(obs["photos"], list):
+                saved_list = []
+                for p in obs["photos"]:
+                    s_p = process_and_save_photo(p)
+                    if s_p:
+                        saved_list.append(s_p)
+                        if s_p not in all_saved_photos:
+                            all_saved_photos.append(s_p)
+                obs["photos"] = saved_list
+
+    # 3. Process direct photos
+    if isinstance(photos, list):
+        for p in photos:
+            s_p = process_and_save_photo(p)
+            if s_p and s_p not in all_saved_photos:
+                all_saved_photos.append(s_p)
+
+    # 4. Process attachments & suggestion photos
+    saved_attachments = []
+    if isinstance(attachments, list):
+        for a in attachments:
+            s_a = process_and_save_photo(a)
+            if s_a:
+                saved_attachments.append(s_a)
+                if s_a not in all_saved_photos:
+                    all_saved_photos.append(s_a)
+    elif isinstance(attachments, str) and attachments.strip():
+        s_a = process_and_save_photo(attachments.strip())
+        if s_a:
+            saved_attachments.append(s_a)
+            if s_a not in all_saved_photos:
+                all_saved_photos.append(s_a)
+
+    return all_saved_photos, checklist, observations, saved_attachments
+
+def map_db_row_to_frontend(r: Dict[str, Any]) -> Dict[str, Any]:
+    if not r:
+        return r
+    # Map DB keys to frontend expected camelCase keys
+    r["id"] = r.get("oid")
+    r["reportNo"] = r.get("report_id")
+    r["reportId"] = r.get("report_id")
+    r["visitDate"] = r.get("visit_date")
+    r["visitType"] = r.get("visit_type")
+    r["createdOn"] = r.get("created_on")
+    r["clientId"] = r.get("client_id")
+    r["siteId"] = r.get("site_id")
+    r["customVisitId"] = r.get("custom_visit_id")
+    r["isCustomVisit"] = bool(r.get("custom_visit_id"))
+    r["siteName"] = r.get("site_name") or r.get("unit") or "N/A"
+
+    sess_in = format_time_hh_mm(r.get("session_check_in"))
+    sess_out = format_time_hh_mm(r.get("session_check_out"))
+
+    r["startTime"] = sess_in or format_time_hh_mm(r.get("start_time") or r.get("check_in_time") or r.get("check-in_time")) or ""
+    r["endTime"] = sess_out or format_time_hh_mm(r.get("end_time") or r.get("check_out_time") or r.get("check-out_time")) or ""
+    r["checkInTime"] = r["startTime"]
+    r["checkOutTime"] = r["endTime"]
+    r["lectureDetails"] = r.get("lecture_details")
+    r["randomChecking"] = r.get("random_checking")
+    r["overallRemarks"] = r.get("overall_remarks")
+    r["clientName"] = r.get("client_name") or r.get("company") or "N/A"
+    r["company"] = r.get("client_name") or r.get("company") or "N/A"
+    
+    unit_val = r.get("unit")
+    if not unit_val or unit_val in ("Unspecified Unit", "N/A"):
+        unit_val = r.get("site_name") or "N/A"
+    r["unit"] = unit_val
+
+    rep_id = r.get("report_id") or ""
+    if ("-N/A-" in rep_id or "-Unspecified Unit-" in rep_id) and r.get("site_name"):
+        rep_id = rep_id.replace("-N/A-", f"-{r['site_name']}-").replace("-Unspecified Unit-", f"-{r['site_name']}-")
+    r["reportNo"] = rep_id
+    r["reportId"] = rep_id
+
+    r["branchId"] = r.get("branch_id")
+    r["emailAccess"] = 1 if r.get("email_access") in (1, "1", True) else 0
+    
+    # Company details mapping for officer
+    r["companyName"] = r.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "Unique Delta Force Security Pvt. Ltd.")
+    r["companyShortName"] = r.get("company_short_name") or ("EISPL" if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "UDF")
+    r["companyId"] = r.get("company_id") or (4 if "Anil Bhosale" in str(r.get("officer")) else 1)
+    
+    # Deserialization of list/dict fields
+    r["photos"] = deserialize_field(r.get("photos")) or []
+    r["guards"] = deserialize_field(r.get("guards")) or []
+    r["checklist"] = deserialize_field(r.get("checklist")) or []
+    r["observations"] = deserialize_field(r.get("observations")) or []
+    r["attachments"] = deserialize_field(r.get("attachments")) or []
+    return r
+
+# --- ASSESSMENT CLIENTS & SITES ENDPOINTS ---
+
+def get_officer_branch(cursor, emp_oid=None, empOid=None, branch_id=None, branch_name=None, authorization=None):
+    """
+    Resolves the branch name and branch id for the field officer.
+    Checks:
+    1. Direct parameters (branch_name, branch_id)
+    2. emp_oid / empOid lookup against EMPLOYEE and BRANCH tables
+    3. Bearer token in authorization header (decode base64 JSON payload for id/employee_id/branch_name/branch_id)
+    """
+    resolved_branch_name = branch_name.strip() if branch_name and str(branch_name).strip() else None
+    resolved_branch_id = branch_id
+
+    target_emp = empOid or emp_oid
+
+    # If branch or emp is not explicitly given, try extracting from Bearer token
+    if (not resolved_branch_name or not target_emp) and authorization and authorization.startswith("Bearer "):
+        try:
+            token_part = authorization.split(" ")[1]
+            token_data = json.loads(base64.b64decode(token_part.encode()).decode())
+            if not target_emp:
+                target_emp = token_data.get("id") or token_data.get("empOid") or token_data.get("employee_id")
+            if not resolved_branch_name and token_data.get("branch_name"):
+                resolved_branch_name = str(token_data.get("branch_name")).strip()
+            if not resolved_branch_id and token_data.get("branch_id"):
+                resolved_branch_id = token_data.get("branch_id")
+        except Exception:
+            pass
+
+    # If we have target_emp, look up employee in DB to get their current assigned branch
+    if target_emp and cursor:
+        try:
+            cursor.execute("""
+                SELECT e.BRANCH as branch_id, b.name as branch_name
+                FROM EMPLOYEE e
+                LEFT JOIN BRANCH b ON e.BRANCH = b.oid
+                WHERE e.oid = %s OR e.emp_code = %s
+                LIMIT 1
+            """, (str(target_emp), str(target_emp)))
+            row = cursor.fetchone()
+            if row:
+                if row.get("branch_name"):
+                    resolved_branch_name = str(row["branch_name"]).strip()
+                if row.get("branch_id"):
+                    resolved_branch_id = row["branch_id"]
+        except Exception as e:
+            print(f"Error fetching officer branch: {e}")
+
+    return resolved_branch_name, resolved_branch_id
+
+
+def check_existing_client_and_site(cursor, client_name: str, site_name: str, officer_branch_name: Optional[str] = None):
+    s_name = (site_name or "").strip()
+    c_name = (client_name or "").strip()
+    b_name = (officer_branch_name or "").strip()
+
+    # Both client and site name must be provided to check combination
+    if not s_name or not c_name:
+        return {"exists": False}
+
+    # 1. Check registered master SITE + CLIENTT (+ optionally BRANCH)
+    query = """
+        SELECT s.oid as site_id, s.name as site_name, cl.oid as client_id, cl.name as client_name, b.name as branch_name
+        FROM SITE s
+        JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+        LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+        WHERE (
+            LOWER(TRIM(cl.name)) = LOWER(TRIM(%s))
+            OR LOWER(TRIM(cl.name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+            OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(cl.name)), '%%')
+          )
+          AND (
+            LOWER(TRIM(s.name)) = LOWER(TRIM(%s))
+            OR LOWER(TRIM(s.name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+            OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(s.name)), '%%')
+          )
+    """
+    params = [c_name, c_name, c_name, s_name, s_name, s_name]
+    if b_name:
+        query += " AND (b.name IS NULL OR LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))"
+        params.append(b_name)
+
+    query += """
+        ORDER BY (CASE WHEN LOWER(TRIM(s.name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC,
+                 (CASE WHEN LOWER(TRIM(cl.name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC
+        LIMIT 1
+    """
+    params.extend([s_name, c_name])
+
+    dup = None
+    try:
+        cursor.execute(query, tuple(params))
+        dup = cursor.fetchone()
+    except Exception as err:
+        print("Error checking client and site in master SITE/CLIENTT:", err)
+        dup = None
+
+    # 2. Check previous custom client visits from FIELD_OFFICER_NEW_CLIENT_VISITS
+    if not dup:
+        q_custom = """
+            SELECT ncv.oid as custom_visit_id, ncv.site_name, ncv.client_name, b.name as branch_name
+            FROM FIELD_OFFICER_NEW_CLIENT_VISITS ncv
+            LEFT JOIN BRANCH b ON ncv.branch_oid = b.oid
+            WHERE (
+                LOWER(TRIM(ncv.client_name)) = LOWER(TRIM(%s))
+                OR LOWER(TRIM(ncv.client_name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+                OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(ncv.client_name)), '%%')
+              )
+              AND (
+                LOWER(TRIM(ncv.site_name)) = LOWER(TRIM(%s))
+                OR LOWER(TRIM(ncv.site_name)) LIKE CONCAT('%%', LOWER(TRIM(%s)), '%%')
+                OR LOWER(TRIM(%s)) LIKE CONCAT('%%', LOWER(TRIM(ncv.site_name)), '%%')
+              )
+        """
+        c_params = [c_name, c_name, c_name, s_name, s_name, s_name]
+        if b_name:
+            q_custom += " AND (b.name IS NULL OR LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))"
+            c_params.append(b_name)
+
+        q_custom += """
+            ORDER BY (CASE WHEN LOWER(TRIM(ncv.site_name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC,
+                     (CASE WHEN LOWER(TRIM(ncv.client_name)) = LOWER(TRIM(%s)) THEN 0 ELSE 1 END) ASC
+            LIMIT 1
+        """
+        c_params.extend([s_name, c_name])
+        try:
+            cursor.execute(q_custom, tuple(c_params))
+            dup = cursor.fetchone()
+        except Exception as err:
+            print("Error checking client and site in custom visits:", err)
+            dup = None
+
+    if dup:
+        matched_site = dup.get("site_name") or s_name
+        matched_client = dup.get("client_name") or c_name
+        message = "This client and site combination already exists in the system."
+        return {
+            "exists": True,
+            "message": message,
+            "site_name": matched_site,
+            "client_name": matched_client,
+            "site_id": dup.get("site_id"),
+            "client_id": dup.get("client_id"),
+            "custom_visit_id": dup.get("custom_visit_id"),
+        }
+
+    return {"exists": False}
+
+
+@router.get("/visits/check-client-site")
+def api_check_existing_client_and_site(
+    client_name: str = Query(...),
+    site_name: str = Query(...),
+    emp_oid: Optional[str] = Query(None),
+    empOid: Optional[str] = Query(None),
+    branch_id: Optional[str] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        resolved_branch_name, _ = get_officer_branch(
+            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
+        )
+        res = check_existing_client_and_site(cursor, client_name, site_name, officer_branch_name=resolved_branch_name)
+        return JSONResponse(content=res)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+@router.get("/assessments/clients")
+def get_assessments_clients(
+    emp_oid: Optional[str] = Query(None), 
+    empOid: Optional[str] = Query(None), 
+    branch_id: Optional[str] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        resolved_branch_name, resolved_branch_id = get_officer_branch(
+            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
+        )
+
+        if resolved_branch_name:
+            # Return only clients that have sites belonging to this branch (e.g. Pune)
+            query = """
+                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code, sb.name as branch_name
+                FROM CLIENTT cl
+                JOIN SITE s ON s.CLIENTT = cl.oid
+                JOIN BRANCH sb ON s.BRANCH = sb.oid
+                WHERE LOWER(TRIM(sb.name)) = LOWER(TRIM(%s))
+                ORDER BY cl.name ASC
+            """
+            cursor.execute(query, (resolved_branch_name,))
+            rows = cursor.fetchall()
+        elif resolved_branch_id:
+            query = """
+                SELECT DISTINCT cl.oid as id, cl.name, cl.company_vender_code as code, sb.name as branch_name
+                FROM CLIENTT cl
+                JOIN SITE s ON s.CLIENTT = cl.oid
+                LEFT JOIN BRANCH sb ON s.BRANCH = sb.oid
+                WHERE s.BRANCH = %s
+                ORDER BY cl.name ASC
+            """
+            cursor.execute(query, (resolved_branch_id,))
+            rows = cursor.fetchall()
+        else:
+            # Fallback if no branch could be determined
+            cursor.execute("SELECT oid as id, name, company_vender_code as code FROM CLIENTT ORDER BY name ASC")
+            rows = cursor.fetchall()
+
+        return JSONResponse(content=rows)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+@router.get("/assessments/sites")
+def get_assessments_sites(
+    client_id: Optional[int] = Query(None), 
+    company_id: Optional[int] = Query(None), 
+    branch_id: Optional[int] = Query(None),
+    branch_name: Optional[str] = Query(None),
+    emp_oid: Optional[str] = Query(None), 
+    empOid: Optional[str] = Query(None), 
+    authorization: Optional[str] = Header(None)
+):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        resolved_branch_name, resolved_branch_id = get_officer_branch(
+            cursor, emp_oid=emp_oid, empOid=empOid, branch_id=branch_id, branch_name=branch_name, authorization=authorization
+        )
+
+        query = """
+            SELECT DISTINCT s.oid as id, s.name, s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name, 
+                   sg.latitude as latitude, 
+                   sg.longitude as longitude,
+                   sg.radius as radius
+            FROM SITE s 
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid 
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            LEFT JOIN (
+                SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude, MAX(radius) as radius
+                FROM SITE_GATE_QRCODE 
+                WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
+                GROUP BY SITE
+            ) sg ON s.oid = sg.SITE
+        """
+        where_clauses = []
+        params = []
+
+        target_client = client_id or company_id
+        if target_client:
+            where_clauses.append("(s.CLIENTT = %s)")
+            params.append(target_client)
+
+        if resolved_branch_name:
+            where_clauses.append("(LOWER(TRIM(b.name)) = LOWER(TRIM(%s)))")
+            params.append(resolved_branch_name)
+        elif resolved_branch_id:
+            where_clauses.append("(s.BRANCH = %s)")
+            params.append(resolved_branch_id)
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+
+        query += " ORDER BY s.name"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return JSONResponse(content=rows)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+@router.post("/assessments/branches/{branch_id}/email-access")
+@router.put("/assessments/branches/{branch_id}")
+def update_branch_email_access(branch_id: int, payload: dict):
+    email_access = 1 if payload.get("emailAccess") in (1, "1", True) or payload.get("email_access") in (1, "1", True) else 0
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if branch_id in (3, 6):
+            cursor.execute("UPDATE BRANCH SET email_access = %s WHERE oid IN (3, 6) OR LOWER(name) LIKE '%pune%'", (email_access,))
+        else:
+            cursor.execute("UPDATE BRANCH SET email_access = %s WHERE oid = %s", (email_access, branch_id))
+        conn.commit()
+        return JSONResponse(content={"success": True, "message": f"Updated email access for branch {branch_id} to {email_access}"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+@router.get("/site-guards")
+def get_site_guards(
+    site_id: Optional[int] = Query(None),
+    siteId: Optional[int] = Query(None),
+    shift: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    target_site_id = site_id or siteId
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if target_site_id:
+            query = """
+                SELECT 
+                    e.oid as empOid,
+                    e.name,
+                    e.emp_code as empCode,
+                    COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
+                    'Satisfactory' as rating,
+                    'Present' as status
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.active = 1 AND e.SITE = %s
+                ORDER BY e.name
+            """
+            cursor.execute(query, (target_site_id,))
+        else:
+            query = """
+                SELECT 
+                    e.oid as empOid,
+                    e.name,
+                    e.emp_code as empCode,
+                    COALESCE(d.name, e.company_designation, 'Security Guard') as dutyType,
+                    'Satisfactory' as rating,
+                    'Present' as status
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.active = 1
+                LIMIT 50
+            """
+            cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        guards_list = []
+        for r in rows:
+            guards_list.append({
+                "name": r.get("name") or "Security Guard",
+                "empCode": r.get("empCode") or f"G{r.get('empOid')}",
+                "empOid": r.get("empOid"),
+                "dutyType": r.get("dutyType") or "Security Guard",
+                "rating": "Satisfactory",
+                "status": "Present"
+            })
+        return JSONResponse(content=guards_list)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+# --- PLANNED VISITS ENDPOINT (FIELD_OFFICER_ASSIGNED_VISITS & FIELD_OFFICER_VISIT_FREQUENCY) ---
+
+@router.get("/planned-visits")
+def get_planned_visits(empOid: Optional[str] = Query(None), authorization: Optional[str] = Header(None)):
+    import calendar
+    from datetime import datetime
+
+    # Strictly require valid authentication
+    auth_user = get_authenticated_employee(authorization)
+    if auth_user and auth_user.get("role") in ("OFFICER", "officer") and (auth_user.get("id") or auth_user.get("employee_id")):
+        empOid = str(auth_user.get("id") or auth_user.get("employee_id"))
+    elif not empOid and auth_user and (auth_user.get("id") or auth_user.get("employee_id")):
+        empOid = str(auth_user.get("id") or auth_user.get("employee_id"))
+
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    
+    try:
+        cursor = conn.cursor(dictionary=True)
+
+        # Check if custom_visit_id column exists in report tables to be safe across environments
+        has_custom_visit_col = False
+        try:
+            cursor.execute("SHOW COLUMNS FROM FIELD_OFFICER_DAY_VISIT_REPORTS LIKE 'custom_visit_id'")
+            has_custom_visit_col = bool(cursor.fetchone())
+        except Exception:
+            pass
+
+        # Fetch completed reports per site/custom visit with visit/creation date for accurate plan matching
+        completed_reports = []
+        try:
+            custom_sel = "custom_visit_id," if has_custom_visit_col else "NULL as custom_visit_id,"
+            custom_cond = "OR custom_visit_id IS NOT NULL" if has_custom_visit_col else ""
+            query_counts = f"""
+                SELECT site_id, {custom_sel} employee_oid, LOWER(TRIM(officer)) as off_name, DATE(COALESCE(visit_date, created_on)) as rep_date, created_on as rep_created_at
+                FROM (
+                    SELECT site_id, {custom_sel} employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE (site_id IS NOT NULL {custom_cond}) AND status = 'Completed'
+                    UNION ALL
+                    SELECT site_id, {custom_sel} employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE (site_id IS NOT NULL {custom_cond}) AND status = 'Completed'
+                    UNION ALL
+                    SELECT site_id, {custom_sel} employee_oid, officer, visit_date, created_on FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE (site_id IS NOT NULL {custom_cond})
+                ) t
+            """
+            cursor.execute(query_counts)
+            completed_reports = cursor.fetchall() or []
+        except Exception as err:
+            print("Error checking completed site counts:", err)
+
+        where_clauses = ["(UPPER(av.status) = 'PUBLISHED' OR UPPER(av.status) = 'COMPLETED')"]
+        params = []
+        if empOid:
+            where_clauses.append("(av.employee_oid = %s OR e.oid = %s OR e.emp_code = %s)")
+            params.extend([empOid, empOid, empOid])
+
+        where_clause = " WHERE " + " AND ".join(where_clauses)
+
+        # Query both registered-site visits and custom-client visits
+        query = f"""
+            (
+                SELECT 
+                    av.oid as id,
+                    av.plan_code as planCode,
+                    av.planning_type as planningType,
+                    av.visit_date as visitDate,
+                    av.week_start_date as weekStartDate,
+                    av.week_end_date as weekEndDate,
+                    av.planning_month as planningMonth,
+                    av.planning_year as planningYear,
+                    av.status as planStatus,
+                    av.created_at as createdAt,
+                    e.oid as officerId,
+                    e.name as officerName,
+                    s.oid as siteId,
+                    NULL as customVisitId,
+                    0 as isCustomVisit,
+                    s.name as siteName,
+                    COALESCE(sg.latitude, s.latitude) as latitude,
+                    COALESCE(sg.longitude, s.longitude) as longitude,
+                    COALESCE(sg.radius, 100) as radius,
+                    cl.oid as clientId,
+                    cl.name as clientName,
+                    cl.address as address,
+                    vf.visit_frequency as visitFrequency
+                FROM FIELD_OFFICER_ASSIGNED_VISITS av
+                JOIN FIELD_OFFICER_VISIT_FREQUENCY vf ON av.oid = vf.plan_oid
+                LEFT JOIN EMPLOYEE e ON av.employee_oid = e.oid
+                LEFT JOIN SITE s ON vf.site_oid = s.oid
+                LEFT JOIN (
+                    SELECT SITE, AVG(latitude) as latitude, AVG(longitude) as longitude, MAX(radius) as radius
+                    FROM SITE_GATE_QRCODE 
+                    WHERE latitude IS NOT NULL AND longitude IS NOT NULL AND latitude != 0 AND longitude != 0
+                    GROUP BY SITE
+                ) sg ON s.oid = sg.SITE
+                LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+                {where_clause}
+            )
+            UNION ALL
+            (
+                SELECT 
+                    av.oid as id,
+                    av.plan_code as planCode,
+                    av.planning_type as planningType,
+                    av.visit_date as visitDate,
+                    av.week_start_date as weekStartDate,
+                    av.week_end_date as weekEndDate,
+                    av.planning_month as planningMonth,
+                    av.planning_year as planningYear,
+                    av.status as planStatus,
+                    av.created_at as createdAt,
+                    e.oid as officerId,
+                    e.name as officerName,
+                    NULL as siteId,
+                    ncv.oid as customVisitId,
+                    1 as isCustomVisit,
+                    ncv.site_name as siteName,
+                    ncv.latitude as latitude,
+                    ncv.longitude as longitude,
+                    100 as radius,
+                    NULL as clientId,
+                    ncv.client_name as clientName,
+                    ncv.address as address,
+                    ncv.visit_frequency as visitFrequency
+                FROM FIELD_OFFICER_ASSIGNED_VISITS av
+                JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON av.oid = ncv.plan_oid
+                LEFT JOIN EMPLOYEE e ON av.employee_oid = e.oid
+                {where_clause}
+            )
+            ORDER BY createdAt DESC, id DESC
+        """
+        # Note: params are used twice because where_clause is in both halves of UNION ALL
+        cursor.execute(query, params + params)
+        rows = cursor.fetchall()
+        
+        result = []
+        today_str = time.strftime("%Y-%m-%d")
+
+        for r in rows:
+            site_id_val = r.get("siteId")
+            custom_visit_id_val = r.get("customVisitId")
+            is_custom = bool(r.get("isCustomVisit"))
+            officer_id_str = str(r.get("officerId")) if r.get("officerId") is not None else None
+            officer_name = (r.get("officerName") or "").lower().strip()
+
+            ws = r.get("weekStartDate")
+            we = r.get("weekEndDate")
+            pm = r.get("planningMonth")
+            py = r.get("planningYear")
+            vdate = r.get("visitDate")
+            cdate = r["createdAt"].strftime("%Y-%m-%d") if hasattr(r.get("createdAt"), "strftime") else str(r.get("createdAt"))[:10] if r.get("createdAt") else today_str
+
+            # Filter reports within this plan's specific timeframe
+            done_cnt = 0
+            if (is_custom and custom_visit_id_val) or (not is_custom and site_id_val):
+                for rep in completed_reports:
+                    if is_custom:
+                        if rep.get("custom_visit_id") != custom_visit_id_val:
+                            continue
+                    else:
+                        if rep.get("site_id") != site_id_val:
+                            continue
+                    
+                    rep_d_str = str(rep["rep_date"]) if rep.get("rep_date") else None
+                    if not rep_d_str:
+                        continue
+
+                    # Check date range matching plan period
+                    in_period = False
+                    if ws and we:
+                        in_period = (str(ws) <= rep_d_str <= str(we))
+                    elif pm and py:
+                        try:
+                            rep_dt = datetime.strptime(rep_d_str, "%Y-%m-%d")
+                            in_period = (rep_dt.month == int(pm) and rep_dt.year == int(py))
+                        except Exception:
+                            in_period = False
+                    else:
+                        target_d = str(vdate) if vdate else cdate
+                        in_period = (rep_d_str == target_d)
+
+                    if in_period:
+                        # Ensure report was NOT created before this plan was created (with 60-second clock skew margin)
+                        rep_created_raw = rep.get("rep_created_at")
+                        if rep_created_raw and r.get("createdAt"):
+                            try:
+                                rep_dt = rep_created_raw if isinstance(rep_created_raw, datetime) else datetime.fromisoformat(str(rep_created_raw).replace('Z', ''))
+                                plan_dt = r["createdAt"] if isinstance(r["createdAt"], datetime) else datetime.fromisoformat(str(r["createdAt"]).replace('Z', ''))
+                                if (plan_dt - rep_dt).total_seconds() > 60:
+                                    continue
+                            except Exception:
+                                pass
+
+                        rep_emp = str(rep["employee_oid"]) if rep.get("employee_oid") else None
+                        rep_off = (rep.get("off_name") or "").strip()
+                        if officer_id_str and rep_emp and officer_id_str == rep_emp:
+                            done_cnt += 1
+                        elif officer_name and rep_off and officer_name == rep_off:
+                            done_cnt += 1
+                        elif not officer_id_str and not officer_name:
+                            done_cnt += 1
+
+            freq = r.get("visitFrequency") or 1
+            pending_cnt = max(0, freq - done_cnt)
+
+            if ws and we:
+                try:
+                    ws_dt = datetime.strptime(str(ws), "%Y-%m-%d")
+                    we_dt = datetime.strptime(str(we), "%Y-%m-%d")
+                    period_str = f"{ws_dt.strftime('%d %b %Y')} - {we_dt.strftime('%d %b %Y')}"
+                except Exception:
+                    period_str = f"{ws} - {we}"
+            elif pm and py:
+                try:
+                    last_day = calendar.monthrange(int(py), int(pm))[1]
+                    month_name = datetime(int(py), int(pm), 1).strftime("%b")
+                    period_str = f"01 {month_name} {py} - {last_day} {month_name} {py}"
+                except Exception:
+                    period_str = f"Month {pm}/{py}"
+            elif vdate:
+                try:
+                    vd_dt = datetime.strptime(str(vdate), "%Y-%m-%d")
+                    period_str = vd_dt.strftime("%d %b %Y")
+                except Exception:
+                    period_str = str(vdate)
+            elif r.get("createdAt"):
+                period_str = r["createdAt"].strftime("%d %b %Y") if hasattr(r["createdAt"], "strftime") else str(r["createdAt"])[:10]
+            else:
+                period_str = time.strftime("%d %b %Y")
+
+            date_str = str(ws) if ws else (str(vdate) if vdate else period_str)
+
+            # Determine if date range is expired
+            is_expired = False
+            if we:
+                is_expired = (str(we) < today_str)
+            elif pm and py:
+                try:
+                    last_day = calendar.monthrange(int(py), int(pm))[1]
+                    last_day_str = f"{int(py):04d}-{int(pm):02d}-{last_day:02d}"
+                    is_expired = (last_day_str < today_str)
+                except Exception:
+                    is_expired = False
+            elif vdate:
+                is_expired = (str(vdate) < today_str)
+            elif ws:
+                is_expired = (str(ws) < today_str)
+
+            raw_status = (r.get("planStatus") or "PUBLISHED").upper()
+            if raw_status == "COMPLETED" or done_cnt >= freq:
+                status = "Completed"
+            elif done_cnt > 0:
+                status = "In Progress"
+            elif raw_status == "DRAFT":
+                status = "Pending"
+            elif is_expired:
+                status = "Overdue"
+            else:
+                status = "Pending"
+
+            pt_raw = (r.get("planningType") or "WEEKLY").upper()
+            if pt_raw == "WEEKLY":
+                type_name = "Weekly"
+            elif pt_raw == "MONTHLY":
+                type_name = "Monthly"
+            elif pt_raw == "SINGLE":
+                type_name = "Single"
+            else:
+                type_name = pt_raw.title()
+
+            shift_text = f"{type_name} ({done_cnt}/{freq} Done)"
+
+            client_val = r.get("clientName") or ("Custom Client" if is_custom else "N/A")
+            site_val = r.get("siteName") or ("Custom Location" if is_custom else "N/A")
+
+            result.append({
+                "id": f"pv-{r['id']}-c{custom_visit_id_val}" if is_custom else f"pv-{r['id']}-{site_id_val or 0}",
+                "planId": r["id"],
+                "planCode": r.get("planCode"),
+                "planningType": r.get("planningType"),
+                "clientId": r.get("clientId"),
+                "client_id": r.get("clientId"),
+                "clientName": client_val,
+                "client_name": client_val,
+                "siteId": site_id_val,
+                "site_id": site_id_val,
+                "customVisitId": custom_visit_id_val,
+                "custom_visit_id": custom_visit_id_val,
+                "isCustomVisit": is_custom,
+                "is_custom": is_custom,
+                "address": r.get("address"),
+                "siteName": site_val,
+                "site_name": site_val,
+                "latitude": float(r["latitude"]) if r.get("latitude") is not None else None,
+                "longitude": float(r["longitude"]) if r.get("longitude") is not None else None,
+                "radius": r.get("radius", 100),
+                "officerId": r.get("officerId"),
+                "officerName": r.get("officerName") or "Officer",
+                "weekStartDate": str(ws) if ws else None,
+                "weekEndDate": str(we) if we else None,
+                "visitDate": str(vdate) if vdate else None,
+                "planningMonth": pm,
+                "planningYear": py,
+                "isExpired": is_expired,
+                "date": date_str,
+                "plannedPeriod": period_str,
+                "shift": shift_text,
+                "visitFrequency": freq,
+                "completedVisits": done_cnt,
+                "pendingVisits": pending_cnt,
+                "status": status
+            })
+
+        cursor.close()
+        conn.close()
+        return JSONResponse(content=result)
+    except Exception as e:
+        if 'conn' in locals() and conn:
+            conn.close()
+        print(f"Error in get_planned_visits: {e}")
+        return JSONResponse(status_code=500, content={"message": f"Server error: {str(e)}"})
+
+@router.post("/planned-visits")
+def create_planned_visit(payload: dict, authorization: Optional[str] = Header(None)):
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"success": False, "message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        from datetime import datetime
+        
+        cursor.execute("SELECT plan_code FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE plan_code LIKE 'VP-%' ORDER BY CHAR_LENGTH(plan_code) DESC, plan_code DESC LIMIT 1")
+        last_vp_row = cursor.fetchone()
+        next_num = 1
+        if last_vp_row and last_vp_row.get("plan_code"):
+            try:
+                num_str = str(last_vp_row["plan_code"]).replace("VP-", "").strip()
+                next_num = int(num_str) + 1
+            except Exception:
+                next_num = 1
+        plan_code = f"VP-{next_num:03d}"
+        
+        planning_type = str(payload.get("planningType", "SINGLE")).upper()
+        if planning_type not in ["WEEKLY", "MONTHLY", "SINGLE"]:
+            planning_type = "SINGLE"
+            
+        emp_oid = None
+        if authorization:
+            try:
+                auth_user = get_authenticated_employee(authorization)
+                if auth_user and (auth_user.get("id") or auth_user.get("employee_id") or auth_user.get("empOid")):
+                    emp_oid = int(auth_user.get("id") or auth_user.get("employee_id") or auth_user.get("empOid"))
+            except Exception:
+                pass
+
+        if not emp_oid:
+            raw_emp = payload.get("officerId") or payload.get("employee_oid") or payload.get("empOid") or payload.get("createdBy") or payload.get("created_by") or 7558
+            try:
+                emp_oid = int(raw_emp)
+            except (ValueError, TypeError):
+                try:
+                    cursor.execute("SELECT oid FROM EMPLOYEE WHERE emp_code = %s OR oid = %s LIMIT 1", (str(raw_emp), str(raw_emp)))
+                    emp_row = cursor.fetchone()
+                    if emp_row and emp_row.get("oid"):
+                        emp_oid = int(emp_row["oid"])
+                except Exception as err:
+                    print("Warning resolving emp_code:", err)
+            if not emp_oid:
+                emp_oid = 7558
+
+        raw_site = payload.get("siteId") or payload.get("site_oid") or 1
+        site_oid = 1
+        try:
+            site_oid = int(raw_site)
+        except (ValueError, TypeError):
+            site_oid = 1
+
+        freq = int(payload.get("visitFrequency", 1))
+
+        week_start_date = None
+        week_end_date = None
+        planning_month = None
+        planning_year = None
+        visit_date = None
+
+        if planning_type == "SINGLE":
+            visit_date = payload.get("visitDate") or payload.get("startDate") or datetime.now().strftime("%Y-%m-%d")
+        elif planning_type == "WEEKLY":
+            week_start_date = payload.get("weekStartDate") or payload.get("startDate") or datetime.now().strftime("%Y-%m-%d")
+            week_end_date = payload.get("weekEndDate") or payload.get("endDate") or week_start_date
+        elif planning_type == "MONTHLY":
+            pm = payload.get("planningMonth") or payload.get("month")
+            py = payload.get("planningYear") or payload.get("year")
+            if pm and py:
+                planning_month = int(pm)
+                planning_year = int(py)
+            else:
+                date_ref = payload.get("startDate") or payload.get("visitDate") or datetime.now().strftime("%Y-%m-%d")
+                try:
+                    dt_ref = datetime.strptime(str(date_ref), "%Y-%m-%d")
+                    planning_month = dt_ref.month
+                    planning_year = dt_ref.year
+                except Exception:
+                    now_dt = datetime.now()
+                    planning_month = now_dt.month
+                    planning_year = now_dt.year
+        
+        created_by = payload.get("createdBy") or payload.get("created_by") or emp_oid
+
+        is_custom_visit = bool(
+            payload.get("isCustomVisit")
+            or payload.get("is_custom")
+            or payload.get("customSiteName")
+            or payload.get("customClientName")
+            or payload.get("clientId") == "OTHER"
+            or (not payload.get("siteId") and (payload.get("siteName") or payload.get("customSiteName")))
+        )
+
+        if is_custom_visit:
+            c_name = (payload.get("customClientName") or payload.get("clientName") or "Custom Client").strip()
+            s_name = (payload.get("customSiteName") or payload.get("siteName") or "Custom Location").strip()
+
+        cursor.execute("""
+            INSERT INTO FIELD_OFFICER_ASSIGNED_VISITS 
+            (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, employee_oid, planning_method, status, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'MANUAL', 'PUBLISHED', %s)
+        """, (plan_code, planning_type, week_start_date, week_end_date, planning_month, planning_year, visit_date, emp_oid, created_by))
+        
+        plan_oid = cursor.lastrowid
+
+        if is_custom_visit:
+            addr = (payload.get("address") or "").strip() or None
+            
+            lat_raw = payload.get("latitude")
+            lon_raw = payload.get("longitude")
+            lat = None
+            lon = None
+            if lat_raw is not None and str(lat_raw).strip() != "":
+                try:
+                    lat = float(lat_raw)
+                except Exception:
+                    lat = None
+            if lon_raw is not None and str(lon_raw).strip() != "":
+                try:
+                    lon = float(lon_raw)
+                except Exception:
+                    lon = None
+
+            branch_oid = payload.get("branchId") or payload.get("branch_oid")
+            if not branch_oid and emp_oid:
+                try:
+                    cursor.execute("SELECT branch_oid, branch_id, BRANCH FROM EMPLOYEE WHERE oid = %s LIMIT 1", (emp_oid,))
+                    emp_row = cursor.fetchone()
+                    if emp_row:
+                        branch_oid = emp_row.get("branch_oid") or emp_row.get("branch_id") or emp_row.get("BRANCH")
+                except Exception:
+                    pass
+            
+            # Validate branch_oid against BRANCH table to satisfy fk_fncv_branch
+            valid_branch = None
+            if branch_oid:
+                try:
+                    cursor.execute("SELECT oid FROM BRANCH WHERE oid = %s LIMIT 1", (branch_oid,))
+                    valid_branch = cursor.fetchone()
+                except Exception:
+                    valid_branch = None
+            
+            if not valid_branch:
+                cursor.execute("SELECT oid FROM BRANCH ORDER BY oid ASC LIMIT 1")
+                b_row = cursor.fetchone()
+                branch_oid = b_row["oid"] if b_row else 1
+
+            # Store employee oid directly into created_by as requested
+            creator_emp_oid = emp_oid or created_by
+            cursor.execute("""
+                INSERT INTO FIELD_OFFICER_NEW_CLIENT_VISITS 
+                (plan_oid, branch_oid, client_name, site_name, address, latitude, longitude, visit_frequency, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (plan_oid, branch_oid, c_name, s_name, addr, lat, lon, freq, creator_emp_oid))
+        else:
+            # Validate site_oid against SITE table to satisfy fk_visit_plan_sites_site
+            cursor.execute("SELECT oid FROM SITE WHERE oid = %s LIMIT 1", (site_oid,))
+            site_row = cursor.fetchone()
+            if not site_row:
+                if cursor:
+                    cursor.close()
+                conn.close()
+                return JSONResponse(status_code=400, content={"success": False, "message": f"Site with ID '{site_oid}' not found in the database. Please select a valid site."})
+
+            cursor.execute("""
+                INSERT INTO FIELD_OFFICER_VISIT_FREQUENCY (plan_oid, site_oid, visit_frequency)
+                VALUES (%s, %s, %s)
+            """, (plan_oid, site_oid, freq))
+        
+        conn.commit()
+        if cursor:
+            cursor.close()
+        conn.close()
+        return JSONResponse(content={"success": True, "message": "Visit plan assigned successfully", "id": plan_oid, "planCode": plan_code})
+    except Exception as e:
+        print(f"Error in create_planned_visit: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return JSONResponse(status_code=500, content={"success": False, "message": f"Failed to create visit plan: {str(e)}"})
+
+
+# --- OFFICER ROUND REPORTS ---
+
+@router.get("/officer-rounds/reports")
+def get_round_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_NIGHT_VISIT_REPORTS", "custom_visit_id")
+        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
+        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
+        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
+        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
+        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
+
+        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
+        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
+
+        query = f"""
+            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
+                   {email_access_expr} as email_access,
+                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
+                   svs.session_check_in, svs.session_check_out
+            FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            {custom_join}
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
+            LEFT JOIN (
+                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
+                       MAX(check_in_time) as session_check_in,
+                       MAX(check_out_time) as session_check_out
+                FROM SITE_VISIT_SESSIONS
+                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
+            ) svs ON (
+                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
+                AND {svs_join_cond}
+                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+            )
+        """
+        params = []
+        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
+        if target_emp:
+            query += """ WHERE (
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY r.created_on DESC, r.oid DESC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return [map_db_row_to_frontend(r) for r in rows]
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.get("/officer-rounds/reports/{id}")
+def get_round_report(id: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_NIGHT_VISIT_REPORTS", "custom_visit_id")
+        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
+        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
+        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
+        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
+        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
+
+        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
+        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
+
+        query = f"""
+            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
+                   {email_access_expr} as email_access,
+                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
+                   svs.session_check_in, svs.session_check_out
+            FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            {custom_join}
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
+            LEFT JOIN (
+                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
+                       MAX(check_in_time) as session_check_in,
+                       MAX(check_out_time) as session_check_out
+                FROM SITE_VISIT_SESSIONS
+                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
+            ) svs ON (
+                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
+                AND {svs_join_cond}
+                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+            )
+            WHERE r.oid = %s
+        """
+        cursor.execute(query, (id,))
+        r = cursor.fetchone()
+        if not r:
+            raise HTTPException(status_code=404, detail="Report not found")
+        return map_db_row_to_frontend(r)
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/officer-rounds/reports")
+def save_round_report(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        emp = get_authenticated_employee(authorization)
+        emp_oid = emp.get("id")
+        emp_name = emp.get("name")
+
+        if not payload.get("id") and not payload.get("oid"):
+            cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
+            max_r = cursor.fetchone()
+            next_num = (int(max_r["oid"]) + 1) if max_r and max_r.get("oid") else 109
+            oid = str(next_num)
+        else:
+            oid = str(payload.get("id") or payload.get("oid"))
+
+        unit = payload.get("unit") or payload.get("unit_name") or ""
+        
+        # Handle custom visit vs registered visit
+        custom_visit_id = payload.get("custom_visit_id") or payload.get("customVisitId")
+        if custom_visit_id:
+            try:
+                custom_visit_id = int(custom_visit_id)
+            except (ValueError, TypeError):
+                custom_visit_id = None
+
+        c_name = "Client"
+        s_name = unit or "Site"
+        if custom_visit_id:
+            site_id = None
+            client_id = None
+            cursor.execute("SELECT client_name, site_name, plan_oid FROM FIELD_OFFICER_NEW_CLIENT_VISITS WHERE oid = %s", (custom_visit_id,))
+            ncv_row = cursor.fetchone()
+            if ncv_row:
+                c_name = ncv_row.get("client_name") or "Custom Client"
+                s_name = ncv_row.get("site_name") or unit or "Custom Location"
+                if not unit:
+                    unit = s_name
+                if ncv_row.get("plan_oid"):
+                    cursor.execute("SELECT employee_oid, status FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE oid = %s", (ncv_row["plan_oid"],))
+                    plan_row = cursor.fetchone()
+                    if plan_row:
+                        if (plan_row.get("status") or "").upper() == "DRAFT":
+                            raise HTTPException(status_code=400, detail="Cannot submit report for a draft visit plan")
+                        if emp.get("role") == "OFFICER" and str(plan_row.get("employee_oid")) != str(emp_oid):
+                            raise HTTPException(status_code=403, detail="Officer not authorized for this visit plan")
+        else:
+            site_id = payload.get("siteId") or payload.get("site_id") or 1
+            client_id = payload.get("clientId") or payload.get("client_id") or 1
+            if client_id:
+                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
+                cr = cursor.fetchone()
+                if cr and cr.get("name"): c_name = cr["name"]
+            if site_id:
+                cursor.execute("SELECT name FROM SITE WHERE oid = %s", (site_id,))
+                sr = cursor.fetchone()
+                if sr and sr.get("name"): s_name = sr["name"]
+
+        visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
+        visit_type = payload.get("visitType") or payload.get("visit_type") or "Night Round"
+        shift = payload.get("shift") or "Night"
+        start_time = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
+        end_time = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
+
+        if not start_time or not end_time:
+            try:
+                if custom_visit_id:
+                    sess_sql = """
+                        SELECT check_in_time, check_out_time 
+                        FROM SITE_VISIT_SESSIONS 
+                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND custom_visit_id = %s 
+                          AND DATE(check_in_time) = %s
+                        ORDER BY id DESC LIMIT 1
+                    """
+                    sess_params = (emp_oid, emp_oid, custom_visit_id, visit_date)
+                else:
+                    sess_sql = """
+                        SELECT check_in_time, check_out_time 
+                        FROM SITE_VISIT_SESSIONS 
+                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND site_id = %s 
+                          AND DATE(check_in_time) = %s
+                        ORDER BY id DESC LIMIT 1
+                    """
+                    sess_params = (emp_oid, emp_oid, site_id, visit_date)
+                cursor.execute(sess_sql, sess_params)
+                sess_row = cursor.fetchone()
+                if sess_row:
+                    if not start_time and sess_row.get("check_in_time"):
+                        start_time = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
+                    if not end_time and sess_row.get("check_out_time"):
+                        end_time = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
+            except Exception:
+                pass
+
+        gps = payload.get("gps") or ""
+        photos = payload.get("photos")
+        guards = payload.get("guards")
+        checklist = payload.get("checklist")
+        observations = payload.get("observations")
+        suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
+        attachments = payload.get("attachments") or payload.get("suggestion_photos") or payload.get("suggestionPhotos")
+        officer_signature = payload.get("officerSignature") or payload.get("officer_signature") or ""
+        status = payload.get("status") or "Completed"
+        created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
+        lecture_details = payload.get("lectureDetails") or payload.get("lecture_details") or ""
+        random_checking = payload.get("randomChecking") or payload.get("random_checking") or ""
+        overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
+
+        # Process and convert all base64 photos to server uploads
+        photos, checklist, observations, attachments = extract_and_process_report_photos(photos, checklist, observations, attachments)
+
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_NIGHT_VISIT_REPORTS", "custom_visit_id")
+
+        if not payload.get("reportNo") and not payload.get("reportId") and not payload.get("report_id"):
+            try:
+                dt = datetime.strptime(str(visit_date), "%Y-%m-%d")
+                date_fmt = dt.strftime("%d/%m/%y")
+            except Exception:
+                date_fmt = datetime.now().strftime("%d/%m/%y")
+
+            visit_seq = 1
+            if custom_visit_id and has_custom_col:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE custom_visit_id = %s AND oid != %s", (custom_visit_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+            elif site_id:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+
+            seq_str = f"{visit_seq:02d}"
+            report_id = f"{seq_str}-{c_name}-{s_name}-ONR-{date_fmt}"
+        else:
+            report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
+
+        # Check if exists
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (oid,))
+        exists = cursor.fetchone()
+
+        if exists:
+            if has_custom_col:
+                sql = """
+                    UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS SET
+                        report_id = %s, unit = %s, client_id = %s, site_id = %s, custom_visit_id = %s, visit_date = %s,
+                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
+                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
+                        suggestions = %s, attachments = %s, officer_signature = %s, status = %s,
+                        created_on = COALESCE(created_on, %s), lecture_details = %s, random_checking = %s,
+                        overall_remarks = %s, employee_oid = %s
+                    WHERE oid = %s
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    officer_signature, status, created_on, lecture_details, random_checking,
+                    overall_remarks, emp_oid, oid
+                )
+            else:
+                sql = """
+                    UPDATE FIELD_OFFICER_NIGHT_VISIT_REPORTS SET
+                        report_id = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
+                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
+                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
+                        suggestions = %s, attachments = %s, officer_signature = %s, status = %s,
+                        created_on = COALESCE(created_on, %s), lecture_details = %s, random_checking = %s,
+                        overall_remarks = %s, employee_oid = %s
+                    WHERE oid = %s
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    officer_signature, status, created_on, lecture_details, random_checking,
+                    overall_remarks, emp_oid, oid
+                )
+            cursor.execute(sql, query_params)
+        else:
+            if has_custom_col:
+                sql = """
+                    INSERT INTO FIELD_OFFICER_NIGHT_VISIT_REPORTS (
+                        report_id, unit, client_id, site_id, custom_visit_id, visit_date,
+                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
+                        gps, photos, guards, checklist, observations,
+                        suggestions, attachments, officer_signature, status,
+                        created_on, lecture_details, random_checking, overall_remarks, employee_oid, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    officer_signature, status, created_on, lecture_details, random_checking,
+                    overall_remarks, emp_oid, oid
+                )
+            else:
+                sql = """
+                    INSERT INTO FIELD_OFFICER_NIGHT_VISIT_REPORTS (
+                        report_id, unit, client_id, site_id, visit_date,
+                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
+                        gps, photos, guards, checklist, observations,
+                        suggestions, attachments, officer_signature, status,
+                        created_on, lecture_details, random_checking, overall_remarks, employee_oid, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    officer_signature, status, created_on, lecture_details, random_checking,
+                    overall_remarks, emp_oid, oid
+                )
+            cursor.execute(sql, query_params)
+
+            # Insert or update into VISIT_REPORT_METADATA if site_id is valid
+            if site_id:
+                try:
+                    metadata_sql = """
+                        INSERT INTO VISIT_REPORT_METADATA (
+                            employee_oid, officer, report_type, report_oid, site_id, visit_date
+                        ) VALUES (%s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
+                    """
+                    metadata_params = (
+                        emp_oid,
+                        emp_name,
+                        "NIGHT",
+                        oid,
+                        site_id,
+                        visit_date
+                    )
+                    cursor.execute(metadata_sql, metadata_params)
+                except Exception as meta_err:
+                    print("Warning inserting visit metadata:", meta_err)
+        
+        conn.commit()
+        return {"success": True, "message": "Report saved successfully", "id": oid, "report_id": report_id}
+    except HTTPException:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@router.delete("/officer-rounds/reports/{id}")
+def delete_round_report(id: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("DELETE FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS WHERE oid = %s", (id,))
+        conn.commit()
+        return {"success": True, "message": "Report deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --- OFFICER VISIT REPORTS ---
+
+@router.get("/officer-visits/reports")
+def get_visit_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_DAY_VISIT_REPORTS", "custom_visit_id")
+        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
+        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
+        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
+        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
+        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
+
+        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
+        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
+
+        query = f"""
+            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
+                   {email_access_expr} as email_access,
+                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
+                   svs.session_check_in, svs.session_check_out
+            FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            {custom_join}
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
+            LEFT JOIN (
+                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
+                       MAX(check_in_time) as session_check_in,
+                       MAX(check_out_time) as session_check_out
+                FROM SITE_VISIT_SESSIONS
+                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
+            ) svs ON (
+                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
+                AND {svs_join_cond}
+                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+            )
+        """
+        params = []
+        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
+        if target_emp:
+            query += """ WHERE (
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY r.created_on DESC, r.oid DESC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return [map_db_row_to_frontend(r) for r in rows]
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.get("/officer-tours/reports")
+@router.get("/patrol-tour-reports")
+def get_patrol_tour_reports(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_PATROL_TOUR_REPORTS", "custom_visit_id")
+        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
+        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
+        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
+        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
+        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
+
+        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
+        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
+
+        query = f"""
+            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
+                   {email_access_expr} as email_access,
+                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
+                   svs.session_check_in, svs.session_check_out
+            FROM FIELD_OFFICER_PATROL_TOUR_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            {custom_join}
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
+            LEFT JOIN (
+                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
+                       MAX(check_in_time) as session_check_in,
+                       MAX(check_out_time) as session_check_out
+                FROM SITE_VISIT_SESSIONS
+                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
+            ) svs ON (
+                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
+                AND {svs_join_cond}
+                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+            )
+        """
+        params = []
+        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
+        if target_emp:
+            query += """ WHERE (
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY r.created_on DESC, r.oid DESC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return [map_db_row_to_frontend(r) for r in rows]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@router.get("/officer-visits/reports/{id}")
+def get_visit_report(id: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_DAY_VISIT_REPORTS", "custom_visit_id")
+        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
+        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
+        custom_site = "COALESCE(s.name, ncv.site_name, r.unit)" if has_custom_col else "COALESCE(s.name, r.unit)"
+        custom_client = "COALESCE(cl.name, ncv.client_name)" if has_custom_col else "cl.name"
+        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
+
+        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
+        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
+
+        query = f"""
+            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
+                   {email_access_expr} as email_access,
+                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
+                   svs.session_check_in, svs.session_check_out
+            FROM FIELD_OFFICER_DAY_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            {custom_join}
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
+            LEFT JOIN (
+                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
+                       MAX(check_in_time) as session_check_in,
+                       MAX(check_out_time) as session_check_out
+                FROM SITE_VISIT_SESSIONS
+                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
+            ) svs ON (
+                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
+                AND {svs_join_cond}
+                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+            )
+            WHERE r.oid = %s
+        """
+        cursor.execute(query, (id,))
+        r = cursor.fetchone()
+        if not r:
+            raise HTTPException(status_code=404, detail="Report not found")
+        return map_db_row_to_frontend(r)
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/officer-visits/reports")
+def save_visit_report(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        emp = get_authenticated_employee(authorization)
+        emp_oid = emp.get("id")
+        emp_name = emp.get("name")
+
+        if not payload.get("id") and not payload.get("oid"):
+            cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
+            max_r = cursor.fetchone()
+            next_num = (int(max_r["oid"]) + 1) if max_r and max_r.get("oid") else 107
+            oid = str(next_num)
+        else:
+            oid = str(payload.get("id") or payload.get("oid"))
+
+        unit = payload.get("unit") or payload.get("unit_name") or ""
+        
+        # Handle custom visit vs registered visit
+        custom_visit_id = payload.get("custom_visit_id") or payload.get("customVisitId")
+        if custom_visit_id:
+            try:
+                custom_visit_id = int(custom_visit_id)
+            except (ValueError, TypeError):
+                custom_visit_id = None
+
+        c_name = "Client"
+        s_name = unit or "Site"
+        if custom_visit_id:
+            site_id = None
+            client_id = None
+            cursor.execute("SELECT client_name, site_name, plan_oid FROM FIELD_OFFICER_NEW_CLIENT_VISITS WHERE oid = %s", (custom_visit_id,))
+            ncv_row = cursor.fetchone()
+            if ncv_row:
+                c_name = ncv_row.get("client_name") or "Custom Client"
+                s_name = ncv_row.get("site_name") or unit or "Custom Location"
+                if not unit:
+                    unit = s_name
+                if ncv_row.get("plan_oid"):
+                    cursor.execute("SELECT employee_oid, status FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE oid = %s", (ncv_row["plan_oid"],))
+                    plan_row = cursor.fetchone()
+                    if plan_row:
+                        if (plan_row.get("status") or "").upper() == "DRAFT":
+                            raise HTTPException(status_code=400, detail="Cannot submit report for a draft visit plan")
+                        if emp.get("role") == "OFFICER" and str(plan_row.get("employee_oid")) != str(emp_oid):
+                            raise HTTPException(status_code=403, detail="Officer not authorized for this visit plan")
+        else:
+            site_id = payload.get("siteId") or payload.get("site_id") or 1
+            client_id = payload.get("clientId") or payload.get("client_id") or 1
+            if client_id:
+                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
+                cr = cursor.fetchone()
+                if cr and cr.get("name"): c_name = cr["name"]
+            if site_id:
+                cursor.execute("SELECT name FROM SITE WHERE oid = %s", (site_id,))
+                sr = cursor.fetchone()
+                if sr and sr.get("name"): s_name = sr["name"]
+
+        visit_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
+        visit_type = payload.get("visitType") or payload.get("visit_type") or "Scheduled"
+        shift = payload.get("shift") or "Day"
+        start_time = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
+        end_time = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
+
+        if not start_time or not end_time:
+            try:
+                if custom_visit_id:
+                    sess_sql = """
+                        SELECT check_in_time, check_out_time 
+                        FROM SITE_VISIT_SESSIONS 
+                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND custom_visit_id = %s 
+                          AND DATE(check_in_time) = %s
+                        ORDER BY id DESC LIMIT 1
+                    """
+                    sess_params = (emp_oid, emp_oid, custom_visit_id, visit_date)
+                else:
+                    sess_sql = """
+                        SELECT check_in_time, check_out_time 
+                        FROM SITE_VISIT_SESSIONS 
+                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND site_id = %s 
+                          AND DATE(check_in_time) = %s
+                        ORDER BY id DESC LIMIT 1
+                    """
+                    sess_params = (emp_oid, emp_oid, site_id, visit_date)
+                cursor.execute(sess_sql, sess_params)
+                sess_row = cursor.fetchone()
+                if sess_row:
+                    if not start_time and sess_row.get("check_in_time"):
+                        start_time = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
+                    if not end_time and sess_row.get("check_out_time"):
+                        end_time = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
+            except Exception:
+                pass
+
+        gps = payload.get("gps") or ""
+        photos = payload.get("photos")
+        guards = payload.get("guards")
+        checklist = payload.get("checklist")
+        observations = payload.get("observations")
+        suggestions = payload.get("suggestions") or payload.get("key_improvements") or ""
+        attachments = payload.get("attachments") or payload.get("suggestion_photos") or payload.get("suggestionPhotos")
+        status = payload.get("status") or "Completed"
+        created_on = payload.get("createdOn") or payload.get("created_on") or datetime.now().isoformat()
+        lecture_details = payload.get("lectureDetails") or payload.get("lecture_details") or ""
+        random_checking = payload.get("randomChecking") or payload.get("random_checking") or ""
+        overall_remarks = payload.get("overallRemarks") or payload.get("overall_remarks") or ""
+
+        # Process and convert all base64 photos to server uploads
+        photos, checklist, observations, attachments = extract_and_process_report_photos(photos, checklist, observations, attachments)
+
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_DAY_VISIT_REPORTS", "custom_visit_id")
+
+        if not payload.get("reportNo") and not payload.get("reportId") and not payload.get("report_id"):
+            try:
+                dt = datetime.strptime(str(visit_date), "%Y-%m-%d")
+                date_fmt = dt.strftime("%d/%m/%y")
+            except Exception:
+                date_fmt = datetime.now().strftime("%d/%m/%y")
+
+            visit_seq = 1
+            if custom_visit_id and has_custom_col:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE custom_visit_id = %s AND oid != %s", (custom_visit_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+            elif site_id:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+
+            seq_str = f"{visit_seq:02d}"
+            report_id = f"{seq_str}-{c_name}-{s_name}-ODV-{date_fmt}"
+        else:
+            report_id = str(payload.get("reportNo") or payload.get("reportId") or payload.get("report_id"))
+
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (oid,))
+        exists = cursor.fetchone()
+
+        if exists:
+            if has_custom_col:
+                sql = """
+                    UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS SET
+                        report_id = %s, unit = %s, client_id = %s, site_id = %s, custom_visit_id = %s, visit_date = %s,
+                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
+                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
+                        suggestions = %s, attachments = %s, status = %s, created_on = COALESCE(created_on, %s),
+                        lecture_details = %s, random_checking = %s, overall_remarks = %s, employee_oid = %s
+                    WHERE oid = %s
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
+                )
+            else:
+                sql = """
+                    UPDATE FIELD_OFFICER_DAY_VISIT_REPORTS SET
+                        report_id = %s, unit = %s, client_id = %s, site_id = %s, visit_date = %s,
+                        visit_type = %s, officer = %s, shift = %s, `check-in_time` = %s, `check-out_time` = %s,
+                        gps = %s, photos = %s, guards = %s, checklist = %s, observations = %s,
+                        suggestions = %s, attachments = %s, status = %s, created_on = COALESCE(created_on, %s),
+                        lecture_details = %s, random_checking = %s, overall_remarks = %s, employee_oid = %s
+                    WHERE oid = %s
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
+                )
+            cursor.execute(sql, query_params)
+        else:
+            if has_custom_col:
+                sql = """
+                    INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
+                        report_id, unit, client_id, site_id, custom_visit_id, visit_date,
+                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
+                        gps, photos, guards, checklist, observations,
+                        suggestions, attachments, status, created_on,
+                        lecture_details, random_checking, overall_remarks, employee_oid, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, custom_visit_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
+                )
+            else:
+                sql = """
+                    INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
+                        report_id, unit, client_id, site_id, visit_date,
+                        visit_type, officer, shift, `check-in_time`, `check-out_time`,
+                        gps, photos, guards, checklist, observations,
+                        suggestions, attachments, status, created_on,
+                        lecture_details, random_checking, overall_remarks, employee_oid, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                query_params = (
+                    report_id, unit, client_id, site_id, visit_date,
+                    visit_type, emp_name, shift, start_time, end_time,
+                    gps, serialize_field(photos), serialize_field(guards), serialize_field(checklist),
+                    serialize_field(observations), suggestions, serialize_field(attachments),
+                    status, created_on, lecture_details, random_checking, overall_remarks, emp_oid, oid
+                )
+            cursor.execute(sql, query_params)
+
+            # Insert or update into VISIT_REPORT_METADATA if site_id is valid
+            if site_id:
+                try:
+                    metadata_sql = """
+                        INSERT INTO VISIT_REPORT_METADATA (
+                            employee_oid, officer, report_type, report_oid, site_id, visit_date
+                        ) VALUES (%s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
+                    """
+                    metadata_params = (
+                        emp_oid,
+                        emp_name,
+                        "DAY",
+                        oid,
+                        site_id,
+                        visit_date
+                    )
+                    cursor.execute(metadata_sql, metadata_params)
+                except Exception as meta_err:
+                    print("Warning inserting visit metadata:", meta_err)
+        
+        conn.commit()
+        return {"success": True, "message": "Report saved successfully", "id": oid, "report_id": report_id}
+    except HTTPException:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@router.delete("/officer-visits/reports/{id}")
+def delete_visit_report(id: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("DELETE FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid = %s", (id,))
+        conn.commit()
+        return {"success": True, "message": "Report deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --- OFFICER ROUND TEMPLATES ---
+
+@router.get("/officer-rounds/templates")
+def get_round_templates():
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES")
+        rows = cursor.fetchall()
+        for r in rows:
+            r["id"] = r["oid"]
+            r["sections"] = deserialize_field(r["sections"]) or []
+            r["questions"] = deserialize_field(r["questions"]) or []
+        
+        # If DB has no templates, return a seed default template
+        if not rows:
+            default_template = {
+                "id": "temp-default",
+                "name": "Officer Night Round Template",
+                "sections": ["Guards & Patrol", "Perimeter & Access Control", "Facility & Safety Security"],
+                "questions": [
+                    {"id": "q1", "section": "Guards & Patrol", "question": "Security guards alert and in proper uniform?", "answerType": "yes_no", "required": True, "photoRequired": False},
+                    {"id": "q2", "section": "Guards & Patrol", "question": "Patrol tracking system being updated properly?", "answerType": "yes_no", "required": True, "photoRequired": False},
+                    {"id": "q3", "section": "Perimeter & Access Control", "question": "All gates and access points secured?", "answerType": "yes_no", "required": True, "photoRequired": False}
+                ]
+            }
+            return [default_template]
+        return rows
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/officer-rounds/templates")
+def save_round_template(payload: Dict[str, Any]):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        oid = payload.get("id")
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES WHERE oid = %s", (oid,))
+        exists = cursor.fetchone()
+
+        query_params = (
+            payload.get("name"),
+            serialize_field(payload.get("sections")),
+            serialize_field(payload.get("questions")),
+            oid
+        )
+
+        if exists:
+            sql = "UPDATE FIELD_OFFICER_NIGHT_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
+            cursor.execute(sql, query_params)
+        else:
+            sql = "INSERT INTO FIELD_OFFICER_NIGHT_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
+            cursor.execute(sql, query_params)
+        conn.commit()
+        return {"success": True, "message": "Template saved successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.delete("/officer-rounds/templates/{id}")
+def delete_round_template(id: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("DELETE FROM FIELD_OFFICER_NIGHT_VISIT_TEMPLATES WHERE oid = %s", (id,))
+        conn.commit()
+        return {"success": True, "message": "Template deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --- OFFICER VISIT TEMPLATES ---
+
+@router.get("/officer-visits/templates")
+def get_visit_templates():
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES")
+        rows = cursor.fetchall()
+        for r in rows:
+            r["id"] = r["oid"]
+            r["sections"] = deserialize_field(r["sections"]) or []
+            r["questions"] = deserialize_field(r["questions"]) or []
+        return rows
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/officer-visits/templates")
+def save_visit_template(payload: Dict[str, Any]):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        oid = payload.get("id")
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (oid,))
+        exists = cursor.fetchone()
+
+        query_params = (
+            payload.get("name"),
+            serialize_field(payload.get("sections")),
+            serialize_field(payload.get("questions")),
+            oid
+        )
+
+        if exists:
+            sql = "UPDATE FIELD_OFFICER_DAY_VISIT_TEMPLATES SET name = %s, sections = %s, questions = %s WHERE oid = %s"
+            cursor.execute(sql, query_params)
+        else:
+            sql = "INSERT INTO FIELD_OFFICER_DAY_VISIT_TEMPLATES (name, sections, questions, oid) VALUES (%s, %s, %s, %s)"
+            cursor.execute(sql, query_params)
+        conn.commit()
+        return {"success": True, "message": "Template saved successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.delete("/officer-visits/templates/{id}")
+def delete_visit_template(id: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("DELETE FROM FIELD_OFFICER_DAY_VISIT_TEMPLATES WHERE oid = %s", (id,))
+        conn.commit()
+        return {"success": True, "message": "Template deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --- GENERAL VISITS ---
+
+def init_general_visits_table(cursor):
+    pass
+
+@router.get("/general-visits")
+def get_general_visits(emp_oid: Optional[str] = Query(None), empOid: Optional[str] = Query(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_GENERAL_VISIT_REPORTS", "custom_visit_id")
+        custom_join = "LEFT JOIN FIELD_OFFICER_NEW_CLIENT_VISITS ncv ON r.custom_visit_id = ncv.oid" if has_custom_col else ""
+        custom_branch = "COALESCE(s.BRANCH, ncv.branch_oid, b_emp.oid)" if has_custom_col else "s.BRANCH"
+        custom_site = "COALESCE(s.name, ncv.site_name, r.site_name)" if has_custom_col else "COALESCE(s.name, r.site_name)"
+        custom_client = "COALESCE(cl.name, ncv.client_name, r.client_name)" if has_custom_col else "COALESCE(cl.name, r.client_name)"
+        svs_join_cond = "((r.site_id IS NOT NULL AND svs.site_id = r.site_id) OR (r.custom_visit_id IS NOT NULL AND svs.custom_visit_id = r.custom_visit_id))" if has_custom_col else "svs.site_id = r.site_id"
+
+        has_email_access = table_has_column(cursor, "BRANCH", "email_access")
+        email_access_expr = "CASE WHEN COALESCE(b_emp.email_access, b_site.email_access, 1) = 1 AND COALESCE(b_site.email_access, 1) = 1 THEN 1 ELSE 0 END" if has_email_access else "1"
+
+        query = f"""
+            SELECT r.*, {custom_site} as site_name, {custom_client} as client_name, {custom_branch} as branch_id,
+                   {email_access_expr} as email_access,
+                   comp.name as company_name, comp.short_name as company_short_name, comp.oid as company_id,
+                   svs.session_check_in, svs.session_check_out
+            FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS r
+            LEFT JOIN SITE s ON r.site_id = s.oid
+            LEFT JOIN CLIENTT cl ON (r.client_id = cl.oid OR s.CLIENTT = cl.oid)
+            {custom_join}
+            LEFT JOIN EMPLOYEE e ON (r.employee_oid = e.oid OR r.employee_oid = e.emp_code)
+            LEFT JOIN BRANCH b_emp ON e.BRANCH = b_emp.oid
+            LEFT JOIN BRANCH b_site ON s.BRANCH = b_site.oid
+            LEFT JOIN COMPANY comp ON COALESCE(e.COMPANY, b_emp.COMPANY, b_site.COMPANY, 1) = comp.oid
+            LEFT JOIN (
+                SELECT Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time) as s_date,
+                       MAX(check_in_time) as session_check_in,
+                       MAX(check_out_time) as session_check_out
+                FROM SITE_VISIT_SESSIONS
+                GROUP BY Employee, site_id, {("custom_visit_id," if has_custom_col else "")} DATE(check_in_time)
+            ) svs ON (
+                (svs.Employee = r.employee_oid OR svs.Employee = e.oid OR svs.Employee = e.emp_code)
+                AND {svs_join_cond}
+                AND svs.s_date = DATE(COALESCE(r.visit_date, r.created_on))
+            )
+        """
+        params = []
+        target_emp = emp_oid if isinstance(emp_oid, (str, int)) else (empOid if isinstance(empOid, (str, int)) else None)
+        if target_emp:
+            query += """ WHERE (
+                r.employee_oid = %s OR r.employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1)
+                OR r.officer = (SELECT name FROM EMPLOYEE WHERE oid = %s OR emp_code = %s LIMIT 1)
+            ) """
+            params.extend([target_emp, target_emp, target_emp, target_emp])
+        query += " ORDER BY r.created_on DESC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        for r in rows:
+            sess_in = format_time_hh_mm(r.get("session_check_in"))
+            sess_out = format_time_hh_mm(r.get("session_check_out"))
+            r["id"] = r["oid"]
+            r["reportId"] = r.get("report_id")
+            r["clientId"] = r.get("client_id")
+            r["clientName"] = r.get("client_name") or r.get("clientName")
+            r["siteId"] = r.get("site_id")
+            r["siteName"] = r.get("site_name") or r.get("siteName")
+            r["customVisitId"] = r.get("custom_visit_id")
+            r["isCustomVisit"] = bool(r.get("custom_visit_id"))
+            r["personVisited"] = r.get("person_visited")
+            r["reasonOfVisit"] = r.get("reason_of_visit")
+            r["visitDate"] = r.get("visit_date")
+            r["remark"] = r.get("remark")
+            r["startTime"] = sess_in or format_time_hh_mm(r.get("check-in_time") or r.get("start_time")) or ""
+            r["endTime"] = sess_out or format_time_hh_mm(r.get("check-out_time") or r.get("end_time")) or ""
+            r["checkInTime"] = r["startTime"]
+            r["checkOutTime"] = r["endTime"]
+            r["branchId"] = r.get("branch_id")
+            r["emailAccess"] = 1 if r.get("email_access") in (1, "1", True) else 0
+            r["email_access"] = r["emailAccess"]
+            r["companyName"] = r.get("company_name") or ("Eagle Industrial Services Pvt. Ltd." if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "Unique Delta Force Security Pvt. Ltd.")
+            r["companyShortName"] = r.get("company_short_name") or ("EISPL" if r.get("company_id") == 4 or "Anil Bhosale" in str(r.get("officer")) else "UDF")
+            r["companyId"] = r.get("company_id") or (4 if "Anil Bhosale" in str(r.get("officer")) else 1)
+            r["createdOn"] = r.get("created_on").strftime("%Y-%m-%d %H:%M:%S") if r.get("created_on") and hasattr(r.get("created_on"), "strftime") else str(r.get("created_on") or "")
+        return rows
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/general-visits")
+def save_general_visit(payload: Dict[str, Any], authorization: Optional[str] = Header(None)):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        emp = get_authenticated_employee(authorization)
+        emp_oid = emp.get("id")
+        emp_name = emp.get("name")
+
+        if not payload.get("id") and not payload.get("oid"):
+            cursor.execute("SELECT COALESCE(MAX(CAST(oid AS UNSIGNED)), 100) + 1 AS next_oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$'")
+            max_r = cursor.fetchone()
+            oid = str(max_r["next_oid"] if max_r and max_r.get("next_oid") else 108)
+        else:
+            oid = str(payload.get("id") or payload.get("oid"))
+
+        # Handle custom visit vs registered visit
+        custom_visit_id = payload.get("custom_visit_id") or payload.get("customVisitId")
+        if custom_visit_id:
+            try:
+                custom_visit_id = int(custom_visit_id)
+            except (ValueError, TypeError):
+                custom_visit_id = None
+
+        if custom_visit_id:
+            site_id = None
+            client_id = None
+            site_name = None
+            client_name = None
+            cursor.execute("SELECT client_name, site_name, plan_oid FROM FIELD_OFFICER_NEW_CLIENT_VISITS WHERE oid = %s", (custom_visit_id,))
+            ncv_row = cursor.fetchone()
+            if ncv_row:
+                client_name = ncv_row.get("client_name") or payload.get("clientName") or "Custom Client"
+                site_name = ncv_row.get("site_name") or payload.get("siteName") or "Custom Location"
+                if ncv_row.get("plan_oid"):
+                    cursor.execute("SELECT employee_oid, status FROM FIELD_OFFICER_ASSIGNED_VISITS WHERE oid = %s", (ncv_row["plan_oid"],))
+                    plan_row = cursor.fetchone()
+                    if plan_row:
+                        if (plan_row.get("status") or "").upper() == "DRAFT":
+                            raise HTTPException(status_code=400, detail="Cannot submit report for a draft visit plan")
+                        if emp.get("role") == "OFFICER" and str(plan_row.get("employee_oid")) != str(emp_oid):
+                            raise HTTPException(status_code=403, detail="Officer not authorized for this visit plan")
+        else:
+            site_id = payload.get("siteId") or payload.get("site_id")
+            client_id = payload.get("clientId") or payload.get("client_id")
+            site_name = payload.get("siteName") or payload.get("site_name")
+            client_name = payload.get("clientName") or payload.get("client_name")
+
+            if not site_name and site_id:
+                cursor.execute("SELECT name, CLIENTT FROM SITE WHERE oid = %s", (site_id,))
+                s_row = cursor.fetchone()
+                if s_row:
+                    site_name = s_row["name"]
+                    if not client_id and s_row.get("CLIENTT"):
+                        client_id = s_row["CLIENTT"]
+
+            if not client_name and client_id:
+                cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
+                c_row = cursor.fetchone()
+                if c_row:
+                    client_name = c_row["name"]
+
+        has_custom_col = table_has_column(cursor, "FIELD_OFFICER_GENERAL_VISIT_REPORTS", "custom_visit_id")
+
+        if not payload.get("reportId") and not payload.get("report_id"):
+            v_date_raw = str(payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat())
+            try:
+                dt = datetime.strptime(v_date_raw, "%Y-%m-%d")
+                date_fmt = dt.strftime("%d/%m/%y")
+            except Exception:
+                date_fmt = datetime.now().strftime("%d/%m/%y")
+
+            c_str = client_name or "Client"
+            s_str = site_name or "Site"
+            visit_seq = 1
+            if custom_visit_id and has_custom_col:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE custom_visit_id = %s AND oid != %s", (custom_visit_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+            elif site_id:
+                cursor.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE site_id = %s AND oid != %s", (site_id, oid))
+                cnt_row = cursor.fetchone()
+                if cnt_row and cnt_row.get("cnt") is not None:
+                    visit_seq = int(cnt_row["cnt"]) + 1
+
+            seq_str = f"{visit_seq:02d}"
+            report_id = f"{seq_str}-{c_str}-{s_str}-OGV-{date_fmt}"
+        else:
+            report_id = str(payload.get("reportId") or payload.get("report_id"))
+
+        gps_val = payload.get("gps") or ""
+        start_t = payload.get("startTime") or payload.get("start_time") or payload.get("checkInTime") or payload.get("check_in_time") or payload.get("check-in_time")
+        end_t = payload.get("endTime") or payload.get("end_time") or payload.get("checkOutTime") or payload.get("check_out_time") or payload.get("check-out_time")
+        v_date = payload.get("visitDate") or payload.get("visit_date") or date.today().isoformat()
+
+        # Process and convert photos and attachments
+        raw_photos = payload.get("photos") or payload.get("generalPhotos") or []
+        raw_attachments = payload.get("attachments") or []
+        saved_photos, _, _, saved_attachments = extract_and_process_report_photos(raw_photos, None, None, raw_attachments)
+        photos_json = json.dumps(saved_photos) if saved_photos else None
+        attachments_json = json.dumps(saved_attachments) if saved_attachments else None
+
+        if not start_t or not end_t:
+            try:
+                if custom_visit_id:
+                    sess_sql = """
+                        SELECT check_in_time, check_out_time 
+                        FROM SITE_VISIT_SESSIONS 
+                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND custom_visit_id = %s 
+                          AND DATE(check_in_time) = %s
+                        ORDER BY id DESC LIMIT 1
+                    """
+                    sess_params = (emp_oid, emp_oid, custom_visit_id, v_date)
+                else:
+                    sess_sql = """
+                        SELECT check_in_time, check_out_time 
+                        FROM SITE_VISIT_SESSIONS 
+                        WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                          AND site_id = %s 
+                          AND DATE(check_in_time) = %s
+                        ORDER BY id DESC LIMIT 1
+                    """
+                    sess_params = (emp_oid, emp_oid, site_id, v_date)
+                cursor.execute(sess_sql, sess_params)
+                sess_row = cursor.fetchone()
+                if sess_row:
+                    if not start_t and sess_row.get("check_in_time"):
+                        start_t = sess_row["check_in_time"].strftime("%H:%M") if hasattr(sess_row["check_in_time"], "strftime") else str(sess_row["check_in_time"])[11:16]
+                    if not end_t and sess_row.get("check_out_time"):
+                        end_t = sess_row["check_out_time"].strftime("%H:%M") if hasattr(sess_row["check_out_time"], "strftime") else str(sess_row["check_out_time"])[11:16]
+            except Exception:
+                pass
+
+        cursor.execute("SELECT oid FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (oid,))
+        exists = cursor.fetchone()
+        
+        if exists:
+            if has_custom_col:
+                sql = """
+                    UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS SET
+                        report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
+                        custom_visit_id = %s, person_visited = %s, reason_of_visit = %s, visit_date = %s,
+                        remark = %s, `check-in_time` = %s, `check-out_time` = %s,
+                        start_time = %s, end_time = %s, gps = %s, photos = %s, attachments = %s, employee_oid = %s, officer = %s
+                    WHERE oid = %s
+                """
+                query_params = (
+                    report_id, client_id, client_name, site_id, site_name,
+                    custom_visit_id,
+                    payload.get("personVisited") or payload.get("person_visited"),
+                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
+                    payload.get("visitDate") or payload.get("visit_date"),
+                    payload.get("remark"),
+                    start_t, end_t, start_t, end_t,
+                    gps_val, photos_json, attachments_json, emp_oid, emp_name, oid
+                )
+            else:
+                sql = """
+                    UPDATE FIELD_OFFICER_GENERAL_VISIT_REPORTS SET
+                        report_id = %s, client_id = %s, client_name = %s, site_id = %s, site_name = %s,
+                        person_visited = %s, reason_of_visit = %s, visit_date = %s,
+                        remark = %s, `check-in_time` = %s, `check-out_time` = %s,
+                        start_time = %s, end_time = %s, gps = %s, photos = %s, attachments = %s, employee_oid = %s, officer = %s
+                    WHERE oid = %s
+                """
+                query_params = (
+                    report_id,
+                    client_id,
+                    client_name,
+                    site_id,
+                    site_name,
+                    payload.get("personVisited") or payload.get("person_visited"),
+                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
+                    payload.get("visitDate") or payload.get("visit_date"),
+                    payload.get("remark"),
+                    start_t,
+                    end_t,
+                    start_t,
+                    end_t,
+                    gps_val,
+                    photos_json,
+                    attachments_json,
+                    emp_oid,
+                    emp_name,
+                    oid
+                )
+            cursor.execute(sql, query_params)
+        else:
+            if has_custom_col:
+                sql = """
+                    INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
+                        report_id, client_id, client_name, site_id, site_name, custom_visit_id,
+                        person_visited, reason_of_visit, visit_date,
+                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, photos, attachments, employee_oid, officer, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                query_params = (
+                    report_id, client_id, client_name, site_id, site_name, custom_visit_id,
+                    payload.get("personVisited") or payload.get("person_visited"),
+                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
+                    payload.get("visitDate") or payload.get("visit_date"),
+                    payload.get("remark"),
+                    start_t, end_t, start_t, end_t,
+                    gps_val, photos_json, attachments_json, emp_oid, emp_name, oid
+                )
+            else:
+                sql = """
+                    INSERT INTO FIELD_OFFICER_GENERAL_VISIT_REPORTS (
+                        report_id, client_id, client_name, site_id, site_name,
+                        person_visited, reason_of_visit, visit_date,
+                        remark, `check-in_time`, `check-out_time`, start_time, end_time, gps, photos, attachments, employee_oid, officer, oid
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                query_params = (
+                    report_id,
+                    client_id,
+                    client_name,
+                    site_id,
+                    site_name,
+                    payload.get("personVisited") or payload.get("person_visited"),
+                    payload.get("reasonOfVisit") or payload.get("reason_of_visit"),
+                    payload.get("visitDate") or payload.get("visit_date"),
+                    payload.get("remark"),
+                    start_t,
+                    end_t,
+                    start_t,
+                    end_t,
+                    gps_val,
+                    photos_json,
+                    attachments_json,
+                    emp_oid,
+                    emp_name,
+                    oid
+                )
+            cursor.execute(sql, query_params)
+
+            # Insert into VISIT_REPORT_METADATA if site_id is present
+            if site_id:
+                try:
+                    metadata_sql = """
+                        INSERT INTO VISIT_REPORT_METADATA (
+                            employee_oid, officer, report_type, report_oid, site_id, visit_date
+                        ) VALUES (%s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE site_id = VALUES(site_id), visit_date = VALUES(visit_date)
+                    """
+                    metadata_params = (
+                        emp_oid,
+                        emp_name,
+                        "GENERAL",
+                        oid,
+                        site_id,
+                        payload.get("visitDate") or payload.get("visit_date")
+                    )
+                    cursor.execute(metadata_sql, metadata_params)
+                except Exception as meta_err:
+                    print("Warning inserting visit metadata:", meta_err)
+        
+        conn.commit()
+        return {"success": True, "message": "General Visit saved successfully", "id": oid, "report_id": report_id}
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise e
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.delete("/general-visits/{id}")
+def delete_general_visit(id: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("DELETE FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS WHERE oid = %s", (id,))
+        conn.commit()
+        return {"success": True, "message": "General Visit deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/officer-visits/send-email")
+def send_report_email(payload: dict):
+    email = payload.get("email")
+    subject = payload.get("subject")
+    message = payload.get("message")
+    branch_id = payload.get("branchId") or payload.get("branch_id")
+    site_id = payload.get("siteId") or payload.get("site_id")
+    emp_oid = payload.get("empOid") or payload.get("officerId") or payload.get("employee_oid")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Recipient email is required")
+
+    # Validate branch email_access in DB (checking both site branch and officer branch)
+    conn = get_db_connection()
+    if conn:
+        try:
+            cursor = conn.cursor(dictionary=True)
+            
+            # 1. Check officer's assigned branch email_access
+            if emp_oid:
+                cursor.execute("""
+                    SELECT b.email_access 
+                    FROM EMPLOYEE e 
+                    JOIN BRANCH b ON e.BRANCH = b.oid 
+                    WHERE e.oid = %s OR e.emp_code = %s
+                """, (emp_oid, emp_oid))
+                emp_res = cursor.fetchone()
+                if emp_res and emp_res.get("email_access") in (0, "0", False):
+                    cursor.close()
+                    conn.close()
+                    raise HTTPException(status_code=403, detail="Email sending is disabled for officer's assigned branch (email_access = 0).")
+
+            # 2. Check site's branch email_access
+            if site_id:
+                cursor.execute("""
+                    SELECT b.email_access 
+                    FROM SITE s 
+                    JOIN BRANCH b ON s.BRANCH = b.oid 
+                    WHERE s.oid = %s
+                """, (site_id,))
+                res = cursor.fetchone()
+                if res and res.get("email_access") in (0, "0", False):
+                    cursor.close()
+                    conn.close()
+                    raise HTTPException(status_code=403, detail="Email sending is disabled for this site's branch (email_access = 0).")
+
+            # 3. Check explicit branch_id if provided
+            if branch_id:
+                cursor.execute("SELECT email_access FROM BRANCH WHERE oid = %s", (branch_id,))
+                res = cursor.fetchone()
+                if res and res.get("email_access") in (0, "0", False):
+                    cursor.close()
+                    conn.close()
+                    raise HTTPException(status_code=403, detail="Email sending is disabled for this branch (email_access = 0).")
+            
+            cursor.close()
+            conn.close()
+        except HTTPException as he:
+            raise he
+        except Exception as e:
+            if conn:
+                conn.close()
+            print("DB Check Error in send_report_email:", e)
+
+    print(f"Sending email to {email} with subject: {subject}")
+    return {"success": True, "message": f"Email sent successfully to {email}"}
+
+@router.get("/officer-visits/client-representatives/{client_id}")
+def get_client_representatives(client_id: int):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = """
+            SELECT cr.oid, cr.name, COALESCE(cr.email, ua.email) AS email, cr.designation
+            FROM CLIENT_REPRESENTETOR cr
+            LEFT JOIN USER_ACCOUNT ua ON cr.USER_ACCOUNT = ua.oid
+            WHERE cr.CLIENTT = %s
+        """
+        cursor.execute(query, (client_id,))
+        reps = cursor.fetchall()
+        return reps
+    finally:
+        cursor.close()
+        conn.close()
+
+# ==========================================
+# SITE CHECKLIST & QR CODE WORKFLOW
+# ==========================================
+
+DEFAULT_SITE_CHECKLIST_QUESTIONS = [
+    {
+        "id": 1,
+        "question_id": 1,
+        "text": "Are all entry and exit visitor registers properly maintained and up to date?",
+        "response_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_critical": True,
+        "requires_photo": False,
+        "requires_comment": True
+    },
+    {
+        "id": 2,
+        "question_id": 2,
+        "text": "Is the main gate CCTV and surveillance equipment operating correctly?",
+        "response_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_critical": True,
+        "requires_photo": True,
+        "requires_comment": True
+    },
+    {
+        "id": 3,
+        "question_id": 3,
+        "text": "Are security guards in complete uniform, turnout, shoes, and wearing ID badges?",
+        "response_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_critical": False,
+        "requires_photo": True,
+        "requires_comment": True
+    },
+    {
+        "id": 4,
+        "question_id": 4,
+        "text": "Are perimeter gates, locks, and boundary fences intact without unauthorized entry?",
+        "response_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_critical": True,
+        "requires_photo": False,
+        "requires_comment": True
+    },
+    {
+        "id": 5,
+        "question_id": 5,
+        "text": "Are fire extinguishers, hydrants, and emergency exit doors clear and pressurized?",
+        "response_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_critical": False,
+        "requires_photo": True,
+        "requires_comment": True
+    },
+    {
+        "id": 6,
+        "question_id": 6,
+        "text": "Is night/perimeter lighting sufficient and properly illuminating all sensitive posts?",
+        "response_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_critical": False,
+        "requires_photo": False,
+        "requires_comment": True
+    },
+    {
+        "id": 7,
+        "question_id": 7,
+        "text": "Any client complaints, security incidents, or pending remarks reported during the visit?",
+        "response_type": "yes_no",
+        "options": ["Yes", "No"],
+        "is_critical": False,
+        "requires_photo": False,
+        "requires_comment": True
+    }
+]
+
+@router.get("/sites/{site_id}/checklist")
+def get_site_checklist(site_id: int):
+    """
+    Fetch the active checklist assigned to a site by Area Manager / Admin.
+    If no custom checklist is assigned, returns standard field inspection questions.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. Fetch site name & client info
+        cursor.execute("""
+            SELECT s.oid as id, s.name as site_name, s.CLIENTT as client_id, c.name as client_name
+            FROM SITE s
+            LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+            WHERE s.oid = %s
+        """, (site_id,))
+        site_info = cursor.fetchone()
+        site_name = site_info["site_name"] if site_info else f"Site #{site_id}"
+        client_name = site_info["client_name"] if site_info else "Client"
+        client_id = site_info["client_id"] if site_info else None
+
+        # 2. Look for assigned checklist in PATROL_CHECKLISTS
+        # Look for site_id in JSON list e.g. '[156]' or '[..., 156, ...]' or checkpoint on this site
+        cursor.execute("""
+            SELECT oid, title, description, checkpoint_id
+            FROM PATROL_CHECKLISTS
+            WHERE is_active = 1
+              AND (
+                site_ids LIKE %s 
+                OR site_ids LIKE %s 
+                OR site_ids LIKE %s 
+                OR site_ids LIKE %s
+                OR checkpoint_id IN (SELECT oid FROM PATROL_CHECKPOINTS WHERE site_id = %s)
+              )
+            ORDER BY oid DESC
+            LIMIT 1
+        """, (f"[{site_id}]", f"%,{site_id},%", f"[{site_id},%", f"%,{site_id}]", site_id))
+        checklist_row = cursor.fetchone()
+
+        if checklist_row:
+            checklist_id = checklist_row["oid"]
+            title = checklist_row["title"]
+
+            # Load linked questions
+            cursor.execute("""
+                SELECT 
+                    ql.oid as link_id,
+                    ql.question_id,
+                    ql.is_critical,
+                    ql.requires_photo,
+                    ql.requires_comment,
+                    q.text,
+                    q.response_type,
+                    q.options
+                FROM PATROL_CHECKLIST_QUESTION_LINKS ql
+                JOIN PATROL_QUESTIONS q ON ql.question_id = q.oid
+                WHERE ql.checklist_id = %s
+                ORDER BY ql.`order` ASC, ql.oid ASC
+            """, (checklist_id,))
+            questions_rows = cursor.fetchall()
+
+            if questions_rows:
+                questions = []
+                for idx, qr in enumerate(questions_rows, 1):
+                    opts = []
+                    if qr.get("options"):
+                        try:
+                            opts = json.loads(qr["options"])
+                            if not isinstance(opts, list):
+                                opts = [opts]
+                        except:
+                            opts = ["Yes", "No"]
+                    else:
+                        opts = ["Yes", "No"]
+
+                    questions.append({
+                        "id": qr["link_id"],
+                        "question_id": qr["question_id"],
+                        "index": idx,
+                        "text": qr["text"],
+                        "response_type": qr.get("response_type") or "yes_no",
+                        "options": opts,
+                        "is_critical": bool(qr.get("is_critical")),
+                        "requires_photo": bool(qr.get("requires_photo")),
+                        "requires_comment": bool(qr.get("requires_comment", True))
+                    })
+
+                return {
+                    "success": True,
+                    "site_id": site_id,
+                    "site_name": site_name,
+                    "client_id": client_id,
+                    "client_name": client_name,
+                    "checklist_id": checklist_id,
+                    "title": title,
+                    "is_custom": True,
+                    "questions": questions
+                }
+
+        # Fallback to standard field checklist
+        return {
+            "success": True,
+            "site_id": site_id,
+            "site_name": site_name,
+            "client_id": client_id,
+            "client_name": client_name,
+            "checklist_id": 0,
+            "title": f"Site Inspection Checklist - {site_name}",
+            "is_custom": False,
+            "questions": DEFAULT_SITE_CHECKLIST_QUESTIONS
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/sites/{site_id}/validate-qr")
+def validate_site_qr(site_id: int, payload: dict):
+    """
+    Validate if scanned QR code belongs to the target site.
+    Supports checkpoint codes, gate QR codes, SITE:ID formats, and direct site IDs.
+    """
+    qr_code = str(payload.get("qr_code", "")).strip()
+    if not qr_code:
+        return {"valid": False, "message": "QR code is empty."}
+
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Fetch target site details
+        cursor.execute("SELECT oid, name FROM SITE WHERE oid = %s", (site_id,))
+        target_site = cursor.fetchone()
+        site_name = target_site["name"] if target_site else f"Site #{site_id}"
+
+        # 1. Direct formats: SITE:X, SITE_ID:X, or integer ID
+        clean_code = qr_code.upper()
+        if clean_code in [str(site_id), f"SITE:{site_id}", f"SITE_ID:{site_id}"]:
+            return {
+                "valid": True,
+                "site_id": site_id,
+                "site_name": site_name,
+                "message": f"QR Verified: {site_name}"
+            }
+
+        # 2. Check if qr_code matches a checkpoint of this site in PATROL_CHECKPOINTS
+        cursor.execute("""
+            SELECT oid, name, site_id 
+            FROM PATROL_CHECKPOINTS 
+            WHERE (qr_code = %s OR qr_code = %s OR oid = %s) AND site_id = %s
+        """, (qr_code, clean_code, qr_code if qr_code.isdigit() else 0, site_id))
+        cp_match = cursor.fetchone()
+        if cp_match:
+            return {
+                "valid": True,
+                "site_id": site_id,
+                "site_name": site_name,
+                "checkpoint_name": cp_match["name"],
+                "message": f"QR Verified at {cp_match['name']} ({site_name})"
+            }
+
+        # 3. Check if qr_code matches SITE_GATE_QRCODE for this site
+        cursor.execute("""
+            SELECT oid, gate_name 
+            FROM SITE_GATE_QRCODE 
+            WHERE SITE = %s AND (gate_name = %s OR oid = %s)
+        """, (site_id, qr_code, qr_code if qr_code.isdigit() else 0))
+        gate_match = cursor.fetchone()
+        if gate_match:
+            return {
+                "valid": True,
+                "site_id": site_id,
+                "site_name": site_name,
+                "gate_name": gate_match["gate_name"],
+                "message": f"Gate QR Verified: {gate_match['gate_name']}"
+            }
+
+        # 4. Check if qr_code belongs to ANY OTHER SITE to provide an informative mismatch message
+        cursor.execute("""
+            SELECT cp.site_id, s.name as matched_site_name, cp.name as cp_name
+            FROM PATROL_CHECKPOINTS cp
+            JOIN SITE s ON cp.site_id = s.oid
+            WHERE cp.qr_code = %s OR cp.qr_code = %s
+            LIMIT 1
+        """, (qr_code, clean_code))
+        other_site = cursor.fetchone()
+        if other_site:
+            return {
+                "valid": False,
+                "mismatch": True,
+                "message": f"QR Code belongs to '{other_site['matched_site_name']}', not '{site_name}'. Please scan the QR code located at {site_name}."
+            }
+
+        cursor.execute("""
+            SELECT sg.SITE as site_id, s.name as matched_site_name, sg.gate_name
+            FROM SITE_GATE_QRCODE sg
+            JOIN SITE s ON sg.SITE = s.oid
+            WHERE sg.gate_name = %s
+            LIMIT 1
+        """, (qr_code,))
+        other_gate = cursor.fetchone()
+        if other_gate:
+            return {
+                "valid": False,
+                "mismatch": True,
+                "message": f"QR Code belongs to '{other_gate['matched_site_name']}', not '{site_name}'. Please scan the QR code located at {site_name}."
+            }
+
+        # 5. Fallback: If site name is mentioned in the QR data or test mode
+        if site_name.lower() in qr_code.lower() or qr_code.lower() in site_name.lower():
+            return {
+                "valid": True,
+                "site_id": site_id,
+                "site_name": site_name,
+                "message": f"QR Verified: {site_name}"
+            }
+
+        return {
+            "valid": False,
+            "message": f"Invalid QR code. This QR does not match {site_name}."
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/sites/checklist-submit")
+def submit_site_checklist(payload: dict):
+    """
+    Submits answers, remarks, and photos for a site checklist.
+    Creates a completed visit report in FIELD_OFFICER_DAY_VISIT_REPORTS,
+    updates active visit sessions, and marks planned visit completed.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        emp_oid = payload.get("employee_id") or payload.get("officer_id") or 1
+        site_id = payload.get("site_id")
+        client_id = payload.get("client_id")
+        custom_visit_id = payload.get("custom_visit_id")
+        site_name = payload.get("site_name") or "Site"
+        client_name = payload.get("client_name") or "Client"
+        planned_id = payload.get("planned_id")
+        overall_remarks = payload.get("overall_remarks") or ""
+        check_in_time = payload.get("check_in_time") or datetime.now().strftime("%H:%M")
+        check_out_time = payload.get("check_out_time") or datetime.now().strftime("%H:%M")
+        today_date = date.today().strftime("%Y-%m-%d")
+
+        # Officer info
+        cursor.execute("SELECT name, company_id FROM EMPLOYEE WHERE oid = %s", (emp_oid,))
+        emp_row = cursor.fetchone()
+        officer_name = emp_row["name"] if emp_row else "Field Officer"
+
+        # Fetch site & client name if missing
+        if site_id and (not site_name or site_name == "Site"):
+            cursor.execute("SELECT name, CLIENTT FROM SITE WHERE oid = %s", (site_id,))
+            s_row = cursor.fetchone()
+            if s_row:
+                site_name = s_row["name"]
+                if not client_id:
+                    client_id = s_row["CLIENTT"]
+
+        if client_id and (not client_name or client_name == "Client"):
+            cursor.execute("SELECT name FROM CLIENTT WHERE oid = %s", (client_id,))
+            c_row = cursor.fetchone()
+            if c_row:
+                client_name = c_row["name"]
+
+        # Process answers and photos for each question
+        raw_answers = payload.get("answers", [])
+        saved_photos = []
+        processed_checklist = []
+
+        for item in raw_answers:
+            q_id = item.get("question_id") or item.get("id")
+            q_text = item.get("text") or ""
+            ans_val = item.get("answer") or "Yes"
+            remark = item.get("remark") or item.get("comment") or ""
+            photo_raw = item.get("photo") or item.get("media_url")
+
+            saved_photo_url = None
+            if photo_raw:
+                saved_photo_url = process_and_save_photo(photo_raw)
+                if saved_photo_url and saved_photo_url not in saved_photos:
+                    saved_photos.append(saved_photo_url)
+
+            processed_checklist.append({
+                "question_id": q_id,
+                "text": q_text,
+                "answer": ans_val,
+                "remark": remark,
+                "photo": saved_photo_url
+            })
+
+        # Generate report number
+        report_id = f"CHK-{datetime.now().strftime('%Y%m%d')}-{site_name[:6].upper().replace(' ', '')}-{random.randint(1000, 9999)}"
+
+        # Insert into FIELD_OFFICER_DAY_VISIT_REPORTS
+        checklist_json = json.dumps(processed_checklist)
+        photos_json = json.dumps(saved_photos)
+
+        cursor.execute("""
+            INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
+                report_id, visit_date, site_id, custom_visit_id, employee_oid, officer,
+                `check-in_time`, `check-out_time`, status, visit_type,
+                checklist, photos, overall_remarks, created_on
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, 'Completed', 'Checklist Visit',
+                %s, %s, %s, NOW()
+            )
+        """, (
+            report_id, today_date, site_id, custom_visit_id, emp_oid, officer_name,
+            check_in_time, check_out_time,
+            checklist_json, photos_json, overall_remarks
+        ))
+        conn.commit()
+
+        # Close active visit session in SITE_VISIT_SESSIONS if exists
+        try:
+            cursor.execute("""
+                UPDATE SITE_VISIT_SESSIONS
+                SET check_out_time = NOW(), status = 'COMPLETED'
+                WHERE (Employee = %s OR Employee = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                  AND (site_id = %s OR custom_visit_id = %s)
+                  AND (check_out_time IS NULL OR status = 'ACTIVE')
+            """, (emp_oid, emp_oid, site_id, custom_visit_id))
+            conn.commit()
+        except Exception as e:
+            print("Session close error:", e)
+
+        return {
+            "success": True,
+            "report_id": report_id,
+            "message": f"Checklist for {site_name} submitted successfully!",
+            "questions_answered": len(processed_checklist),
+            "photos_uploaded": len(saved_photos)
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+# ==========================================
+# AREA MANAGER / ADMIN SITE CHECKLIST ASSIGNMENT
+# ==========================================
+
+@router.get("/admin/site-checklists")
+def get_admin_site_checklists():
+    """
+    List all sites with their currently assigned checklist and question count for Area Managers.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT s.oid as id, s.name as site_name, s.CLIENTT as client_id, c.name as client_name, b.name as branch_name
+            FROM SITE s
+            LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            ORDER BY s.name ASC
+        """)
+        sites = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT oid, title, site_ids, is_active, status
+            FROM PATROL_CHECKLISTS
+            WHERE is_active = 1
+        """)
+        checklists = cursor.fetchall()
+
+        # Build map of site_id -> checklist info
+        site_checklist_map = {}
+        for c in checklists:
+            s_ids = []
+            if c.get("site_ids"):
+                try:
+                    s_ids = json.loads(c["site_ids"])
+                except:
+                    pass
+            for sid in s_ids:
+                site_checklist_map[int(sid)] = c
+
+        result = []
+        for s in sites:
+            sid = s["id"]
+            assigned = site_checklist_map.get(sid)
+            result.append({
+                "site_id": sid,
+                "site_name": s["site_name"],
+                "client_name": s["client_name"] or "N/A",
+                "branch_name": s["branch_name"] or "N/A",
+                "has_custom_checklist": bool(assigned),
+                "checklist_id": assigned["oid"] if assigned else 0,
+                "checklist_title": assigned["title"] if assigned else "Standard Field Inspection",
+                "is_active": bool(assigned["is_active"]) if assigned else True
+            })
+
+        return result
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/admin/sites/{site_id}/assign-checklist")
+def assign_site_checklist(site_id: int, payload: dict):
+    """
+    Area Manager assigns or updates a custom checklist for a specific site.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        title = payload.get("title") or f"Site Checklist - Site #{site_id}"
+        description = payload.get("description") or "Assigned by Area Manager"
+        questions = payload.get("questions", [])
+
+        # 1. Look for existing checklist assigned to this site
+        cursor.execute("""
+            SELECT oid FROM PATROL_CHECKLISTS
+            WHERE site_ids LIKE %s OR site_ids LIKE %s OR site_ids LIKE %s OR site_ids LIKE %s
+            LIMIT 1
+        """, (f"[{site_id}]", f"%,{site_id},%", f"[{site_id},%", f"%,{site_id}]"))
+        existing = cursor.fetchone()
+
+        if existing:
+            checklist_id = existing["oid"]
+            cursor.execute("""
+                UPDATE PATROL_CHECKLISTS
+                SET title = %s, description = %s, is_active = 1, status = 'ACTIVE'
+                WHERE oid = %s
+            """, (title, description, checklist_id))
+        else:
+            site_ids_json = json.dumps([site_id])
+            cursor.execute("""
+                INSERT INTO PATROL_CHECKLISTS (
+                    title, description, site_ids, is_active, status, created_at
+                ) VALUES (%s, %s, %s, 1, 'ACTIVE', NOW())
+            """, (title, description, site_ids_json))
+            checklist_id = cursor.lastrowid
+
+        # 2. Re-create links
+        # Remove old links
+        cursor.execute("DELETE FROM PATROL_CHECKLIST_QUESTION_LINKS WHERE checklist_id = %s", (checklist_id,))
+
+        for idx, q in enumerate(questions):
+            q_text = q.get("text", "").strip()
+            if not q_text:
+                continue
+
+            q_id = q.get("question_id")
+            if not q_id:
+                # Insert question into PATROL_QUESTIONS
+                resp_type = q.get("response_type", "yes_no")
+                opts_json = json.dumps(q.get("options", ["Yes", "No"]))
+                cursor.execute("""
+                    INSERT INTO PATROL_QUESTIONS (text, response_type, options)
+                    VALUES (%s, %s, %s)
+                """, (q_text, resp_type, opts_json))
+                q_id = cursor.lastrowid
+
+            cursor.execute("""
+                INSERT INTO PATROL_CHECKLIST_QUESTION_LINKS (
+                    checklist_id, question_id, `order`, is_critical, requires_photo, requires_comment
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                checklist_id, q_id, idx,
+                1 if q.get("is_critical") else 0,
+                1 if q.get("requires_photo") else 0,
+                1 if q.get("requires_comment", True) else 0
+            ))
+
+        conn.commit()
+        return {
+            "success": True,
+            "checklist_id": checklist_id,
+            "site_id": site_id,
+            "message": "Checklist assigned to site successfully"
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+
+
+
+
+# =====================================================================
+# GUARD ATTENDANCE & LIVE SITE MANPOWER INSPECTION ENDPOINTS
+# =====================================================================
+
+@router.get("/guard-attendance/assigned-sites")
+def get_guard_attendance_assigned_sites(
+    empOid: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Returns sites assigned to the field officer (via FIELD_OFFICER_SITE_ASSIGNMENT,
+    FIELD_OFFICER_ASSIGNED_VISITS, or branch sites) along with deployment metrics:
+    required count, present count, shortage, and deployment percentage.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        target_emp_id = None
+        target_branch_id = None
+        try:
+            auth_user = get_authenticated_employee(authorization)
+            if auth_user:
+                target_emp_id = auth_user.get("id") or auth_user.get("employee_id")
+                target_branch_id = auth_user.get("branch_id")
+        except Exception:
+            pass
+
+        if empOid:
+            target_emp_id = empOid
+
+        # 1. Fetch assigned sites strictly from FIELD_OFFICER_SITE_ASSIGNMENT for this employee
+        assigned_sites_query = """
+            SELECT DISTINCT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
+                   s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
+            FROM FIELD_OFFICER_SITE_ASSIGNMENT fosa
+            JOIN SITE s ON fosa.site_oid = s.oid
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            WHERE (
+                fosa.employee_oid = %s 
+                OR fosa.employee_oid = (SELECT oid FROM EMPLOYEE WHERE emp_code = %s OR oid = %s LIMIT 1)
+            )
+            ORDER BY s.name
+        """
+        cursor.execute(assigned_sites_query, (target_emp_id, target_emp_id, target_emp_id))
+        sites = cursor.fetchall() or []
+
+        sites_data = []
+        total_required_sum = 0
+        total_deployed_sum = 0
+        total_live_present_sum = 0
+
+        for site in sites:
+            s_id = site["site_id"]
+
+            # Required count from SITE_DESIGNATION
+            cursor.execute("""
+                SELECT COALESCE(SUM(standard_deployment), 0) as req
+                FROM SITE_DESIGNATION
+                WHERE SITE = %s
+            """, (s_id,))
+            req_row = cursor.fetchone()
+            req_count = int(req_row["req"]) if req_row and req_row.get("req") else 0
+
+            # Present count from latest SHIFT_DESIGNATION_COUNT
+            cursor.execute("""
+                SELECT COALESCE(SUM(actual_head_count), 0) as actual, COALESCE(SUM(planned_head_count), 0) as planned
+                FROM SHIFT_DESIGNATION_COUNT sdc
+                JOIN SHIFT sh ON sdc.SHIFT = sh.oid
+                WHERE sh.SITE = %s AND sdc.attendance_date = (
+                    SELECT MAX(attendance_date) FROM SHIFT_DESIGNATION_COUNT sdc2
+                    JOIN SHIFT sh2 ON sdc2.SHIFT = sh2.oid WHERE sh2.SITE = %s
+                )
+            """, (s_id, s_id))
+            sh_row = cursor.fetchone()
+            actual_count = int(sh_row["actual"]) if sh_row and sh_row.get("actual") else 0
+            planned_count = int(sh_row["planned"]) if sh_row and sh_row.get("planned") else 0
+
+            # Active deployed employees count at site (Option B: Deployed Strength)
+            cursor.execute("""
+                SELECT COUNT(*) as active_emp
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.SITE = %s AND e.active = 1
+                  AND (d.name IS NULL OR (
+                      UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                      AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+                  ))
+            """, (s_id,))
+            emp_row = cursor.fetchone()
+            active_emp = int(emp_row["active_emp"]) if emp_row and emp_row.get("active_emp") else 0
+
+            # Live punch attendance for today from ATTENDANCE_CELL (Option B: Live Present)
+            cursor.execute("""
+                SELECT COUNT(DISTINCT ac.EMPLOYEE) as live_cnt
+                FROM ATTENDANCE_CELL ac
+                WHERE (ac.ATTENDANCE_SITE = %s OR ac.EMPLOYEE_SITE = %s)
+                  AND ac.attendance_date = CURDATE()
+                  AND UPPER(ac.attendance_state) IN ('PRESENT', 'IN')
+            """, (s_id, s_id))
+            live_row = cursor.fetchone()
+            live_cnt = int(live_row["live_cnt"]) if live_row and live_row.get("live_cnt") else 0
+
+            # Also check EMPLOYEE_ATTENDANCE
+            cursor.execute("""
+                SELECT COUNT(DISTINCT ea.EMPLOYEE) as ea_cnt
+                FROM EMPLOYEE_ATTENDANCE ea
+                WHERE (ea.EMPLOYEE_SITE = %s)
+                  AND ea.duty_date = CURDATE()
+                  AND UPPER(ea.status) IN ('PRESENT', 'DEPLOYED')
+            """, (s_id,))
+            ea_row = cursor.fetchone()
+            ea_cnt = int(ea_row["ea_cnt"]) if ea_row and ea_row.get("ea_cnt") else 0
+            live_present = max(live_cnt, ea_cnt)
+
+            if req_count > 0:
+                final_req = req_count
+            elif planned_count > 0:
+                final_req = planned_count
+            elif active_emp > 0:
+                final_req = active_emp
+            else:
+                final_req = 0
+
+            final_dep = active_emp if active_emp > 0 else actual_count
+            final_pres = live_present
+
+            shortage = max(0, final_req - final_pres)
+            pct = round((final_pres / final_req) * 100, 1) if final_req > 0 else (100.0 if final_dep > 0 else 0.0)
+
+            total_required_sum += final_req
+            total_deployed_sum += final_dep
+            total_live_present_sum += final_pres
+
+            sites_data.append({
+                "site_id": s_id,
+                "site_name": site["site_name"],
+                "site_code": site.get("site_code") or f"SIT-{s_id}",
+                "client_id": site.get("client_id"),
+                "client_name": site.get("client_name") or "Corporate Client",
+                "branch_name": site.get("branch_name") or "Main Branch",
+                "required": final_req,
+                "deployed": final_dep,
+                "live_present": final_pres,
+                "present": final_pres,
+                "shortage": shortage,
+                "deployment_percentage": pct,
+                "status": "Optimal" if shortage == 0 else "Shortage"
+            })
+
+        overall_pct = round((total_live_present_sum / total_required_sum) * 100, 1) if total_required_sum > 0 else 100.0
+
+        return JSONResponse(content={
+            "summary": {
+                "total_sites": len(sites_data),
+                "total_required": total_required_sum,
+                "total_deployed": total_deployed_sum,
+                "total_live_present": total_live_present_sum,
+                "total_present": total_live_present_sum,
+                "total_shortage": max(0, total_required_sum - total_live_present_sum),
+                "overall_percentage": overall_pct
+            },
+            "sites": sites_data
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+@router.get("/guard-attendance/site-manpower/{site_id}")
+def get_site_manpower_details(
+    site_id: int,
+    shift_id: Optional[str] = Query(None),
+    date: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Returns site-specific shift roster and designation-wise manpower breakdown.
+    Can be filtered by shift (from SHIFT table).
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return JSONResponse(status_code=500, content={"message": "Database connection failed"})
+    cursor = None
+    try:
+        # Sanitize query parameters in case called directly as python functions
+        shift_val = str(shift_id).strip() if (shift_id is not None and not str(type(shift_id)).endswith("Query'>") and not hasattr(shift_id, "default")) else None
+        if shift_val in ("", "None", "null"):
+            shift_val = None
+
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Site details
+        cursor.execute("""
+            SELECT s.oid as site_id, s.name as site_name, s.unit_code as site_code,
+                   s.CLIENTT as client_id, cl.name as client_name, b.name as branch_name
+            FROM SITE s
+            LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid
+            LEFT JOIN BRANCH b ON s.BRANCH = b.oid
+            WHERE s.oid = %s
+        """, (site_id,))
+        site_info = cursor.fetchone()
+        if not site_info:
+            return JSONResponse(status_code=404, content={"message": "Site not found"})
+
+        site_info["site_code"] = site_info.get("site_code") or f"SIT-{site_id}"
+        site_info["client_name"] = site_info.get("client_name") or "Corporate Client"
+
+        # 2. Available shifts for this site
+        cursor.execute("""
+            SELECT oid as id, name,
+                   TIME_FORMAT(start_time, '%H:%i') as start_time,
+                   TIME_FORMAT(end_time, '%H:%i') as end_time
+            FROM SHIFT
+            WHERE SITE = %s
+            ORDER BY position, start_time
+        """, (site_id,))
+        raw_shifts = cursor.fetchall() or []
+
+        shifts = [{"id": "all", "name": "All Shifts", "time_range": "24 Hours"}]
+        for sh in raw_shifts:
+            st = sh.get("start_time") or "00:00"
+            et = sh.get("end_time") or "00:00"
+            shifts.append({
+                "id": str(sh["id"]),
+                "name": sh["name"],
+                "start_time": st,
+                "end_time": et,
+                "time_range": f"{st} - {et}"
+            })
+
+        # Fallback default shifts if site has none configured
+        if len(shifts) == 1:
+            shifts = [
+                {"id": "all", "name": "All Shifts", "time_range": "24 Hours"},
+                {"id": "morning", "name": "Morning Shift", "start_time": "06:00", "end_time": "14:00", "time_range": "06:00 - 14:00"},
+                {"id": "day", "name": "Day Shift", "start_time": "14:00", "end_time": "22:00", "time_range": "14:00 - 22:00"},
+                {"id": "night", "name": "Night Shift", "start_time": "22:00", "end_time": "06:00", "time_range": "22:00 - 06:00"}
+            ]
+
+        # 3. Query designation breakdown
+        # Filter out management/officer roles:
+        desig_query = """
+            SELECT sdc.DESIGNATION as designation_id, d.name as desig_name, d.name_full as desig_full_name,
+                   SUM(sdc.planned_head_count) as planned, SUM(sdc.actual_head_count) as actual
+            FROM SHIFT_DESIGNATION_COUNT sdc
+            JOIN SHIFT sh ON sdc.SHIFT = sh.oid
+            JOIN DESIGNATION d ON sdc.DESIGNATION = d.oid
+            WHERE sh.SITE = %s
+        """
+        params = [site_id]
+
+        if shift_val and shift_val != "all" and shift_val.isdigit():
+            desig_query += " AND sh.oid = %s"
+            params.append(int(shift_val))
+
+        desig_query += """
+            AND (d.name IS NULL OR (
+                UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+            ))
+            GROUP BY sdc.DESIGNATION, d.name, d.name_full
+        """
+        cursor.execute(desig_query, params)
+        desig_rows = cursor.fetchall() or []
+
+        # If SHIFT_DESIGNATION_COUNT had no records, query active EMPLOYEE grouped by designation
+        if not desig_rows:
+            emp_desig_query = """
+                SELECT e.DESIGNATION as designation_id,
+                       COALESCE(d.name, 'S/G') as desig_name,
+                       COALESCE(d.name_full, 'Security Guard') as desig_full_name,
+                       COUNT(*) as active_count
+                FROM EMPLOYEE e
+                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+                WHERE e.SITE = %s AND e.active = 1
+                  AND (d.name IS NULL OR (
+                      UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                      AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+                  ))
+                GROUP BY e.DESIGNATION, d.name, d.name_full
+            """
+            cursor.execute(emp_desig_query, (site_id,))
+            emp_rows = cursor.fetchall() or []
+
+            # Check SITE_DESIGNATION for planned counts
+            cursor.execute("""
+                SELECT sd.DESIGNATION as designation_id, sd.standard_deployment
+                FROM SITE_DESIGNATION sd
+                WHERE sd.SITE = %s
+            """, (site_id,))
+            std_map = {r["designation_id"]: r["standard_deployment"] for r in (cursor.fetchall() or [])}
+
+            num_shifts = max(1, len(shifts) - 1)
+            is_single_shift = bool(shift_val and shift_val != "all")
+
+            for er in emp_rows:
+                d_id = er["designation_id"]
+                full_act = int(er["active_count"])
+                full_plan = int(std_map.get(d_id, full_act))
+
+                if is_single_shift:
+                    plan = max(1, round(full_plan / num_shifts))
+                    act = max(0, round(full_act / num_shifts))
+                else:
+                    plan = full_plan
+                    act = full_act
+
+                desig_rows.append({
+                    "designation_id": d_id,
+                    "desig_name": er["desig_name"],
+                    "desig_full_name": er["desig_full_name"],
+                    "planned": plan,
+                    "actual": act
+                })
+
+        # Query Live Punches for today per designation from ATTENDANCE_CELL (Option B)
+        cursor.execute("""
+            SELECT COALESCE(ac.EMPLOYEE_DESIGNATION, e.DESIGNATION) as desig_id,
+                   COUNT(DISTINCT ac.EMPLOYEE) as live_cnt
+            FROM ATTENDANCE_CELL ac
+            LEFT JOIN EMPLOYEE e ON ac.EMPLOYEE = e.oid
+            WHERE (ac.ATTENDANCE_SITE = %s OR ac.EMPLOYEE_SITE = %s)
+              AND ac.attendance_date = CURDATE()
+              AND UPPER(ac.attendance_state) IN ('PRESENT', 'IN')
+            GROUP BY desig_id
+        """, (site_id, site_id))
+        live_cell_rows = cursor.fetchall() or []
+        live_desig_map = {r["desig_id"]: int(r["live_cnt"]) for r in live_cell_rows if r.get("desig_id")}
+
+        # Fallback check on EMPLOYEE_ATTENDANCE
+        cursor.execute("""
+            SELECT e.DESIGNATION as desig_id,
+                   COUNT(DISTINCT ea.EMPLOYEE) as ea_cnt
+            FROM EMPLOYEE_ATTENDANCE ea
+            JOIN EMPLOYEE e ON ea.EMPLOYEE = e.oid
+            WHERE (ea.EMPLOYEE_SITE = %s)
+              AND ea.duty_date = CURDATE()
+              AND UPPER(ea.status) IN ('PRESENT', 'DEPLOYED')
+            GROUP BY e.DESIGNATION
+        """, (site_id,))
+        for ea_r in (cursor.fetchall() or []):
+            d_id = ea_r.get("desig_id")
+            if d_id:
+                live_desig_map[d_id] = max(live_desig_map.get(d_id, 0), int(ea_r["ea_cnt"]))
+
+        # Normalize and aggregate common designations (e.g. group S/G, L/SG, S/SUP)
+        aggregated: Dict[str, Dict[str, Any]] = {}
+        for row in desig_rows:
+            raw_code = (row.get("desig_name") or "S/G").strip().upper()
+            full_label = row.get("desig_full_name") or ""
+            d_id = row.get("designation_id")
+            
+            # Label normalization
+            if "L" in raw_code and "S" in raw_code and "G" in raw_code:
+                norm_key = "LS/G"
+                display_name = "Lady Security Guard (LS/G)"
+            elif "SUP" in raw_code:
+                norm_key = "S/SUP"
+                display_name = "Supervisor (S/SUP)"
+            elif "HEAD" in raw_code or raw_code == "H/G":
+                norm_key = "H/G"
+                display_name = "Head Guard (H/G)"
+            elif "ARM" in raw_code or raw_code == "A/G":
+                norm_key = "A/G"
+                display_name = "Armed Guard (A/G)"
+            elif "BOUNCER" in raw_code:
+                norm_key = "BOUNCER"
+                display_name = "Bouncer"
+            elif raw_code in ("S/G", "SG", "GUARD") or "GUARD" in full_label.upper():
+                norm_key = "S/G"
+                display_name = "Security Guard (S/G)"
+            else:
+                norm_key = raw_code
+                display_name = f"{row.get('desig_name')} ({full_label})" if full_label else row.get("desig_name")
+
+            plan_val = int(row.get("planned") or 0)
+            dep_val = int(row.get("actual") or 0)
+            live_val = int(live_desig_map.get(d_id, 0))
+
+            if norm_key not in aggregated:
+                aggregated[norm_key] = {
+                    "key": norm_key,
+                    "title": display_name,
+                    "required": 0,
+                    "deployed": 0,
+                    "live_present": 0,
+                    "present": 0
+                }
+            aggregated[norm_key]["required"] += plan_val
+            aggregated[norm_key]["deployed"] += dep_val
+            aggregated[norm_key]["live_present"] += live_val
+            aggregated[norm_key]["present"] += live_val
+
+        designations_list = []
+        site_req_total = 0
+        site_dep_total = 0
+        site_live_total = 0
+
+        # Sort order preference: S/G first, then LS/G, S/SUP, then others
+        def sort_order(item):
+            k = item["key"]
+            if k == "S/G": return 1
+            if k in ("LS/G", "L/SG"): return 2
+            if "SUP" in k: return 3
+            if k == "H/G": return 4
+            return 5
+
+        sorted_items = sorted(aggregated.values(), key=sort_order)
+
+        for idx, item in enumerate(sorted_items, start=1):
+            req = item["required"]
+            dep = item["deployed"]
+            live = item["live_present"]
+            diff = max(0, req - live)
+            pct = round((live / req) * 100, 1) if req > 0 else (100.0 if live > 0 else 0.0)
+
+            site_req_total += req
+            site_dep_total += dep
+            site_live_total += live
+
+            designations_list.append({
+                "index": idx,
+                "key": item["key"],
+                "title": item["title"],
+                "required": req,
+                "deployed": dep,
+                "live_present": live,
+                "present": live,
+                "shortage": diff,
+                "percentage": pct,
+                "is_optimal": diff == 0
+            })
+
+        site_shortage = max(0, site_req_total - site_live_total)
+        site_pct = round((site_live_total / site_req_total) * 100, 1) if site_req_total > 0 else (100.0 if site_live_total > 0 else 0.0)
+
+        return JSONResponse(content={
+            "site": site_info,
+            "shifts": shifts,
+            "selected_shift": shift_val or "all",
+            "kpi": {
+                "required": site_req_total,
+                "deployed": site_dep_total,
+                "live_present": site_live_total,
+                "present": site_live_total,
+                "shortage": site_shortage,
+                "deployment_percentage": site_pct
+            },
+            "designations": designations_list
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass

@@ -255,8 +255,8 @@ export default function CheckpointChecklistScreen() {
             t('tour_completed_msg', { total: res.total_checkpoints, tour: tourName }),
             [
               {
-                text: t('view_tours'),
-                onPress: () => router.replace('/patrol'),
+                text: t('completed_visits') || 'View Completed Report',
+                onPress: () => router.replace('/visits?tab=completed'),
               },
             ]
           );
