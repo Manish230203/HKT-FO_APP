@@ -35,6 +35,7 @@ import {
   FlashlightOff,
   Keyboard,
   Info,
+  LogOut,
 } from 'lucide-react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -715,25 +716,12 @@ export default function TourExecuteScreen() {
         console.warn('Backend checkpoint response submission pending offline:', subErr);
       }
 
-      // Mark this checkpoint COMPLETED, unlock next checkpoint
-      const currentIndex = draft.blueprint.checkpoints.findIndex((c) => c.oid === cp.oid);
-      const nextCp = draft.blueprint.checkpoints[currentIndex + 1];
-
+      // Mark this checkpoint COMPLETED (Open sequence mode: all remaining incomplete checkpoints remain active)
       const updatedCheckpoints = { ...draft.checkpoints };
       updatedCheckpoints[cp.oid] = {
         ...cpExec,
         status: 'completed' as const,
       };
-
-      if (nextCp) {
-        updatedCheckpoints[nextCp.oid] = {
-          ...(updatedCheckpoints[nextCp.oid] || { checkpoint_oid: nextCp.oid, responses: {} }),
-          status: 'active' as const,
-        };
-        setExpandedCpOid(nextCp.oid);
-      } else {
-        setExpandedCpOid(null);
-      }
 
       const updatedDraft: TourDraft = {
         ...draft,
@@ -747,16 +735,33 @@ export default function TourExecuteScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      if (!nextCp) {
+      const remainingIncomplete = draft.blueprint.checkpoints.filter(
+        (c) => c.oid !== cp.oid && updatedCheckpoints[c.oid]?.status !== 'completed'
+      );
+
+      if (remainingIncomplete.length === 0) {
+        setExpandedCpOid(null);
         Alert.alert(
           t('all_checkpoints_verified') || 'Tour Completed! All checkpoints verified.',
           t('tour_completed_all_success') || 'You have successfully completed and verified all checkpoints in this tour.',
           [{ text: t('continue') || 'Proceed to Summary', onPress: handleProceedToSummary }]
         );
       } else {
+        setExpandedCpOid(remainingIncomplete[0]?.oid || null);
         Alert.alert(
           t('checklist_submitted_title') || 'Checkpoint Completed',
-          t('checkpoint_submitted_msg', { checkpoint: cp.name }) || `Checkpoint '${cp.name}' completed! Checkpoint #${nextCp.order} '${nextCp.name}' is now unlocked.`
+          `Checkpoint '${cp.name}' completed successfully!\n\n${remainingIncomplete.length} checkpoint${remainingIncomplete.length === 1 ? '' : 's'} remaining. You can scan any remaining checkpoint next, or check out now.`,
+          [
+            {
+              text: 'Continue Tour',
+              style: 'default',
+            },
+            {
+              text: 'Check Out Now',
+              style: 'destructive',
+              onPress: handleProceedToSummary,
+            },
+          ]
         );
       }
     } catch (e: any) {
@@ -764,6 +769,24 @@ export default function TourExecuteScreen() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleCheckoutTourPrompt = () => {
+    const isFull = completedCount === totalCount && totalCount > 0;
+    Alert.alert(
+      isFull ? 'Finalize Patrolling Tour' : 'Check Out Patrolling Tour',
+      isFull
+        ? `All ${totalCount} checkpoints have been completed! Proceed to view and finalize the inspection report?`
+        : `You have completed ${completedCount} of ${totalCount} checkpoints.\n\nDo you want to check out now and exit patrolling? The inspection report will be generated accurately for the ${completedCount} completed checkpoint(s).`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isFull ? 'Finalize Report' : 'Check Out Now',
+          style: isFull ? 'default' : 'destructive',
+          onPress: handleProceedToSummary,
+        },
+      ]
+    );
   };
 
   const handleProceedToSummary = () => {
@@ -829,15 +852,34 @@ export default function TourExecuteScreen() {
             {siteName}
           </Text>
         </View>
-        {allCompleted && (
-          <TouchableOpacity
-            style={styles.headerFinishBtn}
-            onPress={handleProceedToSummary}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.headerFinishText}>Finish</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[
+            styles.headerFinishBtn,
+            {
+              backgroundColor: allCompleted ? '#22C55E' : isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2',
+              borderColor: allCompleted ? '#16A34A' : '#EF4444',
+              borderWidth: 1,
+            },
+          ]}
+          onPress={allCompleted ? handleProceedToSummary : handleCheckoutTourPrompt}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            {allCompleted ? (
+              <CheckCircle2 color="#FFFFFF" size={14} />
+            ) : (
+              <LogOut color="#EF4444" size={14} />
+            )}
+            <Text
+              style={[
+                styles.headerFinishText,
+                { color: allCompleted ? '#FFFFFF' : '#EF4444' },
+              ]}
+            >
+              {allCompleted ? 'Finish' : 'Check Out'}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -860,6 +902,22 @@ export default function TourExecuteScreen() {
               ]}
             />
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#3B82F6' }} />
+              <Text style={{ fontSize: 11, fontWeight: '600', color: subTextColor }}>
+                Open Checkpoint Mode • Scan in any order
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleCheckoutTourPrompt}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#EF4444' }}>
+                Exit / Check Out
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Checkpoint Timeline */}
@@ -868,14 +926,14 @@ export default function TourExecuteScreen() {
             const isLast = index === checkpointsList.length - 1;
             const cpExec = draft.checkpoints[cp.oid] || {
               checkpoint_oid: cp.oid,
-              status: index === 0 ? 'active' : 'locked',
+              status: 'active',
               verification_status: 'unverified',
               responses: {},
             };
 
             const isCompleted = cpExec.status === 'completed';
-            const isActive = cpExec.status === 'active';
-            const isLocked = cpExec.status === 'locked';
+            const isActive = !isCompleted;
+            const isLocked = false;
             const isVerified = cpExec.verification_status === 'server_verified';
             const isExpanded = expandedCpOid === cp.oid;
 
@@ -901,8 +959,6 @@ export default function TourExecuteScreen() {
                   <View style={[styles.markerCircle, { backgroundColor: dotBg, borderColor: dotBorder }]}>
                     {isCompleted ? (
                       <CheckCircle2 color="#FFFFFF" size={16} />
-                    ) : isLocked ? (
-                      <Lock color="#94A3B8" size={13} />
                     ) : (
                       <Text style={styles.markerOrderText}>{cp.order}</Text>
                     )}
@@ -927,14 +983,13 @@ export default function TourExecuteScreen() {
                       backgroundColor: cardBg,
                       borderColor: cardBorderColor,
                       borderWidth: isActive ? 1.8 : 1,
-                      opacity: isLocked ? 0.6 : 1,
+                      opacity: 1,
                     },
                   ]}
                 >
                   {/* Card Header */}
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    disabled={isLocked}
                     onPress={() => setExpandedCpOid(isExpanded ? null : cp.oid)}
                     style={styles.cpCardHeader}
                   >
@@ -955,25 +1010,19 @@ export default function TourExecuteScreen() {
                       <View style={styles.statePillCompleted}>
                         <Text style={styles.statePillCompletedText}>COMPLETED</Text>
                       </View>
-                    ) : isActive ? (
+                    ) : (
                       <View style={styles.statePillActive}>
                         <Text style={styles.statePillActiveText}>ACTIVE</Text>
                       </View>
-                    ) : (
-                      <View style={styles.statePillLocked}>
-                        <Text style={styles.statePillLockedText}>LOCKED</Text>
-                      </View>
                     )}
 
-                    {!isLocked && (
-                      <View style={{ marginLeft: 6 }}>
-                        {isExpanded ? (
-                          <ChevronUp color={subTextColor} size={18} />
-                        ) : (
-                          <ChevronDown color={subTextColor} size={18} />
-                        )}
-                      </View>
-                    )}
+                    <View style={{ marginLeft: 6 }}>
+                      {isExpanded ? (
+                        <ChevronUp color={subTextColor} size={18} />
+                      ) : (
+                        <ChevronDown color={subTextColor} size={18} />
+                      )}
+                    </View>
                   </TouchableOpacity>
 
                   {/* Completed info display */}
@@ -988,16 +1037,6 @@ export default function TourExecuteScreen() {
                           Completed at {cpExec.verified_at}
                         </Text>
                       )}
-                    </View>
-                  )}
-
-                  {/* Locked status text */}
-                  {isLocked && (
-                    <View style={styles.lockedInfoBox}>
-                      <Lock color="#94A3B8" size={13} />
-                      <Text style={[styles.lockedInfoText, { color: subTextColor }]}>
-                        Locked until previous checkpoint completed
-                      </Text>
                     </View>
                   )}
 
@@ -1391,17 +1430,31 @@ export default function TourExecuteScreen() {
           })}
         </View>
 
-        {/* Bottom Finish Tour Button */}
-        {allCompleted && (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={handleProceedToSummary}
-            style={styles.finishTourBtn}
-          >
-            <CheckCircle2 color="#FFFFFF" size={20} />
-            <Text style={styles.finishTourBtnText}>Review & Finish Tour</Text>
-          </TouchableOpacity>
-        )}
+        {/* Bottom Finish or Check Out Tour Button */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={allCompleted ? handleProceedToSummary : handleCheckoutTourPrompt}
+          style={[
+            styles.finishTourBtn,
+            { backgroundColor: allCompleted ? '#22C55E' : '#DC2626' },
+          ]}
+        >
+          {allCompleted ? (
+            <>
+              <CheckCircle2 color="#FFFFFF" size={20} />
+              <Text style={styles.finishTourBtnText}>
+                Finalize & View Tour Report ({completedCount}/{totalCount})
+              </Text>
+            </>
+          ) : (
+            <>
+              <LogOut color="#FFFFFF" size={20} />
+              <Text style={styles.finishTourBtnText}>
+                Check Out Patrolling ({completedCount}/{totalCount} Covered)
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>

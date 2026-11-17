@@ -104,33 +104,33 @@ export default function SiteManpowerScreen() {
   }, [data?.designations]);
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#0A1128' : colors.background }]} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Hide Expo Router stack header to eliminate duplicate top bar & second back button */}
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* TOP NAVIGATION BAR */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={styles.navIconButton}
+          style={[styles.navIconButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : colors.surfaceSecondary }]}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <ArrowLeft color="#FFFFFF" size={22} />
+          <ArrowLeft color={colors.text} size={22} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.siteHeaderTitle} numberOfLines={1}>
+          <Text style={[styles.siteHeaderTitle, { color: colors.text }]} numberOfLines={1}>
             {siteName}
           </Text>
-          <Text style={styles.siteHeaderSub} numberOfLines={1}>
+          <Text style={[styles.siteHeaderSub, { color: colors.textSecondary }]} numberOfLines={1}>
             Site Code: {siteCode} • {clientName}
           </Text>
         </View>
 
-        <TouchableOpacity onPress={onRefresh} style={styles.navIconButton} activeOpacity={0.7}>
-          <RefreshCw color="#94A3B8" size={18} />
+        <TouchableOpacity onPress={onRefresh} style={[styles.navIconButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : colors.surfaceSecondary }]} activeOpacity={0.7}>
+          <RefreshCw color={colors.textSecondary} size={18} />
         </TouchableOpacity>
       </View>
 
@@ -151,15 +151,19 @@ export default function SiteManpowerScreen() {
               return (
                 <TouchableOpacity
                   key={sh.id}
-                  style={[styles.shiftTab, isActive && styles.shiftTabActive]}
+                  style={[
+                    styles.shiftTab,
+                    { backgroundColor: isDark ? '#0F1A36' : colors.card, borderColor: colors.border },
+                    isActive && styles.shiftTabActive,
+                  ]}
                   activeOpacity={0.8}
                   onPress={() => setSelectedShift(sh.id)}
                 >
-                  <Text style={[styles.shiftTabText, isActive && styles.shiftTabTextActive]}>
+                  <Text style={[styles.shiftTabText, { color: colors.textSecondary }, isActive && styles.shiftTabTextActive]}>
                     {sh.name}
                   </Text>
                   {sh.time_range && (
-                    <Text style={[styles.shiftTimeText, isActive && styles.shiftTimeTextActive]}>
+                    <Text style={[styles.shiftTimeText, { color: colors.placeholder }, isActive && styles.shiftTimeTextActive]}>
                       ({sh.time_range})
                     </Text>
                   )}
@@ -172,27 +176,27 @@ export default function SiteManpowerScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#00D2FF" />
-            <Text style={styles.loadingText}>Fetching manpower counts...</Text>
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Fetching manpower counts...</Text>
           </View>
         ) : (
           <>
             {/* KPI METRIC CARDS (2x2 GRID - Option B: Roster Deployed & Live Punches) */}
             <View style={styles.sectionHeaderBox}>
-              <Text style={styles.sectionHeaderText}>KPI Metric Cards</Text>
+              <Text style={[styles.sectionHeaderText, { color: colors.text }]}>KPI Metric Cards</Text>
             </View>
 
             <View style={styles.kpiGrid}>
               {/* Row 1: Required & Deployed */}
               <View style={styles.kpiRow}>
                 {/* Required Card */}
-                <View style={styles.kpiCard}>
-                  <Text style={styles.kpiLabel}>Required:</Text>
-                  <Text style={styles.kpiValueWhite}>{kpi.required} Guards</Text>
+                <View style={[styles.kpiCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Required:</Text>
+                  <Text style={[styles.kpiValueWhite, { color: colors.text }]}>{kpi.required} Guards</Text>
                 </View>
 
                 {/* Deployed (Roster Strength) Card */}
-                <View style={[styles.kpiCard, styles.kpiCardDeployed]}>
-                  <Text style={styles.kpiLabel}>Deployed (Roster):</Text>
+                <View style={[styles.kpiCard, styles.kpiCardDeployed, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Deployed (Roster):</Text>
                   <Text style={styles.kpiValueCyan}>{kpi.deployed ?? kpi.present} Guards</Text>
                 </View>
               </View>
@@ -204,8 +208,8 @@ export default function SiteManpowerScreen() {
                   const liveCount = kpi.live_present ?? kpi.present;
                   const isZero = liveCount === 0 && kpi.required > 0;
                   return (
-                    <View style={[styles.kpiCard, isZero ? styles.kpiCardZero : styles.kpiCardPresent]}>
-                      <Text style={styles.kpiLabel}>Live Present:</Text>
+                    <View style={[styles.kpiCard, isZero ? styles.kpiCardZero : styles.kpiCardPresent, { backgroundColor: colors.card }]}>
+                      <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Live Present:</Text>
                       <Text style={isZero ? styles.kpiValueRed : styles.kpiValueGreen}>
                         {liveCount} Guards
                       </Text>
@@ -214,17 +218,17 @@ export default function SiteManpowerScreen() {
                 })()}
 
                 {/* Shortage Card with Attendance Percentage */}
-                <View style={styles.kpiCard}>
+                <View style={[styles.kpiCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <View style={styles.kpiHeaderRow}>
-                    <Text style={styles.kpiLabel}>Shortage:</Text>
+                    <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Shortage:</Text>
                     <View style={kpi.shortage > 0 ? styles.shortagePill : styles.optimalPill}>
                       <Text style={kpi.shortage > 0 ? styles.shortagePillText : styles.optimalPillText}>
                         {kpi.shortage > 0 ? `-${kpi.shortage}` : '0'}
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.attendanceSubText}>{kpi.deployment_percentage}% Punched</Text>
-                  <View style={styles.progressBarTrack}>
+                  <Text style={[styles.attendanceSubText, { color: colors.textSecondary }]}>{kpi.deployment_percentage}% Punched</Text>
+                  <View style={[styles.progressBarTrack, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0' }]}>
                     <View
                       style={[
                         styles.progressBarFill,
@@ -238,13 +242,13 @@ export default function SiteManpowerScreen() {
 
             {/* DESIGNATION-WISE BREAKDOWN */}
             <View style={[styles.sectionHeaderBox, { marginTop: 22 }]}>
-              <Text style={styles.sectionHeaderText}>Designation-wise Breakdown</Text>
+              <Text style={[styles.sectionHeaderText, { color: colors.text }]}>Designation-wise Breakdown</Text>
             </View>
 
             {designations.length === 0 ? (
-              <View style={styles.emptyDesignationCard}>
-                <Users color="#64748B" size={32} />
-                <Text style={styles.emptyDesignationText}>
+              <View style={[styles.emptyDesignationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Users color={colors.textSecondary} size={32} />
+                <Text style={[styles.emptyDesignationText, { color: colors.textSecondary }]}>
                   No active guard roles recorded for this shift.
                 </Text>
               </View>
@@ -254,14 +258,14 @@ export default function SiteManpowerScreen() {
                 const deployedCount = desig.deployed ?? desig.required;
                 const isFull = desig.shortage === 0 && liveCount >= desig.required;
                 return (
-                  <View key={desig.key} style={styles.desigCard}>
+                  <View key={desig.key} style={[styles.desigCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <View style={styles.desigCardTop}>
                       {/* Number Badge & Title */}
                       <View style={styles.desigTitleRow}>
                         <View style={styles.numberBadge}>
-                          <Text style={styles.numberBadgeText}>{desig.index}.</Text>
+                          <Text style={[styles.numberBadgeText, { color: colors.textSecondary }]}>{desig.index}.</Text>
                         </View>
-                        <Text style={styles.desigTitleText} numberOfLines={1}>
+                        <Text style={[styles.desigTitleText, { color: colors.text }]} numberOfLines={1}>
                           {desig.title}
                         </Text>
                       </View>
@@ -280,8 +284,8 @@ export default function SiteManpowerScreen() {
                     </View>
 
                     {/* Stats Sub-Row (Option B) */}
-                    <Text style={styles.desigStatsText}>
-                      Req: <Text style={styles.boldWhite}>{desig.required}</Text>  •  
+                    <Text style={[styles.desigStatsText, { color: colors.textSecondary }]}>
+                      Req: <Text style={[styles.boldWhite, { color: colors.text }]}>{desig.required}</Text>  •  
                       Dep: <Text style={styles.boldCyan}>{deployedCount}</Text>  •  
                       Live: <Text style={liveCount > 0 ? styles.boldGreen : styles.boldRed}>{liveCount}</Text>  •  
                       {desig.shortage === 0 ? (
@@ -292,7 +296,7 @@ export default function SiteManpowerScreen() {
                     </Text>
 
                     {/* Glowing Progress Bar */}
-                    <View style={styles.desigProgressTrack}>
+                    <View style={[styles.desigProgressTrack, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0' }]}>
                       <View
                         style={[
                           styles.desigProgressFill,

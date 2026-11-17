@@ -77,7 +77,7 @@ export function TimePicker24Modal({
 
           <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
             {/* Hours Section */}
-            <Text style={styles.sectionLabel}>{t('hours').toUpperCase()} (00 - 23)</Text>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{t('hours').toUpperCase()} (00 - 23)</Text>
             <View style={styles.gridRow}>
               {hours.map((h) => {
                 const isSelected = selectedHour === h;
@@ -85,16 +85,20 @@ export function TimePicker24Modal({
                   <TouchableOpacity
                     key={h}
                     onPress={() => setSelectedHour(h)}
-                    style={[styles.pill, isSelected && styles.pillSelected]}
+                    style={[
+                      styles.pill,
+                      { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : colors.surfaceSecondary, borderColor: colors.border },
+                      isSelected && styles.pillSelected,
+                    ]}
                   >
-                    <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>{h}</Text>
+                    <Text style={[styles.pillText, { color: colors.text }, isSelected && styles.pillTextSelected]}>{h}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
             {/* Minutes Section */}
-            <Text style={styles.sectionLabel}>{t('minutes').toUpperCase()} (00 - 55)</Text>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{t('minutes').toUpperCase()} (00 - 55)</Text>
             <View style={styles.gridRow}>
               {minutes.map((m) => {
                 const isSelected = selectedMinute === m;
@@ -102,9 +106,13 @@ export function TimePicker24Modal({
                   <TouchableOpacity
                     key={m}
                     onPress={() => setSelectedMinute(m)}
-                    style={[styles.pill, isSelected && styles.pillSelected]}
+                    style={[
+                      styles.pill,
+                      { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : colors.surfaceSecondary, borderColor: colors.border },
+                      isSelected && styles.pillSelected,
+                    ]}
                   >
-                    <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>{m}</Text>
+                    <Text style={[styles.pillText, { color: colors.text }, isSelected && styles.pillTextSelected]}>{m}</Text>
                   </TouchableOpacity>
                 );
               })}

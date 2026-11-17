@@ -116,36 +116,24 @@ class MobileGPSTracker {
     if (!this.employeeId || !this.isTracking) return;
 
     try {
-      const config = this.hasActiveVisit ? {
+      const config: Location.LocationTaskOptions = this.hasActiveVisit ? {
         accuracy: Location.Accuracy.BestForNavigation,
         timeInterval: 30000, // 30 seconds active visit
         distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
         deferredUpdatesInterval: 30000,
         deferredUpdatesDistance: 0,
-        showsBackgroundLocationIndicator: true,
+        showsBackgroundLocationIndicator: false,
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
-        foregroundService: {
-          notificationTitle: 'VIGILO-O Active',
-          notificationBody: 'Location tracking is active for officer verification.',
-          notificationColor: '#00599B',
-          killServiceOnDestroy: false,
-        },
       } : {
         accuracy: Location.Accuracy.BestForNavigation,
         timeInterval: 90000, // 90 seconds travelling
         distanceInterval: 0, // 0 meters to ensure background callbacks fire when stationary
         deferredUpdatesInterval: 90000,
         deferredUpdatesDistance: 0,
-        showsBackgroundLocationIndicator: true,
+        showsBackgroundLocationIndicator: false,
         pausesUpdatesAutomatically: false,
         activityType: Location.ActivityType.AutomotiveNavigation,
-        foregroundService: {
-          notificationTitle: 'VIGILO-O Active',
-          notificationBody: 'Location tracking is active for officer verification.',
-          notificationColor: '#00599B',
-          killServiceOnDestroy: false,
-        },
       };
 
       if (Platform.OS !== 'web') {

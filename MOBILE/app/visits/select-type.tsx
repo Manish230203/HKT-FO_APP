@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Sun, Moon, BookOpen, ChevronRight, ArrowLeft, Building2, Compass } from 'lucide-react-native';
+import { Sun, Moon, BookOpen, ChevronRight, ArrowLeft, Building2 } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { StatusBar } from 'react-native';
@@ -158,30 +158,6 @@ export default function SelectVisitTypeScreen() {
             <Text style={[styles.cardTitle, { color: colors.text }]}>{t('general_visit') || 'General Visit'}</Text>
             <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
               {t('general_visit_desc') || 'Conduct general audit, client meeting or official liaison inspection.'}
-            </Text>
-          </View>
-          <ChevronRight color={colors.textSecondary} size={22} />
-        </TouchableOpacity>
-
-        {/* Patrolling Tour & Checkpoint Checklist Card */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => handleSelect('tour')}
-          style={[
-            styles.typeCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: isDark ? 'rgba(59, 130, 246, 0.35)' : 'rgba(59, 130, 246, 0.45)',
-            },
-          ]}
-        >
-          <View style={[styles.iconBox, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-            <Compass color="#3B82F6" size={34} />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Patrolling Tour & Checklist</Text>
-            <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
-              Conduct sequential checkpoint checklist with GPS & QR verification.
             </Text>
           </View>
           <ChevronRight color={colors.textSecondary} size={22} />

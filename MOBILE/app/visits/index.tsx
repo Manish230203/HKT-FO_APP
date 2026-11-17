@@ -11,7 +11,9 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
@@ -19,11 +21,14 @@ import {
   CheckCircle2,
   Play,
   CalendarDays,
+  Calendar,
   Building2,
   AlertCircle,
   RefreshCw,
   LogIn,
   LogOut,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
@@ -129,6 +134,120 @@ export default function VisitsScreen() {
   const [selectedReport, setSelectedReport] = useState<CompletedVisit | null>(null);
   const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  // Completed Visits Filter State:
+  // User Filter Tabs: 'week' (Current Week), 'month' (Current Month), 'custom' (Custom Range)
+  const [completedFilter, setCompletedFilter] = useState<'week' | 'month' | 'custom'>('week');
+  const [viewMonthOffset, setViewMonthOffset] = useState<number>(0);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
+
+  // Generate days array for active view month in date selector strip
+  const daysInViewMonth = React.useMemo(() => {
+    const now = new Date();
+    const targetDate = new Date(now.getFullYear(), now.getMonth() + viewMonthOffset, 1);
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+
+    const days = [];
+    for (let d = 1; d <= totalDays; d++) {
+      const dateObj = new Date(year, month, d);
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+      days.push({
+        dateStr,
+        dayName,
+        dayNum: dd,
+        dayNumber: d,
+      });
+    }
+    return {
+      year,
+      month,
+      monthName: targetDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      days,
+    };
+  }, [viewMonthOffset]);
+
+  const normalizeReportDate = (item: CompletedVisit): Date | null => {
+    const r = item.rawReport || {};
+    const raw = r.created_on || r.createdOn || r.visit_date || r.visitDate || item.date;
+    if (!raw) return null;
+
+    if (typeof raw === 'string') {
+      const s = raw.trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const d = new Date(s.replace(' ', 'T'));
+        if (!isNaN(d.getTime())) return d;
+      }
+      const dmyMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (dmyMatch) {
+        const day = parseInt(dmyMatch[1], 10);
+        const month = parseInt(dmyMatch[2], 10) - 1;
+        const year = parseInt(dmyMatch[3], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
+    } else if (raw instanceof Date) {
+      return raw;
+    }
+    return null;
+  };
+
+  const getVisitDateStr = (visit: CompletedVisit): string | null => {
+    const d = normalizeReportDate(visit);
+    if (!d) return null;
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const isDateInCurrentWeek = (d: Date): boolean => {
+    const now = new Date();
+    const day = now.getDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
+    const diffToMonday = (day + 6) % 7; // Monday = 0, Tuesday = 1 ... Sunday = 6
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7); // up to next Monday 00:00:00
+
+    return d.getTime() >= startOfWeek.getTime() && d.getTime() < endOfWeek.getTime();
+  };
+
+  const isDateInCurrentMonth = (d: Date): boolean => {
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  };
+
+  const filteredCompletedVisits = React.useMemo(() => {
+    return completedVisits.filter((visit) => {
+      const visitDate = normalizeReportDate(visit);
+      if (!visitDate) return true; // keep if date unparseable
+
+      if (completedFilter === 'week') {
+        return isDateInCurrentWeek(visitDate);
+      } else if (completedFilter === 'month') {
+        return isDateInCurrentMonth(visitDate);
+      } else if (completedFilter === 'custom') {
+        if (selectedDate) {
+          const vDateStr = getVisitDateStr(visit);
+          return vDateStr === selectedDate;
+        } else {
+          return (
+            visitDate.getFullYear() === daysInViewMonth.year &&
+            visitDate.getMonth() === daysInViewMonth.month
+          );
+        }
+      }
+      return true;
+    });
+  }, [completedVisits, completedFilter, selectedDate, daysInViewMonth]);
 
   const resolveMobilePhotoUrl = (url: string) => {
     if (!url || typeof url !== 'string') return '';
@@ -429,10 +548,10 @@ export default function VisitsScreen() {
             const sName = visitObj.siteName || visitObj.customSiteName || '';
             Alert.alert(
               t('checked_in_success_title') || 'Checked-In Successfully',
-              `Check-In recorded at ${nowTime} for:\n${sName || t('new_client_visit') || 'New Client Visit'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`,
+              `Check-In recorded at ${nowTime} for:\n${sName || t('new_client_visit') || 'New Client Visit'}.\n\nYour site visit session is now active. You can now fill the report or check out.`,
               [
                 {
-                  text: 'Submit Report',
+                  text: 'Fill Report',
                   onPress: () => handleSubmitReportNav(visitObj),
                 },
                 {
@@ -444,10 +563,10 @@ export default function VisitsScreen() {
           } else {
             Alert.alert(
               t('checked_in_success_title') || 'Checked-In Successfully',
-              `Check-In recorded at ${nowTime} for:\n${visitObj.siteName || visitObj.customSiteName || 'Site'}.\n\nYour site visit session is now active. Please submit the visit report to proceed to check-out.`,
+              `Check-In recorded at ${nowTime} for:\n${visitObj.siteName || visitObj.customSiteName || 'Site'}.\n\nYour site visit session is now active. You can now fill the report or check out.`,
               [
                 {
-                  text: 'Submit Report',
+                  text: 'Fill Report',
                   onPress: () => handleSubmitReportNav(visitObj),
                 },
                 {
@@ -667,10 +786,8 @@ export default function VisitsScreen() {
     return hasCompletedForThisSession;
   };
 
-  const handleTopCheckOut = async () => {
+  const handleTopFillReport = () => {
     if (!activeBackendSession) return;
-
-    // Search for a matching planned visit for this site or custom visit
     const matchingPv = plannedVisits.find((pv) => {
       if (activeBackendSession.custom_visit_id) {
         return Number(pv.customVisitId || pv.custom_visit_id || pv.id) === Number(activeBackendSession.custom_visit_id);
@@ -678,73 +795,83 @@ export default function VisitsScreen() {
       return Number(pv.siteId) === Number(activeBackendSession.site_id);
     });
 
-    const isSubmitted = isReportSubmittedForSite(activeBackendSession.site_id, activeBackendSession.site_name, activeBackendSession.custom_visit_id);
+    const cIn = activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00';
+    const isCustom = !!(activeBackendSession.custom_visit_id || matchingPv?.isCustomVisit || matchingPv?.is_custom);
+    const sName = activeBackendSession.site_name || matchingPv?.siteName || matchingPv?.site_name || matchingPv?.customSiteName || '';
+    const cName = matchingPv?.clientName || matchingPv?.client_name || matchingPv?.customClientName || '';
 
-    if (isSubmitted) {
-      if (matchingPv) {
-        await handleCheckOutVisit(matchingPv);
-      } else {
-        Alert.alert(
-          t('confirm_checkout_title') || 'Confirm Check-Out',
-          `Are you sure you want to check out from ${activeBackendSession.site_name || 'this site'}?\n\nThis will complete and end your visit session.`,
-          [
-            {
-              text: t('cancel') || 'Cancel',
-              style: 'cancel',
-            },
-            {
-              text: t('checkout') || 'Check-Out',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  const empOid = getEmpOid();
-                  const checkOutPayload: any = {
-                    employee_id: empOid,
-                    latitude: userLocation?.latitude,
-                    longitude: userLocation?.longitude,
-                  };
-                  if (activeBackendSession.custom_visit_id) {
-                    checkOutPayload.custom_visit_id = Number(activeBackendSession.custom_visit_id);
-                    checkOutPayload.site_id = null;
-                  } else {
-                    checkOutPayload.site_id = Number(activeBackendSession.site_id);
-                    checkOutPayload.custom_visit_id = null;
-                  }
-                  await checkOutSiteVisit(checkOutPayload);
-                  if (activeBackendSession.custom_visit_id) {
-                    await clearActiveCheckIn(activeBackendSession.custom_visit_id);
-                  } else if (activeBackendSession.site_id) {
-                    await clearActiveCheckIn(activeBackendSession.site_id);
-                  }
-                  await fetchActiveSession();
-                  await fetchVisits();
-                  setActiveTab('completed');
-                  Alert.alert(t('visit_completed_title') || 'Visit Completed', t('visit_completed_desc') || 'You have checked out successfully! Visit record is complete.');
-                } catch (e: any) {
-                  console.error('Check-out error:', e);
-                  Alert.alert(t('check_out_error'), e?.response?.data?.message || t('failed_complete_checkout'));
-                }
-              },
-            },
-          ]
-        );
-      }
+    if (isCustom) {
+      router.push(
+        `/visits/general-visit/general-visit-create?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=1&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
+      );
     } else {
-      const cIn = activeBackendSession.start_time ? new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00';
-      const isCustom = !!(activeBackendSession.custom_visit_id || matchingPv?.isCustomVisit || matchingPv?.is_custom);
-      const sName = activeBackendSession.site_name || matchingPv?.siteName || matchingPv?.site_name || matchingPv?.customSiteName || '';
-      const cName = matchingPv?.clientName || matchingPv?.client_name || matchingPv?.customClientName || '';
-      if (isCustom) {
-        router.push(
-          `/visits/general-visit/general-visit-create?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=1&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
-        );
-      } else {
-        router.push(
-          `/visits/select-type?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=0&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
-        );
-      }
+      router.push(
+        `/visits/select-type?clientId=${matchingPv?.clientId || matchingPv?.client_id || ''}&clientName=${encodeURIComponent(cName)}&siteId=${activeBackendSession.site_id || ''}&siteName=${encodeURIComponent(sName)}&plannedId=${matchingPv?.id || ''}&checkInTime=${cIn}&customVisitId=${activeBackendSession.custom_visit_id || ''}&isCustom=0&customClientName=${encodeURIComponent(cName)}&customSiteName=${encodeURIComponent(sName)}`
+      );
     }
   };
+
+  const handleTopCheckOutOnly = async () => {
+    if (!activeBackendSession) return;
+
+    const matchingPv = plannedVisits.find((pv) => {
+      if (activeBackendSession.custom_visit_id) {
+        return Number(pv.customVisitId || pv.custom_visit_id || pv.id) === Number(activeBackendSession.custom_visit_id);
+      }
+      return Number(pv.siteId) === Number(activeBackendSession.site_id);
+    });
+
+    if (matchingPv) {
+      await handleCheckOutVisit(matchingPv);
+    } else {
+      Alert.alert(
+        t('confirm_checkout_title') || 'Confirm Check-Out',
+        `Are you sure you want to check out from ${activeBackendSession.site_name || 'this site'}?\n\nThis will complete and end your visit session.`,
+        [
+          {
+            text: t('cancel') || 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: t('checkout') || 'Check-Out',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const empOid = getEmpOid();
+                const checkOutPayload: any = {
+                  employee_id: empOid,
+                  latitude: userLocation?.latitude,
+                  longitude: userLocation?.longitude,
+                };
+                if (activeBackendSession.custom_visit_id) {
+                  checkOutPayload.custom_visit_id = Number(activeBackendSession.custom_visit_id);
+                  checkOutPayload.site_id = null;
+                } else {
+                  checkOutPayload.site_id = Number(activeBackendSession.site_id);
+                  checkOutPayload.custom_visit_id = null;
+                }
+                await checkOutSiteVisit(checkOutPayload);
+                if (activeBackendSession.custom_visit_id) {
+                  await clearActiveCheckIn(activeBackendSession.custom_visit_id);
+                } else if (activeBackendSession.site_id) {
+                  await clearActiveCheckIn(activeBackendSession.site_id);
+                }
+                await fetchActiveSession();
+                await fetchVisits();
+                setActiveTab('completed');
+                Alert.alert(t('visit_completed_title') || 'Visit Completed', t('visit_completed_desc') || 'You have checked out successfully! Visit record is complete.');
+              } catch (e: any) {
+                console.error('Check-out error:', e);
+                Alert.alert(t('check_out_error'), e?.response?.data?.message || t('failed_complete_checkout'));
+              }
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const handleTopCheckOut = handleTopCheckOutOnly;
 
   // PDF Generation State
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
@@ -1019,7 +1146,7 @@ export default function VisitsScreen() {
           <Text style={styles.headerSub}>
             {activeTab === 'pending'
               ? `${pendingVisits.length} ${t('pending')}`
-              : `${completedVisits.length} ${t('completed')}`}
+              : `${filteredCompletedVisits.length} ${t('completed')}`}
           </Text>
         </View>
         <TouchableOpacity onPress={fetchVisits} style={styles.refreshBtn}>
@@ -1046,22 +1173,24 @@ export default function VisitsScreen() {
                 Started at {new Date(activeBackendSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {isTopReportSubmitted ? 'Ready for Check-Out' : 'Report Pending'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.activeSessionCheckoutBtn, { backgroundColor: isTopReportSubmitted ? '#EF4444' : '#3B82F6' }]}
-              onPress={handleTopCheckOut}
-            >
-              {isTopReportSubmitted ? (
-                <>
-                  <LogOutIcon color="#FFFFFF" size={15} style={{ marginRight: 5 }} />
-                  <Text style={styles.activeSessionCheckoutBtnText}>Check-Out</Text>
-                </>
-              ) : (
-                <>
-                  <FileText color="#FFFFFF" size={15} style={{ marginRight: 5 }} />
-                  <Text style={styles.activeSessionCheckoutBtnText}>Submit Report</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <View style={styles.activeSessionButtonsCol}>
+              <TouchableOpacity
+                style={[styles.activeSessionActionBtn, { backgroundColor: isTopReportSubmitted ? '#10B981' : '#3B82F6' }]}
+                onPress={handleTopFillReport}
+              >
+                <FileText color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
+                <Text style={styles.activeSessionActionBtnText}>
+                  {isTopReportSubmitted ? 'Fill Report (Done)' : 'Fill Report'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.activeSessionActionBtn, { backgroundColor: '#EF4444' }]}
+                onPress={handleTopCheckOutOnly}
+              >
+                <LogOutIcon color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
+                <Text style={styles.activeSessionActionBtnText}>Check-Out</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         );
       })()}
@@ -1226,7 +1355,15 @@ export default function VisitsScreen() {
                       </View>
 
                       {isCheckedIn ? (
-                        isReportSubmitted ? (
+                        <View style={styles.checkedInButtonsCol}>
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            style={[styles.startBtn, { backgroundColor: isReportSubmitted ? '#10B981' : '#3B82F6' }]}
+                            onPress={() => handleSubmitReportNav(pv)}
+                          >
+                            <FileText color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
+                            <Text style={styles.startBtnText}>{isReportSubmitted ? 'Fill Report (Done)' : 'Fill Report'}</Text>
+                          </TouchableOpacity>
                           <TouchableOpacity
                             activeOpacity={0.85}
                             style={[styles.startBtn, { backgroundColor: '#EF4444' }]}
@@ -1235,16 +1372,7 @@ export default function VisitsScreen() {
                             <LogOut color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
                             <Text style={styles.startBtnText}>Check-Out</Text>
                           </TouchableOpacity>
-                        ) : (
-                          <TouchableOpacity
-                            activeOpacity={0.85}
-                            style={[styles.startBtn, { backgroundColor: '#3B82F6' }]}
-                            onPress={() => handleSubmitReportNav(pv)}
-                          >
-                            <FileText color="#FFFFFF" size={13} style={{ marginRight: 4 }} />
-                            <Text style={styles.startBtnText}>Submit Report</Text>
-                          </TouchableOpacity>
-                        )
+                        </View>
                       ) : !hasSiteCoords && !isCustomVisit ? (
                         <View style={{ alignItems: 'flex-end' }}>
                           <View
@@ -1378,14 +1506,225 @@ export default function VisitsScreen() {
         {/* COMPLETED TAB */}
         {activeTab === 'completed' && (
           <>
-            {completedVisits.length === 0 ? (
+            {/* RANGE FILTER TABS: CURRENT WEEK | CURRENT MONTH | CUSTOM RANGE */}
+            <View style={[styles.rangeFilterContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setCompletedFilter('week');
+                  setViewMonthOffset(0);
+                  setSelectedDate(null);
+                }}
+                style={[styles.rangePillBtn, completedFilter === 'week' && styles.rangePillActive]}
+              >
+                <Text style={[styles.rangePillText, completedFilter === 'week' && styles.rangePillTextActive]}>
+                  Current Week
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setCompletedFilter('month');
+                  setViewMonthOffset(0);
+                  setSelectedDate(null);
+                }}
+                style={[styles.rangePillBtn, completedFilter === 'month' && styles.rangePillActive]}
+              >
+                <Text style={[styles.rangePillText, completedFilter === 'month' && styles.rangePillTextActive]}>
+                  Current Month
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setCompletedFilter('custom');
+                  setViewMonthOffset(0);
+                  setSelectedDate(null);
+                }}
+                style={[styles.rangePillBtn, completedFilter === 'custom' && styles.rangePillActive]}
+              >
+                <Text style={[styles.rangePillText, completedFilter === 'custom' && styles.rangePillTextActive]}>
+                  Custom Range
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* DYNAMIC DATE SELECTOR STRIP - SHOWN WHEN CUSTOM RANGE IS ACTIVE */}
+            {completedFilter === 'custom' && (
+              <View style={[styles.dateStripCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {/* Month Navigation Header */}
+                <View style={styles.monthNavHeader}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setViewMonthOffset((prev) => prev - 1);
+                      setSelectedDate(null);
+                    }}
+                    style={[styles.navArrowBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9' }]}
+                  >
+                    <ChevronLeft color={colors.text} size={20} />
+                  </TouchableOpacity>
+
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={[styles.monthNavTitle, { color: colors.text }]}>
+                      {daysInViewMonth.monthName.toUpperCase()}
+                    </Text>
+                    {selectedDate && (
+                      <Text style={{ fontSize: 11, color: '#3B82F6', fontWeight: '700', marginTop: 2 }}>
+                        Filtered: {new Date(selectedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </Text>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setViewMonthOffset((prev) => Math.min(0, prev + 1));
+                      setSelectedDate(null);
+                    }}
+                    style={[styles.navArrowBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9' }]}
+                  >
+                    <ChevronRight color={colors.text} size={20} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Horizontal Scrollable Days */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.dateStripScroll}
+                >
+                  {daysInViewMonth.days.map((item) => {
+                    const isSelected = selectedDate === item.dateStr;
+                    const hasRecord = completedVisits.some((v) => getVisitDateStr(v) === item.dateStr);
+
+                    return (
+                      <TouchableOpacity
+                        key={item.dateStr}
+                        activeOpacity={0.8}
+                        onPress={() => setSelectedDate(isSelected ? null : item.dateStr)}
+                        style={[
+                          styles.dayPillBtn,
+                          { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' },
+                          isSelected && styles.dayPillActive,
+                          hasRecord && !isSelected && styles.dayPillHasRecord,
+                        ]}
+                      >
+                        <Text style={[styles.dayNameLabel, isSelected && styles.dayNameActive, { color: isSelected ? '#E0F2FE' : colors.textSecondary }]}>
+                          {item.dayName}
+                        </Text>
+                        <Text style={[styles.dayNumDigits, isSelected && styles.dayNumActive, { color: isSelected ? '#FFFFFF' : colors.text }]}>
+                          {item.dayNum}
+                        </Text>
+                        {hasRecord && (
+                          <View
+                            style={[
+                              styles.recordIndicatorDot,
+                              isSelected && { backgroundColor: '#FFFFFF' },
+                            ]}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* ACTIVE FILTER STATUS STRIP */}
+            <View style={[styles.dateFilterContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.dateFilterLeft}>
+                <View style={styles.dateFilterTitleRow}>
+                  <CalendarDays color="#3B82F6" size={16} style={{ marginRight: 6 }} />
+                  <Text style={[styles.dateFilterTitle, { color: colors.text }]}>
+                    {completedFilter === 'week'
+                      ? 'Current Week'
+                      : completedFilter === 'month'
+                      ? `Current Month (${daysInViewMonth.monthName})`
+                      : selectedDate
+                      ? new Date(selectedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : `Custom: ${daysInViewMonth.monthName}`}
+                  </Text>
+                  <View style={[styles.dateFilterBadge, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
+                    <Text style={[styles.dateFilterBadgeText, { color: '#3B82F6' }]}>
+                      {filteredCompletedVisits.length} {filteredCompletedVisits.length === 1 ? 'Report' : 'Reports'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.dateFilterSubtitle, { color: colors.textSecondary }]}>
+                  {completedFilter === 'week'
+                    ? 'Showing Monday to Sunday reports'
+                    : completedFilter === 'month'
+                    ? 'Showing all reports for current calendar month'
+                    : selectedDate
+                    ? 'Showing reports for selected date'
+                    : 'Showing all reports for this navigated month'}
+                </Text>
+              </View>
+
+              {/* Action Buttons: Clear Date or Reset to Week */}
+              {(completedFilter !== 'week' || selectedDate) && (
+                <View style={styles.dateFilterActionsRow}>
+                  {selectedDate && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      style={[styles.dateFilterResetBtn, { borderColor: colors.border }]}
+                      onPress={() => setSelectedDate(null)}
+                    >
+                      <X color={colors.textSecondary} size={13} style={{ marginRight: 4 }} />
+                      <Text style={[styles.dateFilterResetBtnText, { color: colors.textSecondary }]}>All Days</Text>
+                    </TouchableOpacity>
+                  )}
+                  {completedFilter !== 'week' && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      style={[styles.dateFilterResetBtn, { borderColor: '#3B82F6' }]}
+                      onPress={() => {
+                        setCompletedFilter('week');
+                        setViewMonthOffset(0);
+                        setSelectedDate(null);
+                      }}
+                    >
+                      <Text style={[styles.dateFilterResetBtnText, { color: '#3B82F6' }]}>This Week</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {filteredCompletedVisits.length === 0 ? (
               <View style={styles.emptyBox}>
                 <AlertCircle color="#64748B" size={48} style={{ marginBottom: 12 }} />
-                <Text style={styles.emptyTitle}>{t('no_reports_yet')}</Text>
-                <Text style={styles.emptySubtitle}>{t('no_completed_visits_desc')}</Text>
+                <Text style={styles.emptyTitle}>
+                  {selectedDate ? 'No Reports On Selected Date' : t('no_reports_yet')}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  {completedFilter === 'week'
+                    ? 'No completed visit reports have been submitted during the current week.'
+                    : completedFilter === 'month'
+                    ? 'No completed visit reports found for the current month.'
+                    : selectedDate
+                    ? `No completed visit reports found for ${new Date(selectedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.`
+                    : `No completed visit reports found for ${daysInViewMonth.monthName}.`}
+                </Text>
+                {completedFilter !== 'week' && (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={[styles.startBtn, { backgroundColor: '#3B82F6', marginTop: 14 }]}
+                    onPress={() => {
+                      setCompletedFilter('week');
+                      setViewMonthOffset(0);
+                      setSelectedDate(null);
+                    }}
+                  >
+                    <Text style={styles.startBtnText}>Show Current Week Reports</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
-              completedVisits.map((visit, index) => (
+              filteredCompletedVisits.map((visit, index) => (
                 <TouchableOpacity
                   key={`${visit.id}_${index}`}
                   activeOpacity={0.85}
@@ -2154,6 +2493,165 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontWeight: '600',
     color: '#3B82F6',
   },
+  dateFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  dateFilterLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  dateFilterTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+    flexWrap: 'wrap',
+  },
+  dateFilterTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginRight: 6,
+  },
+  dateFilterBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  dateFilterBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  dateFilterSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  dateFilterActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dateFilterResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  dateFilterResetBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dateFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  dateFilterButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  /* RANGE FILTER PILLS */
+  rangeFilterContainer: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  rangePillBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  rangePillActive: {
+    backgroundColor: '#3B82F6',
+  },
+  rangePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  rangePillTextActive: {
+    color: '#FFFFFF',
+  },
+
+  /* DATE STRIP CARD */
+  dateStripCard: {
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  monthNavHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  navArrowBtn: {
+    padding: 6,
+    borderRadius: 10,
+  },
+  monthNavTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  dateStripScroll: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  dayPillBtn: {
+    width: 56,
+    height: 64,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  dayPillActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#60A5FA',
+  },
+  dayPillHasRecord: {
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+  },
+  dayNameLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dayNameActive: {
+    color: '#E0F2FE',
+  },
+  dayNumDigits: {
+    fontSize: 17,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  dayNumActive: {
+    color: '#FFFFFF',
+  },
+  recordIndicatorDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#3B82F6',
+    marginTop: 3,
+  },
   siteNameText: {
     fontSize: 16,
     fontWeight: '700',
@@ -2690,6 +3188,30 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  activeSessionButtonsCol: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  activeSessionActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 105,
+  },
+  activeSessionActionBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  checkedInButtonsCol: {
+    flexDirection: 'column',
+    gap: 6,
+    alignItems: 'flex-end',
   },
   // Active Visit Enforcer Modal Styles
   enforcerModalOverlay: {

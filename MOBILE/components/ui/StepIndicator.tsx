@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 import { THEME } from '../../constants/theme';
 
 interface StepIndicatorProps {
@@ -8,6 +9,8 @@ interface StepIndicatorProps {
 }
 
 export const StepIndicator: React.FC<StepIndicatorProps> = ({ steps, currentStep }) => {
+  const { colors, isDark } = useTheme();
+
   return (
     <View style={styles.container}>
       <View style={styles.stepsRow}>
@@ -20,11 +23,21 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({ steps, currentStep
               <View
                 style={[
                   styles.circle,
+                  {
+                    backgroundColor: isDark ? '#1E293B' : colors.surfaceSecondary,
+                    borderColor: colors.border,
+                  },
                   isActive && styles.circleActive,
                   isCompleted && styles.circleCompleted,
                 ]}
               >
-                <Text style={[styles.circleText, (isActive || isCompleted) && styles.circleTextActive]}>
+                <Text
+                  style={[
+                    styles.circleText,
+                    { color: colors.textSecondary },
+                    (isActive || isCompleted) && styles.circleTextActive,
+                  ]}
+                >
                   {idx + 1}
                 </Text>
               </View>
@@ -32,6 +45,7 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({ steps, currentStep
                 <View
                   style={[
                     styles.line,
+                    { backgroundColor: isDark ? '#1E293B' : '#CBD5E1' },
                     idx < currentStep && styles.lineActive,
                   ]}
                 />
@@ -40,7 +54,7 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({ steps, currentStep
           );
         })}
       </View>
-      <Text style={styles.currentStepTitle}>
+      <Text style={[styles.currentStepTitle, { color: colors.textSecondary }]}>
         Step {currentStep + 1} of {steps.length}: {steps[currentStep]}
       </Text>
     </View>
@@ -61,9 +75,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#1E293B',
     borderWidth: 1,
-    borderColor: THEME.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -78,7 +90,6 @@ const styles = StyleSheet.create({
   circleText: {
     fontSize: 12,
     fontWeight: '700',
-    color: THEME.textVariant,
   },
   circleTextActive: {
     color: '#FFFFFF',
@@ -86,7 +97,6 @@ const styles = StyleSheet.create({
   line: {
     flex: 1,
     height: 2,
-    backgroundColor: '#1E293B',
     marginHorizontal: 4,
   },
   lineActive: {
@@ -97,7 +107,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: THEME.typography.xs,
     fontWeight: '600',
-    color: THEME.textVariant,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

@@ -30,6 +30,7 @@ import {
   Search,
   Sparkles,
   Trophy,
+  LogOut,
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
@@ -39,6 +40,7 @@ import {
   getTourCheckpoints,
   getSiteGuards,
   passPatrolBaton,
+  checkoutPatrolTour,
   CheckpointItem,
   SiteGuard,
 } from '../../services/patrolService';
@@ -187,6 +189,71 @@ export default function PatrolTourProgressScreen() {
     }
   };
 
+  const [checkingOut, setCheckingOut] = useState<boolean>(false);
+
+  const handleCheckoutTour = () => {
+    const isFull = completedCount === totalCount && totalCount > 0;
+    Alert.alert(
+      'Check Out Patrolling',
+      isFull
+        ? `All ${totalCount} checkpoints have been completed! Check out now to finalize and submit the patrol tour report?`
+        : `You have completed ${completedCount} of ${totalCount} checkpoints.\n\nAre you sure you want to exit patrolling early and generate the inspection report for the covered checkpoints?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isFull ? 'Finalize & Check Out' : 'Check Out Now',
+          style: isFull ? 'default' : 'destructive',
+          onPress: executeCheckoutTour,
+        },
+      ]
+    );
+  };
+
+  const executeCheckoutTour = async () => {
+    try {
+      setCheckingOut(true);
+      let lat: number | undefined;
+      let lng: number | undefined;
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (loc && loc.coords) {
+          lat = loc.coords.latitude;
+          lng = loc.coords.longitude;
+        }
+      } catch (locErr) {
+        console.warn('Checkout GPS warning:', locErr);
+      }
+
+      const res = await checkoutPatrolTour({
+        empOid,
+        tourName,
+        siteId,
+        latitude: lat,
+        longitude: lng,
+      });
+
+      if (res && res.success) {
+        Alert.alert(
+          'Patrol Tour Checked Out',
+          `Tour session ended successfully!\n\nCovered: ${res.covered_count} of ${res.total_count} checkpoints.\nReport #${res.report_id || 'PTR'} has been generated.`,
+          [
+            {
+              text: 'View Completed Visits',
+              onPress: () => router.replace('/visits?tab=completed'),
+            },
+          ]
+        );
+      } else {
+        throw new Error(res?.message || 'Failed to check out tour');
+      }
+    } catch (e: any) {
+      console.error('Checkout tour error:', e);
+      Alert.alert('Check-out Error', e?.response?.data?.detail || e?.message || 'Could not complete check-out.');
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
   const darkNavyBg = isDark ? '#0A1128' : '#F4F7FA';
   const cardBg = isDark ? '#131C33' : '#FFFFFF';
   const cardBorder = isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0';
@@ -221,7 +288,21 @@ export default function PatrolTourProgressScreen() {
             {siteName}
           </Text>
         </View>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          style={styles.headerCheckoutBtn}
+          activeOpacity={0.8}
+          onPress={handleCheckoutTour}
+          disabled={checkingOut}
+        >
+          {checkingOut ? (
+            <ActivityIndicator size="small" color="#EF4444" />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <LogOut color="#EF4444" size={16} />
+              <Text style={styles.headerCheckoutText}>Check Out</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -259,11 +340,50 @@ export default function PatrolTourProgressScreen() {
           )}
         </View>
 
-        {/* Section Heading */}
+        {/* Quick Check-Out / Exit Patrolling Action Card */}
+        <View style={[styles.checkoutBannerCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text style={[styles.checkoutBannerTitle, { color: textColor }]}>
+              Patrolling In Progress
+            </Text>
+            <Text style={[styles.checkoutBannerSub, { color: subTextColor }]}>
+              {allCompleted
+                ? 'All checkpoints covered! Tap Check Out to finalize.'
+                : `Covered ${completedCount} of ${totalCount} checkpoints. You can exit anytime.`}
+            </Text>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleCheckoutTour}
+            disabled={checkingOut}
+            style={[
+              styles.checkoutActionButton,
+              { backgroundColor: allCompleted ? '#10B981' : '#EF4444' },
+            ]}
+          >
+            {checkingOut ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <LogOut color="#FFFFFF" size={16} />
+                <Text style={styles.checkoutActionBtnText}>Check Out</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Section Heading with Open Checkpoint Mode Badge */}
         <View style={styles.checkpointsHeader}>
-          <Text style={[styles.checkpointsHeadingText, { color: textColor }]}>{t('sequential_checkpoints')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+            <Text style={[styles.checkpointsHeadingText, { color: textColor }]}>
+              Checkpoints ({totalCount})
+            </Text>
+            <View style={styles.openModeBadge}>
+              <Text style={styles.openModeBadgeText}>START ANYWHERE</Text>
+            </View>
+          </View>
           <Text style={[styles.checkpointsSubtitleText, { color: subTextColor }]}>
-            {t('sequential_checkpoints_subtitle')}
+            Scan and complete checkpoints in any sequence of your choice.
           </Text>
         </View>
 
@@ -600,6 +720,65 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 12,
     marginTop: 1,
+  },
+  headerCheckoutBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  headerCheckoutText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  checkoutBannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 18,
+  },
+  checkoutBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  checkoutBannerSub: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  checkoutActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  checkoutActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  openModeBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  openModeBadgeText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   scrollContent: {
     padding: 16,

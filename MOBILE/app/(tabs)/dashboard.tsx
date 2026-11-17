@@ -47,6 +47,7 @@ import {
   MapPin,
   Navigation,
   AlertTriangle,
+  Compass,
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../../context/AuthContext';
@@ -853,6 +854,21 @@ export default function DashboardScreen() {
                 <UserPlus color="#10B981" size={28} />
               </View>
               <Text style={[styles.gridItemLabel, { color: colors.text }]}>{t('new_client')}</Text>
+            </TouchableOpacity>
+
+            {/* Tours */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                if (!checkDutyAccess('viewing patrolling tours')) return;
+                router.push('/visits/tours/tour-select');
+              }}
+              style={styles.gridItem}
+            >
+              <View style={[styles.gridIconCircle, { backgroundColor: colors.gridIconBg, borderColor: colors.gridIconBorder }]}>
+                <Compass color="#8B5CF6" size={28} />
+              </View>
+              <Text style={[styles.gridItemLabel, { color: colors.text }]}>Tours</Text>
             </TouchableOpacity>
 
           </View>

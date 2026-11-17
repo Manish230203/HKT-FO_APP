@@ -230,6 +230,18 @@ export async function deleteTourDraft(executionUuid: string): Promise<void> {
 // BACKEND API CLIENTS
 // ==========================================
 
+export async function getAllDatabaseTours(): Promise<TourItem[]> {
+  try {
+    const res = await api.get('/v1/tours/all');
+    if (res.data && res.data.success) {
+      return res.data.tours || [];
+    }
+  } catch (e: any) {
+    console.warn('API getAllDatabaseTours error:', e?.response?.data || e.message);
+  }
+  return [];
+}
+
 export async function getAssignedToursForSite(siteId: number | string): Promise<TourItem[]> {
   try {
     const res = await api.get('/v1/tours/assigned-to-site', {

@@ -86,3 +86,11 @@ class PassBatonRequest(BaseModel):
     longitude: float
     site_id: Optional[int] = None
 
+class TourCheckoutRequest(BaseModel):
+    tour_name: Optional[str] = None
+    site_id: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    notes: Optional[str] = None
+
+

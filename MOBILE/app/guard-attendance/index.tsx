@@ -94,32 +94,32 @@ export default function AssignedSitesScreen() {
   }, [sites, searchQuery]);
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: isDark ? '#0A1128' : colors.background }]} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Hide Expo Router stack header to eliminate duplicate top bar & second back button */}
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* TOP NAVIGATION BAR */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={styles.navIconButton}
+          style={[styles.navIconButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : colors.surfaceSecondary }]}
           activeOpacity={0.7}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <ArrowLeft color="#FFFFFF" size={22} />
+          <ArrowLeft color={colors.text} size={22} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Assigned Sites</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Assigned Sites</Text>
           <View style={styles.officerBadgeRow}>
             <Shield color="#00D2FF" size={12} />
             <Text style={styles.officerCodeText}>{officerCode}</Text>
           </View>
         </View>
 
-        <TouchableOpacity onPress={onRefresh} style={styles.navIconButton} activeOpacity={0.7}>
-          <RefreshCw color="#94A3B8" size={18} />
+        <TouchableOpacity onPress={onRefresh} style={[styles.navIconButton, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : colors.surfaceSecondary }]} activeOpacity={0.7}>
+          <RefreshCw color={colors.textSecondary} size={18} />
         </TouchableOpacity>
       </View>
 
@@ -129,12 +129,12 @@ export default function AssignedSitesScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* SEARCH BAR */}
-        <View style={styles.searchContainer}>
-          <Search color="#64748B" size={18} style={styles.searchIcon} />
+        <View style={[styles.searchContainer, { backgroundColor: isDark ? '#0F1A36' : colors.card, borderColor: colors.border }]}>
+          <Search color={colors.textSecondary} size={18} style={styles.searchIcon} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.text }]}
             placeholder="Search assigned sites by name or code..."
-            placeholderTextColor="#64748B"
+            placeholderTextColor={colors.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCapitalize="none"
@@ -142,17 +142,17 @@ export default function AssignedSitesScreen() {
         </View>
 
         {/* AGGREGATE SUMMARY BANNER */}
-        <View style={styles.summaryBanner}>
+        <View style={[styles.summaryBanner, { backgroundColor: isDark ? '#0F1A36' : '#F0FDFA', borderColor: isDark ? '#06B6D4' : '#0D9488' }]}>
           <View style={styles.summaryBannerLeft}>
-            <Text style={styles.summaryCountText}>{summary.total_sites}</Text>
-            <Text style={styles.summarySubText}>Assigned Sites Active</Text>
+            <Text style={[styles.summaryCountText, { color: colors.text }]}>{summary.total_sites}</Text>
+            <Text style={[styles.summarySubText, { color: colors.textSecondary }]}>Assigned Sites Active</Text>
           </View>
-          <View style={styles.summaryBannerDivider} />
+          <View style={[styles.summaryBannerDivider, { backgroundColor: colors.border }]} />
           <View style={styles.summaryBannerRight}>
-            <Text style={styles.summaryDutyText}>
+            <Text style={[styles.summaryDutyText, { color: colors.text }]}>
               {summary.total_live_present ?? summary.total_present} / {summary.total_required} Live Present
             </Text>
-            <Text style={styles.summaryDutySubText}>
+            <Text style={[styles.summaryDutySubText, { color: isDark ? '#38BDF8' : '#0284C7' }]}>
               Deployed: {summary.total_deployed ?? summary.total_present} • ({summary.overall_percentage}% Present)
             </Text>
           </View>
@@ -162,13 +162,13 @@ export default function AssignedSitesScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#00D2FF" />
-            <Text style={styles.loadingText}>Loading assigned sites...</Text>
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading assigned sites...</Text>
           </View>
         ) : filteredSites.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Building2 color="#475569" size={48} />
-            <Text style={styles.emptyTitle}>No Assigned Sites Found</Text>
-            <Text style={styles.emptyDesc}>
+            <Building2 color={colors.textSecondary} size={48} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Assigned Sites Found</Text>
+            <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
               {searchQuery ? 'No assigned sites match your search.' : 'No sites are currently assigned to your employee code in the database.'}
             </Text>
           </View>
@@ -180,7 +180,7 @@ export default function AssignedSitesScreen() {
             return (
               <TouchableOpacity
                 key={item.site_id}
-                style={styles.siteCard}
+                style={[styles.siteCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                 activeOpacity={0.85}
                 onPress={() => {
                   router.push({
@@ -196,11 +196,11 @@ export default function AssignedSitesScreen() {
               >
                 <View style={styles.siteCardLeft}>
                   {/* Site Title */}
-                  <Text style={styles.siteNameText} numberOfLines={1}>
+                  <Text style={[styles.siteNameText, { color: colors.text }]} numberOfLines={1}>
                     {item.site_name}
                   </Text>
                   {/* Client Subtitle */}
-                  <Text style={styles.siteClientText} numberOfLines={1}>
+                  <Text style={[styles.siteClientText, { color: colors.textSecondary }]} numberOfLines={1}>
                     Client: {item.client_name}
                   </Text>
 

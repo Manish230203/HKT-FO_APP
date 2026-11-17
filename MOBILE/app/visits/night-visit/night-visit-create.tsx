@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { Moon, Plus, Trash2, ChevronDown, Building, X, Clock, MapPin, Camera, Lock } from 'lucide-react-native';
+import { Moon, Plus, Trash2, ChevronDown, ChevronUp, Building, X, Clock, MapPin, Camera, Lock, Users, CheckSquare, MessageSquare, Lightbulb, Layers, ShieldCheck } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { getSites, getClients, getSiteGuards, Site, Client, checkOutSiteVisit } from '../../../services/siteService';
@@ -120,6 +120,32 @@ export default function CreateNightVisitReportScreen() {
   const [templateQuestions, setTemplateQuestions] = useState<Array<{ id: string; section?: string; question: string; required?: boolean }>>([]);
   const [onSpotModalVisible, setOnSpotModalVisible] = useState(false);
   const [bankSearchQuery, setBankSearchQuery] = useState('');
+
+  // Collapsible Accordion Sections in Review Step
+  const [reviewExpandedSections, setReviewExpandedSections] = useState<Record<string, boolean>>({
+    general: true,
+    guards: true,
+    checklist: true,
+    briefing: true,
+    suggestions: true,
+  });
+
+  const toggleReviewSection = (sec: string) => {
+    setReviewExpandedSections((prev) => ({ ...prev, [sec]: !prev[sec] }));
+  };
+
+  const areAllReviewExpanded = Object.values(reviewExpandedSections).every(Boolean);
+
+  const toggleAllReviewSections = () => {
+    const nextState = !areAllReviewExpanded;
+    setReviewExpandedSections({
+      general: nextState,
+      guards: nextState,
+      checklist: nextState,
+      briefing: nextState,
+      suggestions: nextState,
+    });
+  };
 
   // Time Picker 24h State
   const [timePickerConfig, setTimePickerConfig] = useState<{
@@ -672,21 +698,21 @@ export default function CreateNightVisitReportScreen() {
 
             {/* Total Site Duration Banner */}
             {getSiteDurationText() ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.12)', padding: 12, borderRadius: 10, marginTop: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.25)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(59, 130, 246, 0.12)' : '#EFF6FF', padding: 12, borderRadius: 10, marginTop: 12, marginBottom: 12, borderWidth: 1, borderColor: isDark ? 'rgba(59, 130, 246, 0.25)' : '#BFDBFE' }}>
                 <Clock color="#3B82F6" size={18} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#93C5FD' }}>
-                  Total Time Spent on Site: <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>{getSiteDurationText()}</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: isDark ? '#93C5FD' : '#1D4ED8' }}>
+                  Total Time Spent on Site: <Text style={{ color: colors.text, fontWeight: '800' }}>{getSiteDurationText()}</Text>
                 </Text>
               </View>
             ) : null}
 
             {/* GPS Location Status Banner */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: 12, borderRadius: 10, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: isDark ? 'rgba(16, 185, 129, 0.1)' : '#ECFDF5', padding: 12, borderRadius: 10, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: isDark ? 'rgba(16, 185, 129, 0.25)' : '#A7F3D0' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <MapPin color="#10B981" size={18} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#6EE7B7' }}>GPS LOCATION</Text>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF', marginTop: 2 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: isDark ? '#6EE7B7' : '#047857' }}>GPS LOCATION</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text, marginTop: 2 }}>
                     {fetchingGps ? 'Fetching GPS coordinates...' : gps || 'Acquiring GPS location...'}
                   </Text>
                 </View>
@@ -694,9 +720,9 @@ export default function CreateNightVisitReportScreen() {
               <TouchableOpacity
                 onPress={fetchCurrentLocation}
                 disabled={fetchingGps}
-                style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
+                style={{ backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
               >
-                <Text style={{ fontSize: 11, fontWeight: '800', color: '#10B981' }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#10B981' : '#059669' }}>
                   {fetchingGps ? 'Locating...' : 'Refresh GPS'}
                 </Text>
               </TouchableOpacity>
@@ -750,7 +776,7 @@ export default function CreateNightVisitReportScreen() {
               const isCustom = !!item.isCustom;
 
               return (
-                <View key={item.id || idx} style={{ marginBottom: 16, backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+                <View key={item.id || idx} style={{ marginBottom: 16, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surfaceSecondary, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : colors.border }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
                       {item.section ? (
@@ -758,7 +784,7 @@ export default function CreateNightVisitReportScreen() {
                           {item.section.toUpperCase()}
                         </Text>
                       ) : null}
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>{qText}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{qText}</Text>
                     </View>
 
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -794,13 +820,23 @@ export default function CreateNightVisitReportScreen() {
                   <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
                     {(['Satisfactory', 'Unsatisfactory', 'NA'] as const).map((val) => {
                       const isSelected = status === val;
-                      let bg = 'rgba(255, 255, 255, 0.05)';
-                      let border = 'rgba(255, 255, 255, 0.15)';
-                      let color = '#94A3B8';
+                      let bg = isDark ? 'rgba(255, 255, 255, 0.05)' : colors.card;
+                      let border = isDark ? 'rgba(255, 255, 255, 0.15)' : colors.border;
+                      let color = colors.textSecondary;
                       if (isSelected) {
-                        if (val === 'Satisfactory') { bg = 'rgba(16, 185, 129, 0.25)'; border = '#10B981'; color = '#6EE7B7'; }
-                        else if (val === 'Unsatisfactory') { bg = 'rgba(239, 68, 68, 0.25)'; border = '#EF4444'; color = '#FCA5A5'; }
-                        else { bg = 'rgba(148, 163, 184, 0.25)'; border = '#94A3B8'; color = '#E2E8F0'; }
+                        if (val === 'Satisfactory') {
+                          bg = isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7';
+                          border = '#10B981';
+                          color = isDark ? '#6EE7B7' : '#15803D';
+                        } else if (val === 'Unsatisfactory') {
+                          bg = isDark ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2';
+                          border = '#EF4444';
+                          color = isDark ? '#FCA5A5' : '#B91C1C';
+                        } else {
+                          bg = isDark ? 'rgba(148, 163, 184, 0.25)' : '#F1F5F9';
+                          border = '#94A3B8';
+                          color = isDark ? '#E2E8F0' : '#475569';
+                        }
                       }
                       return (
                         <TouchableOpacity
@@ -1014,16 +1050,228 @@ export default function CreateNightVisitReportScreen() {
 
         {/* STEP 5: Review & Submit */}
         {currentStep === 5 && (
-          <Card style={styles.stepCard}>
-            <Text style={styles.stepTitle}>Review Night Visit Report</Text>
-            <Text style={styles.reviewLabel}>Site: <Text style={styles.reviewVal}>{siteName || siteId}</Text></Text>
-            <Text style={styles.reviewLabel}>Officer: <Text style={styles.reviewVal}>{user?.name}</Text></Text>
-            <Text style={styles.reviewLabel}>Shift: <Text style={styles.reviewVal}>{shift}</Text></Text>
-            <Text style={styles.reviewLabel}>Guards Checked: <Text style={styles.reviewVal}>{guards.length}</Text></Text>
-            <Text style={styles.reviewLabel}>Briefing Provided: <Text style={styles.reviewVal}>{lectureDetails ? 'Yes' : 'No'}</Text></Text>
-            <Text style={styles.reviewLabel}>Overall Remarks: <Text style={styles.reviewVal}>{overallRemarks || 'Satisfactory'}</Text></Text>
-            <Text style={styles.reviewLabel}>Remark Photos: <Text style={styles.reviewVal}>{suggestionPhotos.length} attached</Text></Text>
-          </Card>
+          <View style={{ gap: 12 }}>
+            {/* Header & Toggle All */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Layers color="#3B82F6" size={18} />
+                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text }}>Filled Night Inspection Details</Text>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={toggleAllReviewSections}
+                style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#3B82F6' }}>
+                  {areAllReviewExpanded ? 'Collapse All' : 'Expand All'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* MODULE 1: General Info */}
+            <Card style={styles.reviewAccordionCard}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => toggleReviewSection('general')}
+                style={styles.reviewAccordionHeader}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Building color="#3B82F6" size={18} />
+                  <Text style={[styles.reviewAccordionTitle, { color: colors.text }]}>1. General Information</Text>
+                </View>
+                {reviewExpandedSections.general ? <ChevronUp color={colors.textSecondary} size={18} /> : <ChevronDown color={colors.textSecondary} size={18} />}
+              </TouchableOpacity>
+              {reviewExpandedSections.general && (
+                <View style={styles.reviewAccordionBody}>
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Client:</Text>
+                    <Text style={styles.reviewVal}>{clientName || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Site:</Text>
+                    <Text style={styles.reviewVal}>{siteName || siteId || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Officer:</Text>
+                    <Text style={styles.reviewVal}>{user?.name || 'Field Officer'}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Date & Time:</Text>
+                    <Text style={styles.reviewVal}>{visitDate} ({startTime})</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Shift:</Text>
+                    <Text style={styles.reviewVal}>{shift}</Text>
+                  </View>
+                </View>
+              )}
+            </Card>
+
+            {/* MODULE 2: Guards Checked & Vigilance */}
+            <Card style={styles.reviewAccordionCard}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => toggleReviewSection('guards')}
+                style={styles.reviewAccordionHeader}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Users color="#10B981" size={18} />
+                  <Text style={[styles.reviewAccordionTitle, { color: colors.text }]}>
+                    2. Guards Checked ({guards.length})
+                  </Text>
+                </View>
+                {reviewExpandedSections.guards ? <ChevronUp color={colors.textSecondary} size={18} /> : <ChevronDown color={colors.textSecondary} size={18} />}
+              </TouchableOpacity>
+              {reviewExpandedSections.guards && (
+                <View style={styles.reviewAccordionBody}>
+                  {guards.length > 0 ? (
+                    guards.map((g, idx) => (
+                      <View key={idx} style={[styles.reviewGuardItem, { borderColor: colors.border }]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }}>
+                            {idx + 1}. {g.name}
+                          </Text>
+                          <Badge variant={g.status === 'Alert & Awake' ? 'success' : g.status === 'Sleeping / Inactive' ? 'danger' : 'default'} label={g.status || 'Alert'} />
+                        </View>
+                        {g.empCode ? (
+                          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                            Code: {g.empCode} {g.isTemporary ? '(Temp)' : ''}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, fontStyle: 'italic' }}>
+                      No guards added to this night inspection report.
+                    </Text>
+                  )}
+                </View>
+              )}
+            </Card>
+
+            {/* MODULE 3: Night Security Checklist */}
+            <Card style={styles.reviewAccordionCard}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => toggleReviewSection('checklist')}
+                style={styles.reviewAccordionHeader}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <CheckSquare color="#6366F1" size={18} />
+                  <Text style={[styles.reviewAccordionTitle, { color: colors.text }]}>
+                    3. Night Security Checklist ({[...templateQuestions, ...customQuestions].length} items)
+                  </Text>
+                </View>
+                {reviewExpandedSections.checklist ? <ChevronUp color={colors.textSecondary} size={18} /> : <ChevronDown color={colors.textSecondary} size={18} />}
+              </TouchableOpacity>
+              {reviewExpandedSections.checklist && (
+                <View style={styles.reviewAccordionBody}>
+                  {[...templateQuestions, ...customQuestions].map((qItem: any, idx) => {
+                    const qText = qItem.question || String(qItem);
+                    const ans = checklist[qText] || 'Satisfactory';
+                    const isSat = ans === 'Satisfactory';
+                    const isUnsat = ans === 'Unsatisfactory';
+                    const photos = questionPhotos[qText] || [];
+
+                    return (
+                      <View key={qItem.id || idx} style={[styles.reviewChecklistItem, { borderColor: colors.border }]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                          <Text style={{ flex: 1, fontSize: 12, fontWeight: '600', color: colors.text, lineHeight: 17 }}>
+                            {idx + 1}. {qText}
+                          </Text>
+                          <View
+                            style={{
+                              backgroundColor: isSat ? 'rgba(34, 197, 94, 0.15)' : isUnsat ? 'rgba(239, 68, 68, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: isSat ? '#22C55E' : isUnsat ? '#EF4444' : '#94A3B8' }}>
+                              {ans}
+                            </Text>
+                          </View>
+                        </View>
+                        {photos.length > 0 && (
+                          <View style={{ marginTop: 6 }}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                              {photos.map((pUri: string, pIdx: number) => (
+                                <Image key={pIdx} source={{ uri: pUri }} style={{ width: 60, height: 60, borderRadius: 6 }} resizeMode="cover" />
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </Card>
+
+            {/* MODULE 4: Briefing & Night Vigilance */}
+            <Card style={styles.reviewAccordionCard}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => toggleReviewSection('briefing')}
+                style={styles.reviewAccordionHeader}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <MessageSquare color="#F59E0B" size={18} />
+                  <Text style={[styles.reviewAccordionTitle, { color: colors.text }]}>4. Briefing & Vigilance</Text>
+                </View>
+                {reviewExpandedSections.briefing ? <ChevronUp color={colors.textSecondary} size={18} /> : <ChevronDown color={colors.textSecondary} size={18} />}
+              </TouchableOpacity>
+              {reviewExpandedSections.briefing && (
+                <View style={styles.reviewAccordionBody}>
+                  <View style={{ gap: 4 }}>
+                    <Text style={styles.reviewLabel}>Briefing / Lecture Given:</Text>
+                    <Text style={[styles.reviewVal, { fontSize: 13 }]}>{lectureDetails || 'Guard briefing conducted on alertness and emergency responsiveness.'}</Text>
+                  </View>
+                  {randomChecking ? (
+                    <View style={{ gap: 4, marginTop: 6 }}>
+                      <Text style={styles.reviewLabel}>Random Spot Checking:</Text>
+                      <Text style={[styles.reviewVal, { fontSize: 13 }]}>{randomChecking}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            </Card>
+
+            {/* MODULE 5: Suggestions & Remarks */}
+            <Card style={styles.reviewAccordionCard}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => toggleReviewSection('suggestions')}
+                style={styles.reviewAccordionHeader}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Lightbulb color="#EC4899" size={18} />
+                  <Text style={[styles.reviewAccordionTitle, { color: colors.text }]}>5. Suggestions & Photos</Text>
+                </View>
+                {reviewExpandedSections.suggestions ? <ChevronUp color={colors.textSecondary} size={18} /> : <ChevronDown color={colors.textSecondary} size={18} />}
+              </TouchableOpacity>
+              {reviewExpandedSections.suggestions && (
+                <View style={styles.reviewAccordionBody}>
+                  <View style={{ gap: 4 }}>
+                    <Text style={styles.reviewLabel}>Overall Remarks:</Text>
+                    <Text style={[styles.reviewVal, { fontSize: 13 }]}>{overallRemarks || 'Satisfactory'}</Text>
+                  </View>
+                  {suggestionPhotos.length > 0 && (
+                    <View style={{ marginTop: 10 }}>
+                      <Text style={[styles.reviewLabel, { marginBottom: 6 }]}>
+                        Attached Photos ({suggestionPhotos.length}):
+                      </Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                        {suggestionPhotos.map((uri, pIdx) => (
+                          <Image key={pIdx} source={{ uri }} style={{ width: 70, height: 70, borderRadius: 8 }} resizeMode="cover" />
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              )}
+            </Card>
+          </View>
         )}
       </ScrollView>
 
@@ -1213,8 +1461,8 @@ export default function CreateNightVisitReportScreen() {
                   style={{
                     padding: 14,
                     borderBottomWidth: 1,
-                    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    borderBottomColor: colors.border,
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : colors.surfaceSecondary,
                     marginBottom: 6,
                     borderRadius: 8,
                   }}
@@ -1226,7 +1474,7 @@ export default function CreateNightVisitReportScreen() {
                       {item.section.toUpperCase()}
                     </Text>
                   ) : null}
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFFFFF' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
                     {item.question}
                   </Text>
                 </TouchableOpacity>
@@ -1381,6 +1629,43 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   reviewVal: {
     fontWeight: '700',
     color: colors.text,
+  },
+  reviewAccordionCard: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  reviewAccordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+  },
+  reviewAccordionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  reviewAccordionBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  reviewGuardItem: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  reviewChecklistItem: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
   },
   footerRow: {
     flexDirection: 'row',

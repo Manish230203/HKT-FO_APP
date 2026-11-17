@@ -90,6 +90,18 @@ function ThemedNavigation() {
                 options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
               <Stack.Screen
+                name="visits/tours/tour-select"
+                options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="visits/tours/tour-execute"
+                options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
+              />
+              <Stack.Screen
+                name="visits/tours/tour-summary"
+                options={{ title: 'Tour Inspection Summary', gestureEnabled: true, fullScreenGestureEnabled: true }}
+              />
+              <Stack.Screen
                 name="patrol/index"
                 options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
               />

@@ -196,3 +196,22 @@ export async function cancelPatrolTour(empOid: number): Promise<{ success: boole
   const res = await api.post(`/mobile/patrol/tour/cancel?empOid=${empOid}`);
   return res.data;
 }
+
+export async function checkoutPatrolTour(data: {
+  empOid: number;
+  tourName?: string;
+  siteId?: number;
+  latitude?: number;
+  longitude?: number;
+  notes?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  tour_name?: string;
+  covered_count: number;
+  total_count: number;
+  report_id?: string;
+}> {
+  const res = await api.post(`/mobile/patrol/tour/checkout?empOid=${data.empOid}`, data);
+  return res.data;
+}

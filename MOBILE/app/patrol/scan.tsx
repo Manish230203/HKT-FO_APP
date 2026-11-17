@@ -328,10 +328,10 @@ export default function PatrolScanScreen() {
 
             <View style={styles.modalBtnRow}>
               <TouchableOpacity
-                style={styles.modalCancelBtn}
+                style={[styles.modalCancelBtn, { borderColor: colors.border }]}
                 onPress={() => setManualModalVisible(false)}
               >
-                <Text style={styles.modalCancelText}>{t('cancel')}</Text>
+                <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>{t('cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

@@ -389,12 +389,12 @@ export default function CreateGeneralVisitScreen() {
         <Input label="Visit Date (YYYY-MM-DD)" value={visitDate} onChangeText={setVisitDate} />
 
         {/* GPS Location Status Banner */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: 12, borderRadius: 10, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: isDark ? 'rgba(16, 185, 129, 0.1)' : '#ECFDF5', padding: 12, borderRadius: 10, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: isDark ? 'rgba(16, 185, 129, 0.25)' : '#A7F3D0' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <MapPin color="#10B981" size={18} style={{ marginRight: 8 }} />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 10, fontWeight: '800', color: '#6EE7B7' }}>GPS LOCATION</Text>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF', marginTop: 2 }}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: isDark ? '#6EE7B7' : '#047857' }}>GPS LOCATION</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text, marginTop: 2 }}>
                 {fetchingGps ? 'Fetching GPS coordinates...' : gps || 'Acquiring GPS location...'}
               </Text>
             </View>
@@ -402,9 +402,9 @@ export default function CreateGeneralVisitScreen() {
           <TouchableOpacity
             onPress={fetchCurrentLocation}
             disabled={fetchingGps}
-            style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
+            style={{ backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
           >
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#10B981' }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#10B981' : '#059669' }}>
               {fetchingGps ? 'Locating...' : 'Refresh GPS'}
             </Text>
           </TouchableOpacity>

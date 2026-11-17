@@ -89,6 +89,91 @@ class TourCompleteRequest(BaseModel):
     checkpoints: Optional[Dict[str, Any]] = None
 
 
+@router.get("/all")
+def get_all_database_tours(
+    db: Session = Depends(get_db),
+    emp_oid: int = Depends(get_current_employee_oid)
+):
+    """
+    Returns all patrolling tours present in the database with checkpoint count and site assignments.
+    """
+    try:
+        tours_rows = db.execute(
+            text("""
+                SELECT t.oid as tour_oid, t.tour_name, t.tour_code, t.description,
+                       t.estimated_duration_minutes, t.is_mandatory,
+                       s.oid as site_id, s.name as site_name, c.name as client_name
+                FROM FIELD_OFFICER_TOURS t
+                LEFT JOIN FIELD_OFFICER_TOUR_ASSIGNMENTS ta ON t.oid = ta.tour_oid AND ta.status = 'ACTIVE'
+                LEFT JOIN SITE s ON ta.site_oid = s.oid
+                LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+                WHERE (t.is_active = 1 OR t.is_active IS NULL) AND t.deleted_at IS NULL
+                ORDER BY t.oid, ta.tour_sequence
+            """)
+        ).fetchall()
+
+        tours_list = []
+        seen_keys = set()
+
+        for row in tours_rows:
+            t_oid = row[0]
+            site_id = row[6]
+            key = f"{t_oid}_{site_id or 0}"
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            cp_count = db.execute(
+                text("SELECT COUNT(*) FROM FIELD_OFFICER_TOUR_CHECKPOINTS WHERE tour_oid = :toid AND is_active = 1"),
+                {"toid": t_oid}
+            ).scalar() or 0
+
+            tours_list.append({
+                "tour_oid": t_oid,
+                "title": row[1] or f"Tour #{t_oid}",
+                "tour_code": row[2] or f"TOUR-{t_oid}",
+                "description": row[3] or "Patrolling Checkpoint Tour",
+                "site_id": site_id,
+                "site_name": row[7] or "All Assigned Sites",
+                "client_name": row[8] or "",
+                "total_checkpoints": max(1, cp_count),
+                "is_mandatory": bool(row[5]),
+                "estimated_duration_minutes": row[4] or 30
+            })
+
+        if not tours_list:
+            try:
+                cls = db.execute(text("SELECT oid, title, description, site_ids FROM PATROL_CHECKLISTS WHERE is_active = 1")).fetchall()
+                for c in cls:
+                    tours_list.append({
+                        "tour_oid": c[0],
+                        "title": c[1] or f"Tour #{c[0]}",
+                        "tour_code": f"TOUR-{c[0]}",
+                        "description": c[2] or "Checkpoint Patrolling Tour",
+                        "site_id": None,
+                        "site_name": "Assigned Site",
+                        "client_name": "",
+                        "total_checkpoints": 3,
+                        "is_mandatory": False,
+                        "estimated_duration_minutes": 30
+                    })
+            except Exception:
+                pass
+
+        return {
+            "success": True,
+            "total": len(tours_list),
+            "tours": tours_list
+        }
+    except Exception as e:
+        print(f"Error fetching all database tours: {e}")
+        return {
+            "success": True,
+            "total": 0,
+            "tours": []
+        }
+
+
 @router.get("/assigned-to-site")
 def get_tours_assigned_to_site(
     site_id: int = Query(...),

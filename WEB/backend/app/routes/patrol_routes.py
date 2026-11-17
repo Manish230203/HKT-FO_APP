@@ -9,7 +9,8 @@ from app.models.patrol_models import Shift, PatrolTour, PatrolLog, Incident, Che
 from app.schemas.patrol_schemas import (
     ShiftStart, ShiftEnd, PatrolLogRequest, IncidentReportRequest, SOSRequest,
     QuestionAnswerRequest, ChecklistSubmitRequest, CheckpointVerifyRequest,
-    QuestionAnswerItem, CheckpointChecklistSubmitRequest, PassBatonRequest
+    QuestionAnswerItem, CheckpointChecklistSubmitRequest, PassBatonRequest,
+    TourCheckoutRequest
 )
 from app.services.gps_service import haversine_distance_meters
 import base64
@@ -2260,13 +2261,7 @@ def get_tour_checkpoints(tour_name: str = Query(...), empOid: int = Query(...), 
 
     scanned_map = {log.checkpoint_id: log for log in scanned_logs}
     
-    # 3. Compute sequential unlocking
-    first_incomplete_idx = -1
-    for idx, cp in enumerate(cps):
-        if cp.id not in scanned_map:
-            first_incomplete_idx = idx
-            break
-
+    # 3. Open Checkpoint Mode: Any incomplete checkpoint is active and scannable in any order
     result_cps = []
     completed_count = 0
     for idx, cp in enumerate(cps):
@@ -2295,7 +2290,8 @@ def get_tour_checkpoints(tour_name: str = Query(...), empOid: int = Query(...), 
                 "checklist_title": c_obj.title if c_obj else cp.name,
                 "supports_handover": True,
             })
-        elif idx == first_incomplete_idx:
+        else:
+            # Active in open sequence mode - officer can start or scan from any checkpoint
             result_cps.append({
                 "checkpoint_id": cp.id,
                 "name": cp.name,
@@ -2316,28 +2312,6 @@ def get_tour_checkpoints(tour_name: str = Query(...), empOid: int = Query(...), 
                 "checklist_title": c_obj.title if c_obj else cp.name,
                 "supports_handover": True,
             })
-        else:
-            result_cps.append({
-                "checkpoint_id": cp.id,
-                "name": cp.name,
-                "order": cp.order or (idx + 1),
-                "latitude": cp.latitude,
-                "longitude": cp.longitude,
-                "radius": cp.radius or 50,
-                "qr_code": cp.qr_code,
-                "status": "locked",
-                "is_completed": False,
-                "is_active": False,
-                "is_locked": True,
-                "scanned_at": None,
-                "completion_time": None,
-                "gps_verified": False,
-                "gps_status_text": None,
-                "lock_reason": "Locked until previous checkpoint completed",
-                "checklist_id": c_obj.id if c_obj else None,
-                "checklist_title": c_obj.title if c_obj else cp.name,
-                "supports_handover": False,
-            })
 
     total_count = len(cps)
     all_completed = (completed_count == total_count and total_count > 0)
@@ -2350,6 +2324,209 @@ def get_tour_checkpoints(tour_name: str = Query(...), empOid: int = Query(...), 
         "all_completed": all_completed,
         "active_tour_id": active_tour.id if active_tour else None,
         "checkpoints": result_cps
+    }
+
+@router.post("/patrol/tour/checkout")
+def checkout_patrol_tour(data: TourCheckoutRequest, empOid: int = Query(...), db: Session = Depends(get_patrol_db)):
+    """
+    Checks out of an ongoing patrol tour at any time, completes the tour session,
+    and generates the patrol tour report for all covered checkpoints.
+    """
+    active_shift = get_active_shift(db, empOid)
+    active_tour = get_active_tour(db, empOid)
+    if not active_tour and data.tour_name:
+        active_tour = db.query(PatrolTour).filter(
+            PatrolTour.user_id == empOid,
+            PatrolTour.tour_name == data.tour_name,
+            PatrolTour.status == "ongoing"
+        ).order_by(PatrolTour.id.desc()).first()
+
+    if not active_tour:
+        today = get_ist_today()
+        from datetime import datetime as std_datetime
+        start_of_day = std_datetime.combine(today, std_datetime.min.time())
+        active_tour = db.query(PatrolTour).filter(
+            PatrolTour.user_id == empOid,
+            PatrolTour.start_time >= start_of_day
+        ).order_by(PatrolTour.id.desc()).first()
+
+    if not active_tour:
+        raise HTTPException(status_code=400, detail="No active patrolling tour found to check out.")
+
+    site_id_val = active_tour.site_id or data.site_id or (active_shift.site_id if active_shift else 1)
+    tour_name_val = active_tour.tour_name or data.tour_name or "Patrol Tour"
+
+    # 1. Retrieve all configured checkpoints for this tour/site
+    cls = db.query(Checklist).filter(
+        Checklist.is_active == True,
+        Checklist.title.like(f"{tour_name_val} - %")
+    ).all()
+    if site_id_val:
+        cls = filter_checklists_by_site(cls, site_id_val)
+    cp_ids = [c.checkpoint_id for c in cls if c.checkpoint_id]
+    if cp_ids:
+        all_cps = db.query(Checkpoint).filter(Checkpoint.id.in_(cp_ids)).order_by(Checkpoint.order, Checkpoint.id).all()
+    else:
+        all_cps = db.query(Checkpoint).filter(Checkpoint.site_id == site_id_val).order_by(Checkpoint.order, Checkpoint.id).all()
+
+    total_checkpoints = len(all_cps) if all_cps else 1
+
+    # 2. Retrieve all scanned logs and responses for this tour
+    scanned_logs = db.query(PatrolLog).filter(
+        PatrolLog.tour_id == active_tour.id,
+        PatrolLog.scan_type == "QR",
+        PatrolLog.checkpoint_id != None,
+        PatrolLog.is_deleted == False
+    ).order_by(PatrolLog.scan_time.asc()).all()
+
+    covered_cp_ids = {log.checkpoint_id for log in scanned_logs if log.checkpoint_id}
+    covered_count = len(covered_cp_ids)
+
+    # 3. Retrieve checklist responses and question answers
+    checklist_responses = db.query(ChecklistResponse).filter(
+        ChecklistResponse.shift_id == active_tour.shift_id,
+        ChecklistResponse.user_id == empOid
+    ).all()
+    resp_ids = [cr.id for cr in checklist_responses]
+
+    q_answers = []
+    if resp_ids:
+        q_answers = db.query(QuestionAnswer).filter(QuestionAnswer.response_id.in_(resp_ids)).all()
+
+    # Build compiled checklist items and photos for report
+    checklist_items = []
+    all_photos = []
+
+    cp_map = {cp.id: cp for cp in all_cps}
+    for qa in q_answers:
+        media_list = []
+        if qa.media_urls:
+            try:
+                media_list = json.loads(qa.media_urls) if isinstance(qa.media_urls, str) else qa.media_urls
+            except Exception:
+                media_list = [qa.media_urls]
+        all_photos.extend(media_list)
+
+        q_text = "Patrol Inspection Question"
+        if qa.question_link_id:
+            link = db.query(ChecklistQuestionLink).filter(ChecklistQuestionLink.id == qa.question_link_id).first()
+            if link:
+                q_obj = db.query(Question).filter(Question.id == link.question_id).first()
+                if q_obj:
+                    q_text = q_obj.text
+
+        ans_val = qa.answer_value or "Yes"
+        is_satisfactory = ans_val.lower() in ("yes", "satisfactory")
+        checklist_items.append({
+            "question": q_text,
+            "status": "Satisfactory" if is_satisfactory else "Unsatisfactory",
+            "answer": ans_val,
+            "remarks": qa.comment or "",
+            "photos": media_list,
+            "is_critical": False,
+            "is_failure": not is_satisfactory
+        })
+
+    # If no individual question answers found, compile from covered checkpoints
+    if not checklist_items:
+        for cp in all_cps:
+            if cp.id in covered_cp_ids:
+                checklist_items.append({
+                    "question": f"[{cp.name}] Checkpoint Verification & Patrol",
+                    "status": "Satisfactory",
+                    "answer": "Verified & Covered",
+                    "remarks": f"Checkpoint '{cp.name}' completed via GPS verification.",
+                    "photos": [],
+                    "is_critical": False,
+                    "is_failure": False
+                })
+
+    # 4. Create/Upsert record in FIELD_OFFICER_PATROL_TOUR_REPORTS
+    now_str = datetime.now().strftime("%H:%M")
+    today_date_str = datetime.now().strftime("%Y-%m-%d")
+    date_code_str = datetime.now().strftime("%Y%m%d")
+    gps_coord_str = f"{data.latitude}, {data.longitude}" if (data.latitude and data.longitude) else None
+
+    # Retrieve officer details
+    officer_row = db.execute(text("SELECT name, emp_code FROM EMPLOYEE WHERE oid = :oid LIMIT 1"), {"oid": empOid}).fetchone()
+    officer_name = officer_row[0] if officer_row else "Field Officer"
+
+    # Retrieve site and client details
+    site_row = db.execute(text("""
+        SELECT s.name, cl.oid, cl.name 
+        FROM SITE s 
+        LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid 
+        WHERE s.oid = :sid LIMIT 1
+    """), {"sid": site_id_val}).fetchone()
+
+    s_name = site_row[0] if site_row else "Site"
+    client_id_val = site_row[1] if site_row else None
+    c_name = site_row[2] if site_row else "Client"
+
+    report_id = f"PTR-{tour_name_val[:4].upper()}-{site_id_val}-{date_code_str}-{active_tour.id}"
+    coverage_summary_text = f"Patrol Tour Checked Out. Covered {covered_count} of {total_checkpoints} checkpoints."
+    if data.notes:
+        coverage_summary_text += f" Notes: {data.notes.strip()}"
+
+    cin_time = active_tour.start_time.strftime("%H:%M") if active_tour.start_time else now_str
+
+    try:
+        db.execute(text("""
+            INSERT INTO FIELD_OFFICER_PATROL_TOUR_REPORTS (
+                employee_oid, report_id, unit, client_id, site_id, tour_oid,
+                visit_date, visit_type, officer, `check-in_time`, `check-out_time`,
+                gps, status, checklist, photos, overall_remarks, created_on
+            ) VALUES (
+                :emp, :rid, :unit, :cid_val, :sid, :toid,
+                :vdate, 'Patrolling Tour', :officer, :cin, :cout,
+                :gps, 'Completed', :clist, :photos, :notes, NOW()
+            )
+        """), {
+            "emp": empOid,
+            "rid": report_id,
+            "unit": s_name,
+            "cid_val": client_id_val,
+            "sid": site_id_val,
+            "toid": active_tour.id,
+            "vdate": today_date_str,
+            "officer": officer_name,
+            "cin": cin_time,
+            "cout": now_str,
+            "gps": gps_coord_str,
+            "clist": json.dumps(checklist_items),
+            "photos": json.dumps(all_photos),
+            "notes": coverage_summary_text,
+        })
+        db.commit()
+    except Exception as ptr_err:
+        db.rollback()
+        print("Error saving to FIELD_OFFICER_PATROL_TOUR_REPORTS:", ptr_err)
+
+    # 5. Mark tour and shift as completed
+    active_tour.status = "completed"
+    active_tour.end_time = datetime.now()
+    if active_shift:
+        active_shift.active_tour = None
+        # Close any site visit session linked to this site if still in progress
+        try:
+            db.execute(text("""
+                UPDATE SITE_VISIT_SESSIONS 
+                SET status = 'COMPLETED', session_check_out = NOW(), check_out_latitude = :lat, check_out_longitude = :lng
+                WHERE employee_id = :emp AND site_id = :sid AND status = 'IN_PROGRESS'
+            """), {"emp": empOid, "sid": site_id_val, "lat": data.latitude, "lng": data.longitude})
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Patrol tour checked out successfully! {covered_count} of {total_checkpoints} checkpoints covered.",
+        "tour_name": tour_name_val,
+        "covered_count": covered_count,
+        "total_count": total_checkpoints,
+        "report_id": report_id
     }
 
 @router.post("/patrol/checkpoint/verify")
