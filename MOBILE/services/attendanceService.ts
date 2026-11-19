@@ -47,7 +47,7 @@ export const getMonthlyStats = async (empOid: number | string) => {
 
 import { gpsTracker } from './gpsService';
 
-export const markAttendanceApi = async (payload: { empOid: number | string; latitude: number; longitude: number; siteOid?: number; timestamp?: string }) => {
+export const markAttendanceApi = async (payload: { empOid: number | string; latitude: number | null; longitude: number | null; siteOid?: number; timestamp?: string }) => {
   try {
     const response = await api.post('/_AIP_markAttendance', payload);
     // Non-blocking trigger of background GPS tracking

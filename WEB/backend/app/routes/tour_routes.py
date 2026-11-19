@@ -96,21 +96,32 @@ def get_all_database_tours(
 ):
     """
     Returns all patrolling tours present in the database with checkpoint count and site assignments.
+    Filtered strictly according to the officer's branch (e.g. Pune branch).
     """
     try:
-        tours_rows = db.execute(
-            text("""
-                SELECT t.oid as tour_oid, t.tour_name, t.tour_code, t.description,
-                       t.estimated_duration_minutes, t.is_mandatory,
-                       s.oid as site_id, s.name as site_name, c.name as client_name
-                FROM FIELD_OFFICER_TOURS t
-                LEFT JOIN FIELD_OFFICER_TOUR_ASSIGNMENTS ta ON t.oid = ta.tour_oid AND ta.status = 'ACTIVE'
-                LEFT JOIN SITE s ON ta.site_oid = s.oid
-                LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
-                WHERE (t.is_active = 1 OR t.is_active IS NULL) AND t.deleted_at IS NULL
-                ORDER BY t.oid, ta.tour_sequence
-            """)
-        ).fetchall()
+        emp_branch = db.execute(
+            text("SELECT BRANCH FROM EMPLOYEE WHERE oid = :oid"),
+            {"oid": emp_oid}
+        ).scalar()
+
+        where_clauses = ["(t.is_active = 1 OR t.is_active IS NULL)", "t.deleted_at IS NULL"]
+        params = {}
+        if emp_branch:
+            where_clauses.append("(t.branch_oid = :boid OR s.BRANCH = :boid OR (t.branch_oid IS NULL AND s.BRANCH IS NULL))")
+            params["boid"] = emp_branch
+
+        sql_str = f"""
+            SELECT t.oid as tour_oid, t.tour_name, t.tour_code, t.description,
+                   t.estimated_duration_minutes, t.is_mandatory,
+                   s.oid as site_id, s.name as site_name, c.name as client_name
+            FROM FIELD_OFFICER_TOURS t
+            LEFT JOIN FIELD_OFFICER_TOUR_ASSIGNMENTS ta ON t.oid = ta.tour_oid AND ta.status = 'ACTIVE'
+            LEFT JOIN SITE s ON ta.site_oid = s.oid
+            LEFT JOIN CLIENTT c ON s.CLIENTT = c.oid
+            WHERE {" AND ".join(where_clauses)}
+            ORDER BY t.oid, ta.tour_sequence
+        """
+        tours_rows = db.execute(text(sql_str), params).fetchall()
 
         tours_list = []
         seen_keys = set()
@@ -181,8 +192,14 @@ def get_tours_assigned_to_site(
     emp_oid: int = Depends(get_current_employee_oid)
 ):
     """
-    Returns dynamic tours configured for a given registered site using FIELD_OFFICER_* tables.
+    Returns dynamic tours configured for a given registered site using FIELD_OFFICER_* tables,
+    filtered strictly according to the officer's branch (e.g. Pune branch).
     """
+    emp_branch = db.execute(
+        text("SELECT BRANCH FROM EMPLOYEE WHERE oid = :oid"),
+        {"oid": emp_oid}
+    ).scalar()
+
     # 1. Fetch site details
     site_row = db.execute(
         text("SELECT oid, name, BRANCH FROM SITE WHERE oid = :sid"),
@@ -193,17 +210,21 @@ def get_tours_assigned_to_site(
     site_branch = site_row[2] if site_row else None
 
     # 2. Query FIELD_OFFICER_TOUR_ASSIGNMENTS joined with FIELD_OFFICER_TOURS
-    assigned_tours = db.execute(
-        text("""
-            SELECT t.oid as tour_oid, t.tour_name as title, t.tour_code, t.description,
-                   t.estimated_duration_minutes, t.is_mandatory, ta.assignment_frequency
-            FROM FIELD_OFFICER_TOURS t
-            JOIN FIELD_OFFICER_TOUR_ASSIGNMENTS ta ON t.oid = ta.tour_oid
-            WHERE ta.site_oid = :sid AND ta.status = 'ACTIVE' AND t.is_active = 1
-            ORDER BY ta.tour_sequence, t.oid
-        """),
-        {"sid": site_id}
-    ).fetchall()
+    assign_sql = """
+        SELECT t.oid as tour_oid, t.tour_name as title, t.tour_code, t.description,
+               t.estimated_duration_minutes, t.is_mandatory, ta.assignment_frequency
+        FROM FIELD_OFFICER_TOURS t
+        JOIN FIELD_OFFICER_TOUR_ASSIGNMENTS ta ON t.oid = ta.tour_oid
+        WHERE ta.site_oid = :sid AND ta.status = 'ACTIVE' AND t.is_active = 1
+    """
+    assign_params = {"sid": site_id}
+    if emp_branch:
+        assign_sql += " AND (t.branch_oid = :boid OR t.branch_oid IS NULL OR :sbranch = :boid)"
+        assign_params["boid"] = emp_branch
+        assign_params["sbranch"] = site_branch
+
+    assign_sql += " ORDER BY ta.tour_sequence, t.oid"
+    assigned_tours = db.execute(text(assign_sql), assign_params).fetchall()
 
     tours_list = []
     seen_tour_oids = set()
@@ -228,22 +249,24 @@ def get_tours_assigned_to_site(
                 "estimated_duration_minutes": row[4] or 30,
             })
 
-    # 3. Fallback: If no direct assignment, query active tours allowing ad-hoc or matching site
+    # 3. Fallback: If no direct assignment, query active tours allowing ad-hoc or matching site/branch
     if not tours_list:
         clean_site_keyword = site_name.split()[0] if site_name else ""
+        ad_hoc_sql = """
+            SELECT t.oid as tour_oid, t.tour_name as title, t.tour_code, t.description,
+                   t.estimated_duration_minutes, t.is_mandatory
+            FROM FIELD_OFFICER_TOURS t
+            WHERE t.is_active = 1 AND (
+                (:b_oid IS NOT NULL AND t.branch_oid = :b_oid)
+                OR (:b_oid IS NULL AND (t.allow_ad_hoc_execution = 1 OR t.tour_name LIKE :s_name))
+                OR (t.allow_ad_hoc_execution = 1 AND (t.branch_oid = :b_oid OR t.branch_oid IS NULL))
+                OR (t.tour_name LIKE :s_name AND (t.branch_oid = :b_oid OR t.branch_oid IS NULL))
+            )
+            ORDER BY t.oid
+        """
         ad_hoc_tours = db.execute(
-            text("""
-                SELECT t.oid as tour_oid, t.tour_name as title, t.tour_code, t.description,
-                       t.estimated_duration_minutes, t.is_mandatory
-                FROM FIELD_OFFICER_TOURS t
-                WHERE t.is_active = 1 AND (
-                    t.allow_ad_hoc_execution = 1 
-                    OR t.tour_name LIKE :s_name
-                    OR (t.branch_oid = :b_oid AND :b_oid IS NOT NULL)
-                )
-                ORDER BY t.oid
-            """),
-            {"s_name": f"%{clean_site_keyword}%", "b_oid": site_branch}
+            text(ad_hoc_sql),
+            {"s_name": f"%{clean_site_keyword}%", "b_oid": emp_branch or site_branch}
         ).fetchall()
 
         for row in ad_hoc_tours:
@@ -292,10 +315,24 @@ def get_tours_assigned_to_custom_visit(
     client_name = row[0] if row else "Custom Client"
     site_name = row[1] if row else "Custom Site"
 
-    # Query active ad-hoc tours
-    tours_rows = db.execute(
-        text("SELECT oid, tour_name, tour_code, description, estimated_duration_minutes, is_mandatory FROM FIELD_OFFICER_TOURS WHERE is_active = 1 AND allow_ad_hoc_execution = 1 ORDER BY oid")
-    ).fetchall()
+    # Query active ad-hoc tours matching officer's branch or general
+    emp_branch = db.execute(
+        text("SELECT BRANCH FROM EMPLOYEE WHERE oid = :oid"),
+        {"oid": emp_oid}
+    ).scalar()
+
+    ad_hoc_sql = """
+        SELECT oid, tour_name, tour_code, description, estimated_duration_minutes, is_mandatory 
+        FROM FIELD_OFFICER_TOURS 
+        WHERE is_active = 1 AND allow_ad_hoc_execution = 1
+    """
+    params = {}
+    if emp_branch:
+        ad_hoc_sql += " AND (branch_oid = :boid OR branch_oid IS NULL)"
+        params["boid"] = emp_branch
+    ad_hoc_sql += " ORDER BY oid"
+
+    tours_rows = db.execute(text(ad_hoc_sql), params).fetchall()
 
     tours = []
     for r in tours_rows:

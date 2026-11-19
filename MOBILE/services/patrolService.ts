@@ -66,6 +66,8 @@ export async function getPatrolTours(empOid: number, siteId?: number): Promise<{
   success: boolean;
   site_id: number;
   site_name: string;
+  branch_id?: number | null;
+  branch_name?: string | null;
   active_tour: any;
   tours: PatrolTourItem[];
 }> {

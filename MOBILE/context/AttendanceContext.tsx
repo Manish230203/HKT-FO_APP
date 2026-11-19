@@ -46,7 +46,7 @@ interface AttendanceContextType {
   profileData: ProfileData | null;
   isLoading: boolean;
   refreshStatus: (force?: boolean, fetchAll?: boolean) => Promise<void>;
-  markAttendance: (latitude: number, longitude: number, siteOid?: number, timestamp?: string) => Promise<{ success: boolean; message: string }>;
+  markAttendance: (latitude: number | null, longitude: number | null, siteOid?: number, timestamp?: string) => Promise<{ success: boolean; message: string }>;
   validateSelfie: (uri: string) => Promise<{ success: boolean; message: string }>;
   unifiedPunch: (uri: string, latitude: number, longitude: number) => Promise<{ success: boolean; message: string }>;
 }
@@ -232,7 +232,7 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
     }
   }, [user]);
 
-  const markAttendance = async (latitude: number, longitude: number, siteOid?: number, timestamp?: string) => {
+  const markAttendance = async (latitude: number | null, longitude: number | null, siteOid?: number, timestamp?: string) => {
     const empOid = getEmpOid();
     if (!empOid) return { success: false, message: 'User not authenticated' };
 

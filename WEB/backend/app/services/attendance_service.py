@@ -1049,7 +1049,15 @@ def mark_attendance_logic(data):
         master_site_oid = site["site_oid"]
         user["site_oid"] = master_site_oid
         user["assigned_site"] = user_assigned_site
-        active_site_oid = master_site_oid
+        active_site_oid = master_site_oid
+
+        # Graceful handling for regional officers when GPS is unavailable:
+        # Fall back to assigned site coordinates if live GPS fix was not acquired,
+        # instead of inserting hardcoded coordinates from another branch.
+        if (lat is None or long is None or (lat == 0 and long == 0)) and site:
+            if site.get("latitude") is not None and site.get("longitude") is not None:
+                lat = float(site["latitude"])
+                long = float(site["longitude"])
 
         if not is_field_officer:
             if site["latitude"] is None or site["longitude"] is None:

@@ -51,6 +51,7 @@ export default function PatrolTourSelectionScreen() {
   const [activeTour, setActiveTour] = useState<any>(null);
   const [siteName, setSiteName] = useState<string>('Site');
   const [siteId, setSiteId] = useState<number>(1);
+  const [branchName, setBranchName] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [startingTour, setStartingTour] = useState<string | null>(null);
@@ -100,6 +101,9 @@ export default function PatrolTourSelectionScreen() {
         setActiveTour(res.active_tour || null);
         setSiteName(res.site_name || 'Assigned Site');
         setSiteId(res.site_id || 1);
+        if (res.branch_name) {
+          setBranchName(res.branch_name);
+        }
       }
     } catch (e: any) {
       const errDetail = e.response?.data?.message || e.response?.data?.detail || (typeof e.response?.data === 'string' ? e.response.data : e.message);
@@ -265,7 +269,7 @@ export default function PatrolTourSelectionScreen() {
                 {officerName}
               </Text>
               <Text style={[styles.officerMetaText, { color: subTextColor }]}>
-                {empCode}
+                {empCode}{branchName ? ` • ${branchName} Branch` : ''}
               </Text>
               <Text style={[styles.officerSiteText, { color: '#3B82F6' }]} numberOfLines={1}>
                 <MapPin size={12} color="#3B82F6" /> {siteName}

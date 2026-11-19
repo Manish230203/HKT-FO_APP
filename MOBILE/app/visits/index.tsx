@@ -1099,7 +1099,14 @@ export default function VisitsScreen() {
     if (pv.status === 'Completed') return false;
 
     // 2. If all required frequencies done, hide from pending
-    const done = pv.completedVisits || 0;
+    const completedForPlan = completedVisits.filter((cv) => {
+      if (pv.isCustomVisit || pv.customVisitId) {
+        const cvCvid = cv.rawReport?.custom_visit_id || cv.rawReport?.customVisitId;
+        return cvCvid && Number(cvCvid) === Number(pv.customVisitId || pv.id);
+      }
+      return cv.siteId && Number(cv.siteId) === Number(pv.siteId);
+    });
+    const done = Math.max(pv.completedVisits || 0, completedForPlan.length);
     const freq = pv.visitFrequency
       ? parseInt(String(pv.visitFrequency), 10)
       : pv.frequency
@@ -1117,7 +1124,14 @@ export default function VisitsScreen() {
 
   const getStatusInfo = (pv: PlannedVisit) => {
     const overdue = isVisitOverdue(pv);
-    const done = pv.completedVisits || 0;
+    const completedForPlan = completedVisits.filter((cv) => {
+      if (pv.isCustomVisit || pv.customVisitId) {
+        const cvCvid = cv.rawReport?.custom_visit_id || cv.rawReport?.customVisitId;
+        return cvCvid && Number(cvCvid) === Number(pv.customVisitId || pv.id);
+      }
+      return cv.siteId && Number(cv.siteId) === Number(pv.siteId);
+    });
+    const done = Math.max(pv.completedVisits || 0, completedForPlan.length);
     const total =
       (pv.visitFrequency
         ? parseInt(String(pv.visitFrequency), 10)

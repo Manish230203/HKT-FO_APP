@@ -55,6 +55,7 @@ export default function MarkAttendanceScreen() {
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [isVerifyingPhoto, setIsVerifyingPhoto] = useState(false);
   const [cameraKey, setCameraKey] = useState<number>(0);
+  const [gpsLoadingText, setGpsLoadingText] = useState<string | null>(null);
 
   const reloadLiveCamera = () => {
     setCapturedPhotoUri(null);
@@ -173,7 +174,7 @@ export default function MarkAttendanceScreen() {
     }, [refreshStatus, checkActivePunchSession, isOfficerActive, hasProfilePhoto])
   );
 
-  // Auto-request camera permissions and pre-fetch GPS on mount
+  // Auto-request camera permissions and pre-fetch GPS on mount with High Accuracy
   useEffect(() => {
     if (!permission?.granted) {
       requestPermission();
@@ -183,11 +184,12 @@ export default function MarkAttendanceScreen() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const lastLoc = await Location.getLastKnownPositionAsync();
-          if (lastLoc) {
+          if (lastLoc && lastLoc.coords) {
             setLocation({ latitude: lastLoc.coords.latitude, longitude: lastLoc.coords.longitude });
           }
-          const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          if (freshLoc) {
+          // Initiate high accuracy GPS satellite lock warm-up immediately
+          const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          if (freshLoc && freshLoc.coords) {
             setLocation({ latitude: freshLoc.coords.latitude, longitude: freshLoc.coords.longitude });
           }
         }
@@ -215,33 +217,6 @@ export default function MarkAttendanceScreen() {
   useEffect(() => {
     checkActivePunchSession();
   }, [checkActivePunchSession]);
-
-
-  // Fetch Location gracefully
-  useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          let loc: Location.LocationObject | null = null;
-          try {
-            loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          } catch {
-            loc = await Location.getLastKnownPositionAsync();
-          }
-
-          if (loc && loc.coords) {
-            setLocation({
-              latitude: loc.coords.latitude,
-              longitude: loc.coords.longitude,
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('Location fetch error (non-blocking):', e);
-      }
-    })();
-  }, []);
 
   // Unified One-Step: Capture Photo -> Face Verification -> Immediately Activate / Deactivate
   const handleCaptureAndToggleSession = async () => {
@@ -332,6 +307,80 @@ export default function MarkAttendanceScreen() {
     await proceedToCaptureAndPunch();
   };
 
+  // Graceful fallback coordinates when GPS fix cannot be acquired (NEVER hardcodes Pune)
+  const getGracefulFallbackCoordinates = (): { latitude: number | null; longitude: number | null } => {
+    // If officer has an assigned site with known coordinates, use them
+    const siteLat = (profileData as any)?.site_latitude || (user as any)?.site_lat || (user as any)?.latitude;
+    const siteLong = (profileData as any)?.site_longitude || (user as any)?.site_long || (user as any)?.longitude;
+    if (siteLat && siteLong && Number(siteLat) !== 0 && Number(siteLong) !== 0) {
+      return { latitude: Number(siteLat), longitude: Number(siteLong) };
+    }
+    // Return null, null - NEVER default to hardcoded Pune coordinates (18.605555, 73.827115)
+    return { latitude: null, longitude: null };
+  };
+
+  // High-Accuracy GPS satellite fix with loader and graceful timeout
+  const acquireAccurateGps = async (): Promise<{ latitude: number | null; longitude: number | null }> => {
+    try {
+      setGpsLoadingText('Acquiring accurate GPS location...');
+
+      // 1. Verify foreground location permissions
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (req.status !== 'granted') {
+          console.warn('Location permission not granted for attendance punch');
+          return getGracefulFallbackCoordinates();
+        }
+      }
+
+      // 2. Ensure location services are enabled on device
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        console.warn('GPS location services disabled on device');
+        return getGracefulFallbackCoordinates();
+      }
+
+      // 3. Acquire high-accuracy satellite fix (with 7s timeout)
+      const highPromise = Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000));
+
+      const freshFix = await Promise.race([highPromise, timeoutPromise]);
+      if (freshFix && freshFix.coords && freshFix.coords.latitude && freshFix.coords.longitude) {
+        setLocation({
+          latitude: freshFix.coords.latitude,
+          longitude: freshFix.coords.longitude,
+        });
+        return {
+          latitude: freshFix.coords.latitude,
+          longitude: freshFix.coords.longitude,
+        };
+      }
+
+      // 4. Fallback to recent last known location if under 3 minutes old
+      const lastLoc = await Location.getLastKnownPositionAsync();
+      if (lastLoc && lastLoc.coords && lastLoc.coords.latitude && lastLoc.coords.longitude) {
+        const ageMs = Date.now() - (lastLoc.timestamp || 0);
+        if (ageMs < 180000) {
+          return {
+            latitude: lastLoc.coords.latitude,
+            longitude: lastLoc.coords.longitude,
+          };
+        }
+      }
+
+      // 5. Graceful fallback (site coordinates or null, NEVER hardcoded Pune)
+      return getGracefulFallbackCoordinates();
+    } catch (err) {
+      console.warn('acquireAccurateGps error:', err);
+      return getGracefulFallbackCoordinates();
+    } finally {
+      setGpsLoadingText(null);
+    }
+  };
+
   const proceedToCaptureAndPunch = async () => {
     // 3. Capture Photo from Live Camera (or fallback to ImagePicker)
     let photoUri: string | null = null;
@@ -417,19 +466,10 @@ export default function MarkAttendanceScreen() {
         }
       }
 
-      // 5. GPS Location
-      let lat = location?.latitude;
-      let long = location?.longitude;
-      if (!lat || !long) {
-        try {
-          const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          lat = freshLoc.coords.latitude;
-          long = freshLoc.coords.longitude;
-        } catch {
-          lat = 18.605555;
-          long = 73.827115;
-        }
-      }
+      // 5. GPS Location - High-accuracy satellite lock before punch submission
+      const gpsFix = await acquireAccurateGps();
+      const lat = gpsFix.latitude;
+      const long = gpsFix.longitude;
 
       const empId = user?.employee_id || (user?.id ? String(user.id) : '') || user?.username || '';
       const todayDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -683,7 +723,7 @@ export default function MarkAttendanceScreen() {
                 <View style={styles.btnLoadingRow}>
                   <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 10 }} />
                   <Text style={styles.capturePhotoBtnText}>
-                    {t('verifying_recording')}
+                    {gpsLoadingText || t('verifying_recording')}
                   </Text>
                 </View>
               ) : (
@@ -715,6 +755,17 @@ export default function MarkAttendanceScreen() {
 
           <Text style={styles.copyrightText}>© 2026 HUMANKIND TECHNOLOGY</Text>
         </ScrollView>
+
+        {/* Accurate GPS Satellite Fix Loader Overlay */}
+        {gpsLoadingText && (
+          <View style={styles.gpsLockOverlay}>
+            <View style={styles.gpsLockCard}>
+              <ActivityIndicator size="large" color="#3B82F6" />
+              <Text style={styles.gpsLockTitle}>{gpsLoadingText}</Text>
+              <Text style={styles.gpsLockSubtitle}>Waiting for active satellite fix...</Text>
+            </View>
+          </View>
+        )}
 
         <CustomAlertModal
           visible={alertInfo.visible}
@@ -1083,5 +1134,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
     marginTop: 24,
+  },
+  gpsLockOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  gpsLockCard: {
+    backgroundColor: '#1E293B',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 10,
+    width: '82%',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.35)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  gpsLockTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  gpsLockSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

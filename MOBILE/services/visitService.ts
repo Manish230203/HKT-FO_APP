@@ -49,6 +49,58 @@ export const getNightVisitTemplates = async () => {
   return response.data || [];
 };
 
+export interface PreviousQuestionsResponse {
+  success: boolean;
+  has_previous: boolean;
+  site_id?: number | string;
+  report_id?: string;
+  questions: Array<{
+    id: string;
+    section?: string;
+    question: string;
+    answerType?: string;
+    isCustom?: boolean;
+    required?: boolean;
+  }>;
+  template_questions: Array<{
+    id: string;
+    section?: string;
+    question: string;
+    answerType?: string;
+    isCustom?: boolean;
+    required?: boolean;
+  }>;
+  custom_questions: Array<{
+    id: string;
+    section?: string;
+    question: string;
+    answerType?: string;
+    isCustom?: boolean;
+    required?: boolean;
+  }>;
+}
+
+export const getSitePreviousQuestions = async (
+  siteId: number | string,
+  visitType: 'DAY_VISIT' | 'NIGHT_VISIT' = 'DAY_VISIT'
+): Promise<PreviousQuestionsResponse> => {
+  try {
+    const response = await api.get('/visits/site-previous-questions', {
+      params: { site_id: siteId, visit_type: visitType },
+    });
+    return response.data;
+  } catch (e) {
+    console.warn('Failed to fetch previous site questions:', e);
+    return {
+      success: false,
+      has_previous: false,
+      questions: [],
+      template_questions: [],
+      custom_questions: [],
+    };
+  }
+};
+
 export const sendReportEmail = async (payload: {
   email: string;
   subject?: string;

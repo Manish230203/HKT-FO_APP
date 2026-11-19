@@ -2114,15 +2114,49 @@ def cancel_patrol_tour(empOid: int = Query(...), db: Session = Depends(get_patro
 @router.get("/patrol/tours")
 def get_patrol_tours(empOid: int = Query(...), site_id: Optional[int] = Query(None), db: Session = Depends(get_patrol_db)):
     """
-    Returns available patrolling tours for the site, active tour status, and checkpoint counts.
+    Returns available patrolling tours for the site and branch, active tour status, and checkpoint counts.
+    Filtered strictly according to the officer's branch (e.g. Pune branch).
     """
+    # 1. Fetch employee's branch and assigned site
+    emp_info = db.execute(
+        text("SELECT e.site, e.BRANCH, b.name as branch_name FROM EMPLOYEE e LEFT JOIN BRANCH b ON e.BRANCH = b.oid WHERE e.oid = :oid"),
+        {"oid": empOid}
+    ).fetchone()
+
+    emp_site_id = emp_info[0] if emp_info else None
+    emp_branch = emp_info[1] if emp_info else None
+    emp_branch_name = emp_info[2] if emp_info else None
+
+    # 2. Resolve site_id within officer's branch
+    if site_id and emp_branch:
+        s_row = db.execute(text("SELECT oid, name, BRANCH FROM SITE WHERE oid = :sid"), {"sid": site_id}).fetchone()
+        if s_row and s_row[2] and s_row[2] != emp_branch:
+            # Selected site is from a different branch; reset so we pick a site from officer's branch
+            site_id = None
+        elif s_row:
+            site_name = s_row[1] or "Site"
+
     if not site_id:
-        site_id = db.execute(text("SELECT site FROM EMPLOYEE WHERE oid = :oid"), {"oid": empOid}).scalar() or 1
-        
-    site_name = db.execute(text("SELECT name FROM SITE WHERE oid = :sid"), {"sid": site_id}).scalar() or "Site"
+        if emp_site_id:
+            s_row = db.execute(text("SELECT oid, name, BRANCH FROM SITE WHERE oid = :sid"), {"sid": emp_site_id}).fetchone()
+            if s_row and (not emp_branch or not s_row[2] or s_row[2] == emp_branch):
+                site_id = emp_site_id
+                site_name = s_row[1] or "Site"
+
+        if not site_id and emp_branch:
+            b_site = db.execute(text("SELECT oid, name FROM SITE WHERE BRANCH = :boid ORDER BY oid LIMIT 1"), {"boid": emp_branch}).fetchone()
+            if b_site:
+                site_id = b_site[0]
+                site_name = b_site[1] or "Site"
+
+        if not site_id:
+            site_id = emp_site_id or 1
+            site_name = db.execute(text("SELECT name FROM SITE WHERE oid = :sid"), {"sid": site_id}).scalar() or "Site"
+    else:
+        site_name = db.execute(text("SELECT name FROM SITE WHERE oid = :sid"), {"sid": site_id}).scalar() or "Site"
     
-    # 1. Look for checklists configured for this site
-    cls = db.query(Checklist).filter(Checklist.site_ids.like(f"%{site_id}%")).all()
+    # 3. Look for checklists configured for this site
+    cls = db.query(Checklist).filter(Checklist.site_ids.like(f"%{site_id}%"), Checklist.is_active == True).all()
     
     tours_map = {}
     for c in cls:
@@ -2135,6 +2169,32 @@ def get_patrol_tours(empOid: int = Query(...), site_id: Optional[int] = Query(No
             tours_map[t_name] = []
         if c.checkpoint_id:
             tours_map[t_name].append(c.checkpoint_id)
+
+    # 4. Also include tours from FIELD_OFFICER_TOURS configured for this branch / site
+    fo_tours = db.execute(text("""
+        SELECT t.oid, t.tour_name, t.description, t.branch_oid
+        FROM FIELD_OFFICER_TOURS t
+        LEFT JOIN FIELD_OFFICER_TOUR_ASSIGNMENTS ta ON t.oid = ta.tour_oid AND ta.status = 'ACTIVE'
+        WHERE (t.is_active = 1 OR t.is_active IS NULL)
+          AND (
+            (ta.site_oid = :sid)
+            OR (:boid IS NOT NULL AND t.branch_oid = :boid)
+          )
+        ORDER BY t.oid
+    """), {"sid": site_id, "boid": emp_branch}).fetchall()
+
+    for fot in fo_tours:
+        t_title = fot[1]
+        if t_title and t_title not in tours_map:
+            fot_cps = db.execute(text("""
+                SELECT tc.checkpoint_oid, c.oid
+                FROM FIELD_OFFICER_TOUR_CHECKPOINTS tc
+                LEFT JOIN PATROL_CHECKPOINTS c ON (c.name = tc.checkpoint_name AND c.site_id = :sid)
+                WHERE tc.tour_oid = :toid AND tc.is_active = 1
+                ORDER BY tc.checkpoint_order
+            """), {"toid": fot[0], "sid": site_id}).fetchall()
+            cp_ids = [r[1] for r in fot_cps if r[1]]
+            tours_map[t_title] = cp_ids
             
     # Fallback to past tours or all checkpoints for this site if none mapped
     if not tours_map:
@@ -2210,12 +2270,16 @@ def get_patrol_tours(empOid: int = Query(...), site_id: Optional[int] = Query(No
             "tour_id": tour_id,
             "site_id": site_id,
             "site_name": site_name,
+            "branch_id": emp_branch,
+            "branch_name": emp_branch_name,
         })
         
     return {
         "success": True,
         "site_id": site_id,
         "site_name": site_name,
+        "branch_id": emp_branch,
+        "branch_name": emp_branch_name,
         "active_tour": {
             "id": user_active_tour.id,
             "tour_name": user_active_tour.tour_name,
@@ -2228,10 +2292,30 @@ def get_patrol_tours(empOid: int = Query(...), site_id: Optional[int] = Query(No
 @router.get("/patrol/tour/checkpoints")
 def get_tour_checkpoints(tour_name: str = Query(...), empOid: int = Query(...), site_id: Optional[int] = Query(None), db: Session = Depends(get_patrol_db)):
     """
-    Returns sequential checkpoints for a given tour with locking, completion, and GPS verification status.
+    Returns sequential checkpoints for a given tour with locking, completion, and GPS verification status,
+    strictly restricted to the officer's branch.
     """
+    emp_info = db.execute(
+        text("SELECT e.site, e.BRANCH FROM EMPLOYEE e WHERE e.oid = :oid"),
+        {"oid": empOid}
+    ).fetchone()
+    emp_site_id = emp_info[0] if emp_info else None
+    emp_branch = emp_info[1] if emp_info else None
+
+    if site_id and emp_branch:
+        s_branch = db.execute(text("SELECT BRANCH FROM SITE WHERE oid = :sid"), {"sid": site_id}).scalar()
+        if s_branch and s_branch != emp_branch:
+            site_id = None
+
     if not site_id:
-        site_id = db.execute(text("SELECT site FROM EMPLOYEE WHERE oid = :oid"), {"oid": empOid}).scalar() or 1
+        if emp_site_id:
+            s_row = db.execute(text("SELECT oid, name, BRANCH FROM SITE WHERE oid = :sid"), {"sid": emp_site_id}).fetchone()
+            if s_row and (not emp_branch or not s_row[2] or s_row[2] == emp_branch):
+                site_id = emp_site_id
+        if not site_id and emp_branch:
+            site_id = db.execute(text("SELECT oid FROM SITE WHERE BRANCH = :boid ORDER BY oid LIMIT 1"), {"boid": emp_branch}).scalar()
+        if not site_id:
+            site_id = emp_site_id or 1
 
     # 1. Find checkpoints for this tour
     cls = db.query(Checklist).filter(

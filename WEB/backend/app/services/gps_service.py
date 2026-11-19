@@ -1062,6 +1062,203 @@ def manual_site_check_out_service(
                           AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
                           AND (visit_date = %s OR created_on LIKE %s)
                     """, (checkin_formatted, checkout_formatted, open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+
+                # Option 3: If no report form was filled, auto-create a completed visit report in FIELD_OFFICER_DAY_VISIT_REPORTS
+                # so the planned visit is immediately marked complete and appears in Completed Visits
+                has_existing_report = False
+                if open_session.custom_visit_id:
+                    try:
+                        c.execute("""
+                            SELECT 1 FROM FIELD_OFFICER_DAY_VISIT_REPORTS 
+                            WHERE custom_visit_id = %s 
+                              AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                              AND (visit_date = %s OR created_on LIKE %s)
+                            LIMIT 1
+                        """, (open_session.custom_visit_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                        has_existing_report = bool(c.fetchone())
+                    except Exception:
+                        has_existing_report = False
+
+                    if not has_existing_report:
+                        try:
+                            c.execute("""
+                                SELECT 1 FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS 
+                                WHERE custom_visit_id = %s 
+                                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                                  AND (visit_date = %s OR created_on LIKE %s)
+                                LIMIT 1
+                            """, (open_session.custom_visit_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                            has_existing_report = bool(c.fetchone())
+                        except Exception:
+                            pass
+
+                    if not has_existing_report:
+                        try:
+                            c.execute("""
+                                SELECT 1 FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS 
+                                WHERE custom_visit_id = %s 
+                                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                                  AND (visit_date = %s OR created_on LIKE %s)
+                                LIMIT 1
+                            """, (open_session.custom_visit_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                            has_existing_report = bool(c.fetchone())
+                        except Exception:
+                            pass
+                elif open_session.site_id:
+                    try:
+                        c.execute("""
+                            SELECT 1 FROM FIELD_OFFICER_DAY_VISIT_REPORTS 
+                            WHERE site_id = %s 
+                              AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                              AND (visit_date = %s OR created_on LIKE %s)
+                            LIMIT 1
+                        """, (open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                        has_existing_report = bool(c.fetchone())
+                    except Exception:
+                        has_existing_report = False
+
+                    if not has_existing_report:
+                        try:
+                            c.execute("""
+                                SELECT 1 FROM FIELD_OFFICER_NIGHT_VISIT_REPORTS 
+                                WHERE site_id = %s 
+                                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                                  AND (visit_date = %s OR created_on LIKE %s)
+                                LIMIT 1
+                            """, (open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                            has_existing_report = bool(c.fetchone())
+                        except Exception:
+                            pass
+
+                    if not has_existing_report:
+                        try:
+                            c.execute("""
+                                SELECT 1 FROM FIELD_OFFICER_GENERAL_VISIT_REPORTS 
+                                WHERE site_id = %s 
+                                  AND (employee_oid = %s OR employee_oid = (SELECT emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1))
+                                  AND (visit_date = %s OR created_on LIKE %s)
+                                LIMIT 1
+                            """, (open_session.site_id, employee_id, employee_id, today_str, f"{today_str}%"))
+                            has_existing_report = bool(c.fetchone())
+                        except Exception:
+                            pass
+
+                if not has_existing_report:
+                    import json
+                    # 1. Next oid
+                    c.execute("SELECT oid FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE oid REGEXP '^[0-9]+$' ORDER BY CAST(oid AS UNSIGNED) DESC LIMIT 1")
+                    max_r = c.fetchone()
+                    if max_r:
+                        max_val = max_r["oid"] if isinstance(max_r, dict) else max_r[0]
+                        next_num = (int(max_val) + 1) if max_val else 109
+                    else:
+                        next_num = 109
+                    new_oid = str(next_num)
+
+                    # 2. Officer info
+                    c.execute("SELECT name, emp_code FROM EMPLOYEE WHERE oid = %s LIMIT 1", (employee_id,))
+                    emp_row = c.fetchone()
+                    if emp_row:
+                        emp_name = (emp_row["name"] if isinstance(emp_row, dict) else emp_row[0]) or f"Officer {employee_id}"
+                    else:
+                        emp_name = f"Officer {employee_id}"
+
+                    # 3. Client / Site info
+                    c_name = "Client"
+                    s_name = open_session.site_name or "Site"
+                    client_id = 1
+                    site_id = open_session.site_id
+                    custom_visit_id = open_session.custom_visit_id
+
+                    if custom_visit_id:
+                        c.execute("SELECT client_name, site_name FROM FIELD_OFFICER_NEW_CLIENT_VISITS WHERE oid = %s", (custom_visit_id,))
+                        ncv_row = c.fetchone()
+                        if ncv_row:
+                            c_name = (ncv_row["client_name"] if isinstance(ncv_row, dict) else ncv_row[0]) or "Custom Client"
+                            s_name = (ncv_row["site_name"] if isinstance(ncv_row, dict) else ncv_row[1]) or s_name
+                        client_id = None
+                        site_id = None
+                    elif site_id:
+                        c.execute("SELECT s.name as site_name, s.CLIENTT as client_id, cl.name as client_name FROM SITE s LEFT JOIN CLIENTT cl ON s.CLIENTT = cl.oid WHERE s.oid = %s", (site_id,))
+                        s_row = c.fetchone()
+                        if s_row:
+                            s_name = (s_row["site_name"] if isinstance(s_row, dict) else s_row[0]) or s_name
+                            client_id = (s_row["client_id"] if isinstance(s_row, dict) else s_row[1]) or 1
+                            c_name = (s_row["client_name"] if isinstance(s_row, dict) else s_row[2]) or "Client"
+
+                    # 4. Formulate report_id
+                    date_fmt = now.strftime("%d/%m/%y")
+                    visit_seq = 1
+                    try:
+                        c.execute("SHOW COLUMNS FROM FIELD_OFFICER_DAY_VISIT_REPORTS LIKE 'custom_visit_id'")
+                        has_custom_col = bool(c.fetchone())
+                    except Exception:
+                        has_custom_col = False
+
+                    try:
+                        if custom_visit_id and has_custom_col:
+                            c.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE custom_visit_id = %s", (custom_visit_id,))
+                            cnt_r = c.fetchone()
+                            if cnt_r:
+                                cnt_v = cnt_r["cnt"] if isinstance(cnt_r, dict) else cnt_r[0]
+                                if cnt_v: visit_seq = int(cnt_v) + 1
+                        elif site_id:
+                            c.execute("SELECT COUNT(*) as cnt FROM FIELD_OFFICER_DAY_VISIT_REPORTS WHERE site_id = %s", (site_id,))
+                            cnt_r = c.fetchone()
+                            if cnt_r:
+                                cnt_v = cnt_r["cnt"] if isinstance(cnt_r, dict) else cnt_r[0]
+                                if cnt_v: visit_seq = int(cnt_v) + 1
+                    except Exception:
+                        pass
+
+                    seq_str = f"{visit_seq:02d}"
+                    auto_report_id = f"{seq_str}-{c_name}-{s_name}-ODV-{date_fmt}"
+
+                    hour = now.hour
+                    shift = "Night" if (hour >= 20 or hour < 7) else "Day"
+
+                    lat = open_session.exit_latitude or open_session.entry_latitude or ""
+                    lng = open_session.exit_longitude or open_session.entry_longitude or ""
+                    gps_str = f"{lat},{lng}" if (lat and lng) else ""
+                    empty_json = json.dumps([])
+                    overall_remarks = "Site visit completed via Check-In & Check-Out"
+
+                    if has_custom_col:
+                        insert_sql = """
+                            INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
+                                report_id, unit, client_id, site_id, custom_visit_id, visit_date,
+                                visit_type, officer, shift, `check-in_time`, `check-out_time`,
+                                gps, photos, guards, checklist, observations,
+                                suggestions, attachments, status, created_on,
+                                lecture_details, random_checking, overall_remarks, employee_oid, oid
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                        params = (
+                            auto_report_id, s_name, client_id, site_id, custom_visit_id, today_str,
+                            "Day Visit", emp_name, shift, checkin_formatted, checkout_formatted,
+                            gps_str, empty_json, empty_json, empty_json, empty_json,
+                            "", empty_json, "Completed", now.isoformat(),
+                            "", "", overall_remarks, str(employee_id), new_oid
+                        )
+                    else:
+                        insert_sql = """
+                            INSERT INTO FIELD_OFFICER_DAY_VISIT_REPORTS (
+                                report_id, unit, client_id, site_id, visit_date,
+                                visit_type, officer, shift, `check-in_time`, `check-out_time`,
+                                gps, photos, guards, checklist, observations,
+                                suggestions, attachments, status, created_on,
+                                lecture_details, random_checking, overall_remarks, employee_oid, oid
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                        params = (
+                            auto_report_id, s_name, client_id, site_id, today_str,
+                            "Day Visit", emp_name, shift, checkin_formatted, checkout_formatted,
+                            gps_str, empty_json, empty_json, empty_json, empty_json,
+                            "", empty_json, "Completed", now.isoformat(),
+                            "", "", overall_remarks, str(employee_id), new_oid
+                        )
+                    c.execute(insert_sql, params)
+
                 raw_conn.commit()
             finally:
                 if c:

@@ -3,11 +3,11 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { Moon, Plus, Trash2, ChevronDown, ChevronUp, Building, X, Clock, MapPin, Camera, Lock, Users, CheckSquare, MessageSquare, Lightbulb, Layers, ShieldCheck } from 'lucide-react-native';
+import { Moon, Plus, Trash2, ChevronDown, ChevronUp, Building, X, Clock, MapPin, Camera, Lock, Users, CheckSquare, MessageSquare, Lightbulb, Layers, ShieldCheck, CheckCircle2, SlidersHorizontal, Hash, AlignLeft } from 'lucide-react-native';
 import { useAuth } from '../../../context/AuthContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { getSites, getClients, getSiteGuards, Site, Client, checkOutSiteVisit } from '../../../services/siteService';
-import { submitNightVisitReport, getNightVisitTemplates } from '../../../services/visitService';
+import { submitNightVisitReport, getNightVisitTemplates, getSitePreviousQuestions } from '../../../services/visitService';
 import { clearActiveCheckIn, markReportSubmittedForCheckIn } from '../../../services/db';
 import { THEME } from '../../../constants/theme';
 import { useTheme } from '../../../context/ThemeContext';
@@ -82,6 +82,28 @@ export default function CreateNightVisitReportScreen() {
   // Custom On-Spot Questions State
   const [customQuestions, setCustomQuestions] = useState<Array<{ id: string; section?: string; question: string; isCustom?: boolean }>>([]);
   const [newQuestionText, setNewQuestionText] = useState('');
+  const [isPreviousQuestionsLoaded, setIsPreviousQuestionsLoaded] = useState(false);
+
+  // Custom Answer Types State ('satisfactory' | 'yes_no' | 'number' | 'text')
+  const [questionAnswerTypes, setQuestionAnswerTypes] = useState<Record<string, 'satisfactory' | 'yes_no' | 'number' | 'text'>>({});
+  const [answerTypeModalVisible, setAnswerTypeModalVisible] = useState(false);
+  const [selectedQuestionForTypeChange, setSelectedQuestionForTypeChange] = useState<string | null>(null);
+
+  const handleSelectAnswerType = (type: 'satisfactory' | 'yes_no' | 'number' | 'text') => {
+    if (!selectedQuestionForTypeChange) return;
+    const qText = selectedQuestionForTypeChange;
+    setQuestionAnswerTypes((prev) => ({ ...prev, [qText]: type }));
+    setChecklist((prev) => {
+      let newVal = 'Satisfactory';
+      if (type === 'yes_no') newVal = 'Yes';
+      else if (type === 'satisfactory') newVal = 'Satisfactory';
+      else if (type === 'number') newVal = '0';
+      else if (type === 'text') newVal = '';
+      return { ...prev, [qText]: newVal };
+    });
+    setAnswerTypeModalVisible(false);
+    setSelectedQuestionForTypeChange(null);
+  };
 
   const handleCheckInNow = () => {
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -305,7 +327,7 @@ export default function CreateNightVisitReportScreen() {
   };
 
   // Checklist
-  const [checklist, setChecklist] = useState<Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'>>({});
+  const [checklist, setChecklist] = useState<Record<string, string>>({});
 
   // GPS Location State
   const [gps, setGps] = useState('');
@@ -367,6 +389,68 @@ export default function CreateNightVisitReportScreen() {
     }
   };
 
+  const loadQuestionsForSite = async (targetSiteId: string, poolOverride?: any[]) => {
+    if (!targetSiteId) return;
+    try {
+      const prevData = await getSitePreviousQuestions(targetSiteId, 'NIGHT_VISIT');
+      if (prevData && prevData.has_previous && prevData.questions && prevData.questions.length > 0) {
+        const prevTemplateQs = (prevData.template_questions && prevData.template_questions.length > 0)
+          ? prevData.template_questions
+          : prevData.questions.filter((q: any) => !q.isCustom);
+
+        const prevCustomQs = (prevData.custom_questions && prevData.custom_questions.length > 0)
+          ? prevData.custom_questions
+          : prevData.questions.filter((q: any) => !!q.isCustom);
+
+        const finalTemplateQs = prevTemplateQs.length > 0 ? prevTemplateQs : prevData.questions.slice(0, 10);
+        const finalCustomQs = prevTemplateQs.length > 0 ? prevCustomQs : prevData.questions.slice(10);
+
+        setTemplateQuestions(finalTemplateQs);
+        setCustomQuestions(finalCustomQs);
+        setIsPreviousQuestionsLoaded(true);
+
+        const initialAnswerTypes: Record<string, 'satisfactory' | 'yes_no' | 'number' | 'text'> = {};
+        const initChecklist: Record<string, string> = {};
+        [...finalTemplateQs, ...finalCustomQs].forEach((qItem: any) => {
+          const text = qItem.question || String(qItem);
+          const rawType = String(qItem.answerType || 'satisfactory').toLowerCase();
+          const aType: 'satisfactory' | 'yes_no' | 'number' | 'text' =
+            rawType.includes('yes') ? 'yes_no' :
+            rawType.includes('num') || rawType.includes('count') ? 'number' :
+            rawType.includes('text') || rawType.includes('remark') ? 'text' : 'satisfactory';
+          initialAnswerTypes[text] = aType;
+          if (aType === 'yes_no') initChecklist[text] = 'Yes';
+          else if (aType === 'number') initChecklist[text] = '0';
+          else if (aType === 'text') initChecklist[text] = '';
+          else initChecklist[text] = 'Satisfactory';
+        });
+        setQuestionAnswerTypes(initialAnswerTypes);
+        setChecklist(initChecklist);
+        return;
+      }
+    } catch (e) {
+      console.warn('Error loading previous site questions:', e);
+    }
+
+    // Fallback to default questions if no previous visit questions exist for this site
+    setIsPreviousQuestionsLoaded(false);
+    const pool = poolOverride || allTemplatePool;
+    const poolQuestions = pool && pool.length > 0 ? pool : DEFAULT_NIGHT_MANDATORY_QUESTIONS;
+    const requiredQs = poolQuestions.filter(
+      (q: any) => q.required === true || q.is_required === true || q.required === 1 || q.is_required === 1 || q.mandatory === true
+    );
+    const defaultList = requiredQs.length > 0 ? requiredQs : poolQuestions.slice(0, 5);
+    setTemplateQuestions(defaultList);
+    setCustomQuestions([]);
+
+    const initChecklist: Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'> = {};
+    defaultList.forEach((qItem: any) => {
+      const text = qItem.question || String(qItem);
+      initChecklist[text] = 'Satisfactory';
+    });
+    setChecklist(initChecklist);
+  };
+
   const loadClientsAndSites = async () => {
     try {
       const empOidVal = user?.id || (user as any)?.empOid || user?.employee_id || 7558;
@@ -380,7 +464,6 @@ export default function CreateNightVisitReportScreen() {
       setSites(siteData || []);
 
       // Load DB template questions from FIELD_OFFICER_NIGHT_VISIT_TEMPLATES or fallback to mandatory questions
-      // Load DB template questions from FIELD_OFFICER_NIGHT_VISIT_TEMPLATES
       let allQs: any[] = [];
       if (templates && templates.length > 0 && templates[0].questions?.length > 0) {
         allQs = templates[0].questions;
@@ -416,6 +499,7 @@ export default function CreateNightVisitReportScreen() {
           setSiteId(String(foundSite.id));
           setSiteName(foundSite.name);
           fetchGuards(String(foundSite.id), shift);
+          await loadQuestionsForSite(String(foundSite.id), allQs);
           const cId = foundSite.client_id || params.clientId;
           if (cId) {
             setClientId(String(cId));
@@ -594,10 +678,12 @@ export default function CreateNightVisitReportScreen() {
           const qPhotos = Array.isArray(questionPhotos[text])
             ? questionPhotos[text]
             : (questionPhotos[text] ? [questionPhotos[text]] : []);
+          const aType = questionAnswerTypes[text] || qItem.answerType || 'satisfactory';
           return {
             section: qItem.section || 'General',
             question: text,
-            status: checklist[text] || 'Satisfactory',
+            answerType: aType,
+            status: checklist[text] !== undefined ? checklist[text] : (aType === 'yes_no' ? 'Yes' : aType === 'number' ? '0' : 'Satisfactory'),
             isCustom: !!qItem.isCustom,
             photos: qPhotos,
             photo: qPhotos[0] || null,
@@ -770,10 +856,39 @@ export default function CreateNightVisitReportScreen() {
               Officer Night Round Checklist ({templateQuestions.length + customQuestions.length} Items)
             </Text>
 
+            {isPreviousQuestionsLoaded && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : '#EFF6FF',
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  marginBottom: 14,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(59, 130, 246, 0.3)' : '#BFDBFE',
+                }}
+              >
+                <Clock size={14} color="#3B82F6" style={{ marginRight: 8 }} />
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '600',
+                    color: isDark ? '#93C5FD' : '#1D4ED8',
+                    flex: 1,
+                  }}
+                >
+                  Questions remembered from previous report at this site (including custom on-spot items)
+                </Text>
+              </View>
+            )}
+
             {[...templateQuestions, ...customQuestions].map((item: any, idx) => {
               const qText = item.question || String(item);
-              const status = checklist[qText] || 'Satisfactory';
               const isCustom = !!item.isCustom;
+              const aType = questionAnswerTypes[qText] || item.answerType || 'satisfactory';
+              const status = checklist[qText] !== undefined ? checklist[qText] : (aType === 'yes_no' ? 'Yes' : aType === 'number' ? '0' : aType === 'text' ? '' : 'Satisfactory');
 
               return (
                 <View key={item.id || idx} style={{ marginBottom: 16, backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.surfaceSecondary, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : colors.border }}>
@@ -788,6 +903,32 @@ export default function CreateNightVisitReportScreen() {
                     </View>
 
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      {/* Answer Type Switcher Button */}
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          setSelectedQuestionForTypeChange(qText);
+                          setAnswerTypeModalVisible(true);
+                        }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9',
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 6,
+                          borderWidth: 1,
+                          borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : '#CBD5E1',
+                          marginRight: 6,
+                        }}
+                      >
+                        <SlidersHorizontal size={11} color={colors.textSecondary} style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textSecondary }}>
+                          {aType === 'satisfactory' ? 'Sat/Unsat' : aType === 'yes_no' ? 'Yes/No' : aType === 'number' ? 'Count' : 'Text'}
+                        </Text>
+                        <ChevronDown size={11} color={colors.textSecondary} style={{ marginLeft: 2 }} />
+                      </TouchableOpacity>
+
                       <View
                         style={{
                           backgroundColor: isCustom ? 'rgba(245, 158, 11, 0.2)' : 'rgba(59, 130, 246, 0.2)',
@@ -816,48 +957,154 @@ export default function CreateNightVisitReportScreen() {
                     </View>
                   </View>
 
-                  {/* 3-Way Status Toggle Buttons */}
-                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
-                    {(['Satisfactory', 'Unsatisfactory', 'NA'] as const).map((val) => {
-                      const isSelected = status === val;
-                      let bg = isDark ? 'rgba(255, 255, 255, 0.05)' : colors.card;
-                      let border = isDark ? 'rgba(255, 255, 255, 0.15)' : colors.border;
-                      let color = colors.textSecondary;
-                      if (isSelected) {
-                        if (val === 'Satisfactory') {
-                          bg = isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7';
-                          border = '#10B981';
-                          color = isDark ? '#6EE7B7' : '#15803D';
-                        } else if (val === 'Unsatisfactory') {
-                          bg = isDark ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2';
-                          border = '#EF4444';
-                          color = isDark ? '#FCA5A5' : '#B91C1C';
-                        } else {
-                          bg = isDark ? 'rgba(148, 163, 184, 0.25)' : '#F1F5F9';
-                          border = '#94A3B8';
-                          color = isDark ? '#E2E8F0' : '#475569';
+                  {/* Render Controls Based on Answer Type */}
+                  {aType === 'satisfactory' && (
+                    <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                      {(['Satisfactory', 'Unsatisfactory', 'NA'] as const).map((val) => {
+                        const isSelected = status === val;
+                        let bg = isDark ? 'rgba(255, 255, 255, 0.05)' : colors.card;
+                        let border = isDark ? 'rgba(255, 255, 255, 0.15)' : colors.border;
+                        let color = colors.textSecondary;
+                        if (isSelected) {
+                          if (val === 'Satisfactory') {
+                            bg = isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7';
+                            border = '#10B981';
+                            color = isDark ? '#6EE7B7' : '#15803D';
+                          } else if (val === 'Unsatisfactory') {
+                            bg = isDark ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2';
+                            border = '#EF4444';
+                            color = isDark ? '#FCA5A5' : '#B91C1C';
+                          } else {
+                            bg = isDark ? 'rgba(148, 163, 184, 0.25)' : '#F1F5F9';
+                            border = '#94A3B8';
+                            color = isDark ? '#E2E8F0' : '#475569';
+                          }
                         }
-                      }
-                      return (
-                        <TouchableOpacity
-                          key={val}
-                          activeOpacity={0.8}
-                          onPress={() => setChecklist((prev) => ({ ...prev, [qText]: val }))}
-                          style={{
-                            flex: 1,
-                            paddingVertical: 8,
-                            borderRadius: 6,
-                            borderWidth: 1,
-                            backgroundColor: bg,
-                            borderColor: border,
-                            alignItems: 'center',
-                          }}
-                        >
-                          <Text style={{ fontSize: 11, fontWeight: isSelected ? '800' : '600', color }}>{val}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                        return (
+                          <TouchableOpacity
+                            key={val}
+                            activeOpacity={0.8}
+                            onPress={() => setChecklist((prev) => ({ ...prev, [qText]: val }))}
+                            style={{
+                              flex: 1,
+                              paddingVertical: 8,
+                              borderRadius: 6,
+                              borderWidth: 1,
+                              backgroundColor: bg,
+                              borderColor: border,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: isSelected ? '800' : '600', color }}>{val}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {aType === 'yes_no' && (
+                    <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                      {(['Yes', 'No', 'NA'] as string[]).map((val) => {
+                        const isSelected = status === val;
+                        let bg = isDark ? 'rgba(255, 255, 255, 0.05)' : colors.card;
+                        let border = isDark ? 'rgba(255, 255, 255, 0.15)' : colors.border;
+                        let color = colors.textSecondary;
+                        if (isSelected) {
+                          if (val === 'Yes') {
+                            bg = isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7';
+                            border = '#10B981';
+                            color = isDark ? '#6EE7B7' : '#15803D';
+                          } else if (val === 'No') {
+                            bg = isDark ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2';
+                            border = '#EF4444';
+                            color = isDark ? '#FCA5A5' : '#B91C1C';
+                          } else {
+                            bg = isDark ? 'rgba(148, 163, 184, 0.25)' : '#F1F5F9';
+                            border = '#94A3B8';
+                            color = isDark ? '#E2E8F0' : '#475569';
+                          }
+                        }
+                        return (
+                          <TouchableOpacity
+                            key={val}
+                            activeOpacity={0.8}
+                            onPress={() => setChecklist((prev) => ({ ...prev, [qText]: val }))}
+                            style={{
+                              flex: 1,
+                              paddingVertical: 8,
+                              borderRadius: 6,
+                              borderWidth: 1,
+                              backgroundColor: bg,
+                              borderColor: border,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, fontWeight: isSelected ? '800' : '600', color }}>{val}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {aType === 'number' && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          const currentNum = parseInt(status, 10) || 0;
+                          setChecklist((prev) => ({ ...prev, [qText]: String(Math.max(0, currentNum - 1)) }));
+                        }}
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 8,
+                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text }}>-</Text>
+                      </TouchableOpacity>
+
+                      <View style={{ flex: 1 }}>
+                        <Input
+                          placeholder="Count"
+                          keyboardType="numeric"
+                          value={String(status || '0')}
+                          onChangeText={(val) => setChecklist((prev) => ({ ...prev, [qText]: val }))}
+                          style={{ textAlign: 'center', fontWeight: '800', fontSize: 16 }}
+                        />
+                      </View>
+
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          const currentNum = parseInt(status, 10) || 0;
+                          setChecklist((prev) => ({ ...prev, [qText]: String(currentNum + 1) }));
+                        }}
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 8,
+                          backgroundColor: THEME.primary,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFF' }}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {aType === 'text' && (
+                    <View style={{ marginBottom: 8 }}>
+                      <Input
+                        placeholder="Type observation or remarks..."
+                        value={String(status || '')}
+                        onChangeText={(val) => setChecklist((prev) => ({ ...prev, [qText]: val }))}
+                      />
+                    </View>
+                  )}
 
                   {/* Per-Question Photo Attachment & Multi-Photo Preview */}
                   {(() => {
@@ -1331,6 +1578,18 @@ export default function CreateNightVisitReportScreen() {
                     setClientName(item.name);
                     setSiteId('');
                     setSiteName('');
+                    setIsPreviousQuestionsLoaded(false);
+                    const requiredQs = allTemplatePool.filter(
+                      (q: any) => q.required === true || q.is_required === true || q.required === 1 || q.is_required === 1 || q.mandatory === true
+                    );
+                    const defaultList = requiredQs.length > 0 ? requiredQs : allTemplatePool.slice(0, 5);
+                    setTemplateQuestions(defaultList);
+                    setCustomQuestions([]);
+                    const initChecklist: Record<string, 'Satisfactory' | 'Unsatisfactory' | 'NA'> = {};
+                    defaultList.forEach((qItem: any) => {
+                      initChecklist[qItem.question || String(qItem)] = 'Satisfactory';
+                    });
+                    setChecklist(initChecklist);
                     setClientModalVisible(false);
                   }}
                 >
@@ -1385,8 +1644,11 @@ export default function CreateNightVisitReportScreen() {
                 <TouchableOpacity
                   style={styles.modalItem}
                   onPress={() => {
-                    setSiteId(String(item.id));
+                    const selectedSiteId = String(item.id);
+                    setSiteId(selectedSiteId);
                     setSiteName(item.name);
+                    fetchGuards(selectedSiteId, shift);
+                    loadQuestionsForSite(selectedSiteId);
                     if (item.client_id) {
                       setClientId(String(item.client_id));
                       setClientName(item.client_name || '');
@@ -1406,6 +1668,112 @@ export default function CreateNightVisitReportScreen() {
             />
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Answer Type Selection Modal */}
+      <Modal
+        visible={answerTypeModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAnswerTypeModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setAnswerTypeModalVisible(false)}
+        >
+          <View style={[styles.modalContainer, { maxHeight: 420 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Change Answer Type</Text>
+              <TouchableOpacity onPress={() => setAnswerTypeModalVisible(false)}>
+                <X color="#94A3B8" size={24} />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14 }}>
+              Select answer format for this checkpoint:
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.modalItem,
+                (questionAnswerTypes[selectedQuestionForTypeChange || ''] || 'satisfactory') === 'satisfactory' && {
+                  borderColor: THEME.primary,
+                  borderWidth: 1.5,
+                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.1)' : '#EFF6FF',
+                },
+              ]}
+              onPress={() => handleSelectAnswerType('satisfactory')}
+            >
+              <CheckCircle2 color="#10B981" size={20} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalItemText}>Satisfactory / Unsatisfactory</Text>
+                <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                  3-state toggle: Satisfactory, Unsatisfactory, or NA
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modalItem,
+                questionAnswerTypes[selectedQuestionForTypeChange || ''] === 'yes_no' && {
+                  borderColor: THEME.primary,
+                  borderWidth: 1.5,
+                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.1)' : '#EFF6FF',
+                },
+              ]}
+              onPress={() => handleSelectAnswerType('yes_no')}
+            >
+              <CheckSquare color="#3B82F6" size={20} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalItemText}>Yes / No</Text>
+                <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                  Direct confirmation: Yes, No, or NA
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modalItem,
+                questionAnswerTypes[selectedQuestionForTypeChange || ''] === 'number' && {
+                  borderColor: THEME.primary,
+                  borderWidth: 1.5,
+                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.1)' : '#EFF6FF',
+                },
+              ]}
+              onPress={() => handleSelectAnswerType('number')}
+            >
+              <Hash color="#F59E0B" size={20} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalItemText}>Number / Count</Text>
+                <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                  Numeric counter (+ / -) for quantity checks
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.modalItem,
+                questionAnswerTypes[selectedQuestionForTypeChange || ''] === 'text' && {
+                  borderColor: THEME.primary,
+                  borderWidth: 1.5,
+                  backgroundColor: isDark ? 'rgba(59, 130, 246, 0.1)' : '#EFF6FF',
+                },
+              ]}
+              onPress={() => handleSelectAnswerType('text')}
+            >
+              <AlignLeft color="#8B5CF6" size={20} style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalItemText}>Text / Remarks</Text>
+                <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                  Free-text input for detailed observations
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       <CustomAlertModal
