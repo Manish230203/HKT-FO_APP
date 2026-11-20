@@ -7,6 +7,7 @@ import { AttendanceProvider } from '../context/AttendanceContext';
 import { LanguageProvider } from '../context/LanguageContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import LocationGuard from '../components/LocationGuard';
+import NetworkGuard from '../components/NetworkGuard';
 
 function ThemedNavigation() {
   const { colors, isDark } = useTheme();
@@ -34,6 +35,7 @@ function ThemedNavigation() {
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack
         screenOptions={{
+          headerBackTitle: '',
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: 'bold' },
@@ -67,19 +69,34 @@ function ThemedNavigation() {
               />
               <Stack.Screen
                 name="visits/select-type"
-                options={{ title: 'Select Visit Type', gestureEnabled: true, fullScreenGestureEnabled: true }}
+                options={{ headerShown: false, gestureEnabled: true, fullScreenGestureEnabled: true }}
               />
               <Stack.Screen
                 name="visits/day-visit/day-visit-create"
-                options={{ title: 'Day Visit Report', gestureEnabled: true, fullScreenGestureEnabled: true }}
+                options={{
+                  title: 'Day Visit Report',
+                  headerBackTitle: '',
+                  gestureEnabled: true,
+                  fullScreenGestureEnabled: true,
+                }}
               />
               <Stack.Screen
                 name="visits/night-visit/night-visit-create"
-                options={{ title: 'Night Visit Report', gestureEnabled: true, fullScreenGestureEnabled: true }}
+                options={{
+                  title: 'Night Visit Report',
+                  headerBackTitle: '',
+                  gestureEnabled: true,
+                  fullScreenGestureEnabled: true,
+                }}
               />
               <Stack.Screen
                 name="visits/general-visit/general-visit-create"
-                options={{ title: 'General Visit Report', gestureEnabled: true, fullScreenGestureEnabled: true }}
+                options={{
+                  title: 'General Visit Report',
+                  headerBackTitle: '',
+                  gestureEnabled: true,
+                  fullScreenGestureEnabled: true,
+                }}
               />
               <Stack.Screen
                 name="visits/scan-checklist"
@@ -99,7 +116,12 @@ function ThemedNavigation() {
               />
               <Stack.Screen
                 name="visits/tours/tour-summary"
-                options={{ title: 'Tour Inspection Summary', gestureEnabled: true, fullScreenGestureEnabled: true }}
+                options={{
+                  title: 'Tour Inspection Summary',
+                  headerBackTitle: '',
+                  gestureEnabled: true,
+                  fullScreenGestureEnabled: true,
+                }}
               />
               <Stack.Screen
                 name="patrol/index"
@@ -138,7 +160,9 @@ export default function RootLayout() {
         <AttendanceProvider>
           <LanguageProvider>
             <ThemeProvider>
-              <ThemedNavigation />
+              <NetworkGuard>
+                <ThemedNavigation />
+              </NetworkGuard>
             </ThemeProvider>
           </LanguageProvider>
         </AttendanceProvider>

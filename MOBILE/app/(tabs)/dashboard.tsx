@@ -530,7 +530,11 @@ export default function DashboardScreen() {
     setIsCheckedIn(isOfficerActive);
     if (isOfficerActive) {
       if (isServerActive && todayRecord?.check_in) {
-        setSessionStart(new Date(todayRecord.check_in));
+        let parsed = new Date(todayRecord.check_in);
+        if (isNaN(parsed.getTime()) && typeof todayRecord.check_in === 'string') {
+          parsed = new Date(todayRecord.check_in.replace(' ', 'T'));
+        }
+        setSessionStart(!isNaN(parsed.getTime()) ? parsed : new Date());
       } else if (activePunch) {
         setSessionStart(new Date(activePunch.timestamp || Date.now()));
       }
@@ -562,13 +566,17 @@ export default function DashboardScreen() {
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
     if (isCheckedIn && sessionStart) {
-      timer = setInterval(() => {
-        const diff = Math.floor((new Date().getTime() - sessionStart.getTime()) / 1000);
+      const updateTimer = () => {
+        // Math.max(0, ...) prevents clock drift / skew between device and server from causing negative countdowns like -1:-1:-17
+        const diff = Math.max(0, Math.floor((Date.now() - sessionStart.getTime()) / 1000));
         const hrs = String(Math.floor(diff / 3600)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
         const secs = String(diff % 60).padStart(2, '0');
         setSessionTime(`${hrs}:${mins}:${secs}`);
-      }, 1000);
+      };
+
+      updateTimer();
+      timer = setInterval(updateTimer, 1000);
     } else {
       setSessionTime('00:00:00');
     }

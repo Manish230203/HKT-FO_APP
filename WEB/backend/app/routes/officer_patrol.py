@@ -6968,12 +6968,13 @@ def get_site_manpower_details(
     try:
 
         # Sanitize query parameters in case called directly as python functions
-
         shift_val = str(shift_id).strip() if (shift_id is not None and not str(type(shift_id)).endswith("Query'>") and not hasattr(shift_id, "default")) else None
-
         if shift_val in ("", "None", "null"):
-
             shift_val = None
+
+        date_val = str(date).strip() if (date is not None and not str(type(date)).endswith("Query'>") and not hasattr(date, "default")) else None
+        if date_val in ("", "None", "null"):
+            date_val = None
 
 
 
@@ -7077,310 +7078,209 @@ def get_site_manpower_details(
 
 
 
-        # 3. Query designation breakdown
-
-        # Filter out management/officer roles:
-
-        desig_query = """
-
-            SELECT sdc.DESIGNATION as designation_id, d.name as desig_name, d.name_full as desig_full_name,
-
-                   SUM(sdc.planned_head_count) as planned, SUM(sdc.actual_head_count) as actual
-
-            FROM SHIFT_DESIGNATION_COUNT sdc
-
-            JOIN SHIFT sh ON sdc.SHIFT = sh.oid
-
-            JOIN DESIGNATION d ON sdc.DESIGNATION = d.oid
-
-            WHERE sh.SITE = %s
-
-        """
-
-        params = [site_id]
-
-
-
-        if shift_val and shift_val != "all" and shift_val.isdigit():
-
-            desig_query += " AND sh.oid = %s"
-
-            params.append(int(shift_val))
-
-
-
-        desig_query += """
-
-            AND (d.name IS NULL OR (
-
-                UPPER(d.name) NOT LIKE '%%OFFICER%%' 
-
-                AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
-
-            ))
-
-            GROUP BY sdc.DESIGNATION, d.name, d.name_full
-
-        """
-
-        cursor.execute(desig_query, params)
-
-        desig_rows = cursor.fetchall() or []
-
-
-
-        # If SHIFT_DESIGNATION_COUNT had no records, query active EMPLOYEE grouped by designation
-
-        if not desig_rows:
-
-            emp_desig_query = """
-
-                SELECT e.DESIGNATION as designation_id,
-
-                       COALESCE(d.name, 'S/G') as desig_name,
-
-                       COALESCE(d.name_full, 'Security Guard') as desig_full_name,
-
-                       COUNT(*) as active_count
-
-                FROM EMPLOYEE e
-
-                LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
-
-                WHERE e.SITE = %s AND e.active = 1
-
-                  AND (d.name IS NULL OR (
-
-                      UPPER(d.name) NOT LIKE '%%OFFICER%%' 
-
-                      AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
-
-                  ))
-
-                GROUP BY e.DESIGNATION, d.name, d.name_full
-
-            """
-
-            cursor.execute(emp_desig_query, (site_id,))
-
-            emp_rows = cursor.fetchall() or []
-
-
-
-            # Check SITE_DESIGNATION for planned counts
-
+        # 3. Determine target date for shift roster queries (CURDATE() or latest available attendance date in SDC)
+        target_date = date_val
+        if not target_date:
             cursor.execute("""
-
-                SELECT sd.DESIGNATION as designation_id, sd.standard_deployment
-
-                FROM SITE_DESIGNATION sd
-
-                WHERE sd.SITE = %s
-
+                SELECT MAX(sdc.attendance_date) as max_date
+                FROM SHIFT_DESIGNATION_COUNT sdc
+                JOIN SHIFT sh ON sdc.SHIFT = sh.oid
+                WHERE sh.SITE = %s
             """, (site_id,))
+            max_d_row = cursor.fetchone()
+            target_date = max_d_row["max_date"] if max_d_row and max_d_row["max_date"] else None
 
-            std_map = {r["designation_id"]: r["standard_deployment"] for r in (cursor.fetchall() or [])}
-
-
-
-            num_shifts = max(1, len(shifts) - 1)
-
-            is_single_shift = bool(shift_val and shift_val != "all")
-
-
-
-            for er in emp_rows:
-
-                d_id = er["designation_id"]
-
-                full_act = int(er["active_count"])
-
-                full_plan = int(std_map.get(d_id, full_act))
-
-
-
-                if is_single_shift:
-
-                    plan = max(1, round(full_plan / num_shifts))
-
-                    act = max(0, round(full_act / num_shifts))
-
-                else:
-
-                    plan = full_plan
-
-                    act = full_act
-
-
-
-                desig_rows.append({
-
-                    "designation_id": d_id,
-
-                    "desig_name": er["desig_name"],
-
-                    "desig_full_name": er["desig_full_name"],
-
-                    "planned": plan,
-
-                    "actual": act
-
-                })
-
-
-
-        # Query Live Punches for today per designation from ATTENDANCE_CELL (Option B)
-
+        # 4. Standard deployment from SITE_DESIGNATION
         cursor.execute("""
-
-            SELECT COALESCE(ac.EMPLOYEE_DESIGNATION, e.DESIGNATION) as desig_id,
-
-                   COUNT(DISTINCT ac.EMPLOYEE) as live_cnt
-
-            FROM ATTENDANCE_CELL ac
-
-            LEFT JOIN EMPLOYEE e ON ac.EMPLOYEE = e.oid
-
-            WHERE (ac.ATTENDANCE_SITE = %s OR ac.EMPLOYEE_SITE = %s)
-
-              AND ac.attendance_date = CURDATE()
-
-              AND UPPER(ac.attendance_state) IN ('PRESENT', 'IN')
-
-            GROUP BY desig_id
-
-        """, (site_id, site_id))
-
-        live_cell_rows = cursor.fetchall() or []
-
-        live_desig_map = {r["desig_id"]: int(r["live_cnt"]) for r in live_cell_rows if r.get("desig_id")}
-
-
-
-        # Fallback check on EMPLOYEE_ATTENDANCE
-
-        cursor.execute("""
-
-            SELECT e.DESIGNATION as desig_id,
-
-                   COUNT(DISTINCT ea.EMPLOYEE) as ea_cnt
-
-            FROM EMPLOYEE_ATTENDANCE ea
-
-            JOIN EMPLOYEE e ON ea.EMPLOYEE = e.oid
-
-            WHERE (ea.EMPLOYEE_SITE = %s)
-
-              AND ea.duty_date = CURDATE()
-
-              AND UPPER(ea.status) IN ('PRESENT', 'DEPLOYED')
-
-            GROUP BY e.DESIGNATION
-
+            SELECT sd.DESIGNATION as designation_id, sd.standard_deployment,
+                   d.name as desig_name, d.name_full as desig_full_name
+            FROM SITE_DESIGNATION sd
+            JOIN DESIGNATION d ON sd.DESIGNATION = d.oid
+            WHERE sd.SITE = %s
         """, (site_id,))
+        site_desig_rows = cursor.fetchall() or []
+        has_std = any(int(r.get("standard_deployment") or 0) > 0 for r in site_desig_rows)
+        std_req_map = {r["designation_id"]: int(r.get("standard_deployment") or 0) for r in site_desig_rows}
 
-        for ea_r in (cursor.fetchall() or []):
+        # 5. Active deployed employees at site by designation (Option B: Deployed Strength)
+        cursor.execute("""
+            SELECT e.DESIGNATION as designation_id,
+                   d.name as desig_name, d.name_full as desig_full_name,
+                   COUNT(*) as active_count
+            FROM EMPLOYEE e
+            LEFT JOIN DESIGNATION d ON e.DESIGNATION = d.oid
+            WHERE e.SITE = %s AND e.active = 1
+              AND (d.name IS NULL OR (
+                  UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                  AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+              ))
+            GROUP BY e.DESIGNATION, d.name, d.name_full
+        """, (site_id,))
+        emp_active_rows = cursor.fetchall() or []
+        active_emp_map = {r["designation_id"]: int(r.get("active_count") or 0) for r in emp_active_rows}
 
-            d_id = ea_r.get("desig_id")
+        is_single_shift = bool(shift_val and shift_val != "all" and str(shift_val).isdigit())
 
-            if d_id:
+        # 6. Live punch attendance for today per client designation from ATTENDANCE_CELL (Option B: Live Present)
+        if is_single_shift:
+            # Query live punches specifically linked to this shift
+            cursor.execute("""
+                SELECT COALESCE(ac.CLIENT_DESIGNATION, e.DESIGNATION) as desig_id,
+                       COUNT(DISTINCT ac.EMPLOYEE) as live_cnt
+                FROM ATTENDANCE_CELL ac
+                JOIN ATTENDANCE_TIME_LOG atl ON atl.ATTENDANCE_CELL = ac.oid
+                JOIN SHIFT_DESIGNATION_COUNT sdc ON atl.SHIFT_DESIGNATION_COUNT = sdc.oid
+                LEFT JOIN EMPLOYEE e ON ac.EMPLOYEE = e.oid
+                WHERE (ac.ATTENDANCE_SITE = %s OR ac.EMPLOYEE_SITE = %s)
+                  AND ac.attendance_date = CURDATE()
+                  AND UPPER(ac.attendance_state) IN ('PRESENT', 'IN')
+                  AND sdc.SHIFT = %s
+                GROUP BY desig_id
+            """, (site_id, site_id, int(shift_val)))
+        else:
+            # All Shifts (24 Hours): All live punches for today across the site
+            cursor.execute("""
+                SELECT COALESCE(ac.CLIENT_DESIGNATION, e.DESIGNATION) as desig_id,
+                       COUNT(DISTINCT ac.EMPLOYEE) as live_cnt
+                FROM ATTENDANCE_CELL ac
+                LEFT JOIN EMPLOYEE e ON ac.EMPLOYEE = e.oid
+                WHERE (ac.ATTENDANCE_SITE = %s OR ac.EMPLOYEE_SITE = %s)
+                  AND ac.attendance_date = CURDATE()
+                  AND UPPER(ac.attendance_state) IN ('PRESENT', 'IN')
+                GROUP BY desig_id
+            """, (site_id, site_id))
+        live_cell_rows = cursor.fetchall() or []
+        live_desig_map = {r["desig_id"]: int(r.get("live_cnt") or 0) for r in live_cell_rows if r.get("desig_id")}
 
-                live_desig_map[d_id] = max(live_desig_map.get(d_id, 0), int(ea_r["ea_cnt"]))
+        # Fallback check on EMPLOYEE_ATTENDANCE (only for all-shifts)
+        if not is_single_shift:
+            cursor.execute("""
+                SELECT e.DESIGNATION as desig_id,
+                       COUNT(DISTINCT ea.EMPLOYEE) as ea_cnt
+                FROM EMPLOYEE_ATTENDANCE ea
+                JOIN EMPLOYEE e ON ea.EMPLOYEE = e.oid
+                WHERE (ea.EMPLOYEE_SITE = %s)
+                  AND ea.duty_date = CURDATE()
+                  AND UPPER(ea.status) IN ('PRESENT', 'DEPLOYED')
+                GROUP BY e.DESIGNATION
+            """, (site_id,))
+            for ea_r in (cursor.fetchall() or []):
+                d_id = ea_r.get("desig_id")
+                if d_id:
+                    live_desig_map[d_id] = max(live_desig_map.get(d_id, 0), int(ea_r.get("ea_cnt") or 0))
 
+        # 7. SDC query (filtered by target_date so historical records are not summed!)
+        sdc_query = """
+            SELECT sdc.DESIGNATION as designation_id, d.name as desig_name, d.name_full as desig_full_name,
+                   SUM(sdc.planned_head_count) as planned, SUM(sdc.actual_head_count) as actual
+            FROM SHIFT_DESIGNATION_COUNT sdc
+            JOIN SHIFT sh ON sdc.SHIFT = sh.oid
+            JOIN DESIGNATION d ON sdc.DESIGNATION = d.oid
+            WHERE sh.SITE = %s
+        """
+        params = [site_id]
+        if is_single_shift:
+            sdc_query += " AND sh.oid = %s"
+            params.append(int(shift_val))
+        if target_date:
+            sdc_query += " AND sdc.attendance_date = %s"
+            params.append(target_date)
 
+        sdc_query += """
+            AND (d.name IS NULL OR (
+                UPPER(d.name) NOT LIKE '%%OFFICER%%' 
+                AND UPPER(d.name) NOT LIKE '%%MANAGER%%'
+            ))
+            GROUP BY sdc.DESIGNATION, d.name, d.name_full
+        """
+        cursor.execute(sdc_query, params)
+        sdc_rows = cursor.fetchall() or []
+        sdc_plan_map = {r["designation_id"]: int(r.get("planned") or 0) for r in sdc_rows}
+        sdc_act_map = {r["designation_id"]: int(r.get("actual") or 0) for r in sdc_rows}
 
-        # Normalize and aggregate common designations (e.g. group S/G, L/SG, S/SUP)
+        # Build comprehensive map of designations
+        if is_single_shift:
+            all_d_ids = set(sdc_plan_map.keys()) | set(sdc_act_map.keys()) | set(live_desig_map.keys())
+        else:
+            all_d_ids = set(std_req_map.keys()) | set(active_emp_map.keys()) | set(live_desig_map.keys()) | set(sdc_plan_map.keys())
+        desig_info_map = {}
+        for r in site_desig_rows:
+            desig_info_map[r["designation_id"]] = (r.get("desig_name"), r.get("desig_full_name"))
+        for r in emp_active_rows:
+            if r["designation_id"] not in desig_info_map:
+                desig_info_map[r["designation_id"]] = (r.get("desig_name"), r.get("desig_full_name"))
+        for r in sdc_rows:
+            if r["designation_id"] not in desig_info_map:
+                desig_info_map[r["designation_id"]] = (r.get("desig_name"), r.get("desig_full_name"))
+        for did in list(all_d_ids):
+            if did not in desig_info_map:
+                cursor.execute("SELECT name, name_full FROM DESIGNATION WHERE oid = %s", (did,))
+                dn = cursor.fetchone()
+                if dn:
+                    desig_info_map[did] = (dn.get("name"), dn.get("name_full"))
 
+        # Aggregate designations
         aggregated: Dict[str, Dict[str, Any]] = {}
-
-        for row in desig_rows:
-
-            raw_code = (row.get("desig_name") or "S/G").strip().upper()
-
-            full_label = row.get("desig_full_name") or ""
-
-            d_id = row.get("designation_id")
-
-            
+        for d_id in all_d_ids:
+            raw_code = (desig_info_map.get(d_id, ('S/G', 'Security Guard'))[0] or "S/G").strip().upper()
+            full_label = desig_info_map.get(d_id, ('', ''))[1] or ""
 
             # Label normalization
-
             if "L" in raw_code and "S" in raw_code and "G" in raw_code:
-
                 norm_key = "LS/G"
-
                 display_name = "Lady Security Guard (LS/G)"
-
             elif "SUP" in raw_code:
-
                 norm_key = "S/SUP"
-
                 display_name = "Supervisor (S/SUP)"
-
             elif "HEAD" in raw_code or raw_code == "H/G":
-
                 norm_key = "H/G"
-
                 display_name = "Head Guard (H/G)"
-
             elif "ARM" in raw_code or raw_code == "A/G":
-
                 norm_key = "A/G"
-
                 display_name = "Armed Guard (A/G)"
-
             elif "BOUNCER" in raw_code:
-
                 norm_key = "BOUNCER"
-
                 display_name = "Bouncer"
-
             elif raw_code in ("S/G", "SG", "GUARD") or "GUARD" in full_label.upper():
-
                 norm_key = "S/G"
-
                 display_name = "Security Guard (S/G)"
-
             else:
-
                 norm_key = raw_code
+                display_name = f"{desig_info_map.get(d_id, (raw_code,))[0]} ({full_label})" if full_label else (desig_info_map.get(d_id, (raw_code,))[0] or raw_code)
 
-                display_name = f"{row.get('desig_name')} ({full_label})" if full_label else row.get("desig_name")
+            if is_single_shift:
+                plan_val = sdc_plan_map.get(d_id, 0)
+                dep_val = sdc_act_map.get(d_id, 0)
+                live_val = live_desig_map.get(d_id, 0)
+            else:
+                # All Shifts (24 Hours): Exactly matches get_guard_attendance_assigned_sites
+                if has_std:
+                    plan_val = std_req_map.get(d_id, 0)
+                elif sdc_plan_map:
+                    plan_val = sdc_plan_map.get(d_id, 0)
+                else:
+                    plan_val = active_emp_map.get(d_id, 0)
 
+                dep_val = active_emp_map.get(d_id, 0) if active_emp_map else sdc_act_map.get(d_id, 0)
+                live_val = live_desig_map.get(d_id, 0)
 
-
-            plan_val = int(row.get("planned") or 0)
-
-            dep_val = int(row.get("actual") or 0)
-
-            live_val = int(live_desig_map.get(d_id, 0))
-
-
+            # Omit row if nothing configured or present
+            if plan_val == 0 and dep_val == 0 and live_val == 0:
+                continue
 
             if norm_key not in aggregated:
-
                 aggregated[norm_key] = {
-
                     "key": norm_key,
-
                     "title": display_name,
-
                     "required": 0,
-
                     "deployed": 0,
-
                     "live_present": 0,
-
                     "present": 0
-
                 }
 
             aggregated[norm_key]["required"] += plan_val
-
             aggregated[norm_key]["deployed"] += dep_val
-
             aggregated[norm_key]["live_present"] += live_val
-
             aggregated[norm_key]["present"] += live_val
 
 
@@ -7426,48 +7326,27 @@ def get_site_manpower_details(
             live = item["live_present"]
 
             diff = max(0, req - live)
-
-            pct = round((live / req) * 100, 1) if req > 0 else (100.0 if live > 0 else 0.0)
-
-
+            pct = min(100.0, round((live / req) * 100, 1)) if req > 0 else (100.0 if live > 0 else 0.0)
 
             site_req_total += req
-
             site_dep_total += dep
-
             site_live_total += live
 
-
-
             designations_list.append({
-
                 "index": idx,
-
                 "key": item["key"],
-
                 "title": item["title"],
-
                 "required": req,
-
                 "deployed": dep,
-
                 "live_present": live,
-
                 "present": live,
-
                 "shortage": diff,
-
                 "percentage": pct,
-
                 "is_optimal": diff == 0
-
             })
 
-
-
         site_shortage = max(0, site_req_total - site_live_total)
-
-        site_pct = round((site_live_total / site_req_total) * 100, 1) if site_req_total > 0 else (100.0 if site_live_total > 0 else 0.0)
+        site_pct = min(100.0, round((site_live_total / site_req_total) * 100, 1)) if site_req_total > 0 else (100.0 if site_live_total > 0 else 0.0)
 
 
 

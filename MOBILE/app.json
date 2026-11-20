@@ -19,7 +19,7 @@
           "fetch"
         ],
         "NSLocationWhenInUseUsageDescription": "Allow VIGILO-O to access your location for attendance and site visit verification.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow VIGILO-O to access your location for background duty tracking.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Allow VIGILO-O to access your location to verify site visits and duty attendance in the background.",
         "NSLocationAlwaysUsageDescription": "Allow VIGILO-O to access your location in the background while screen is locked.",
         "NSLocationUsageDescription": "Allow VIGILO-O to access your location for attendance and site visit verification.",
         "NSCameraUsageDescription": "Allow VIGILO-O to access your camera for attendance and site observation photos.",
@@ -61,16 +61,10 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Allow VIGILO-O to access your location for attendance and site visit verification.",
-          "locationAlwaysAndWhenInUsePermission": "Allow VIGILO-O to access your location for background duty tracking.",
+          "locationAlwaysAndWhenInUsePermission": "Allow VIGILO-O to access your location to verify site visits and duty attendance in the background.",
           "locationAlwaysPermission": "Allow VIGILO-O to access your location in the background while screen is locked.",
           "isIosBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true,
-          "foregroundService": {
-            "notificationTitle": "VIGILO-O Duty Active",
-            "notificationBody": "Location tracking is active for officer verification.",
-            "notificationColor": "#00599B",
-            "foregroundServiceType": "location"
-          }
+          "isAndroidForegroundServiceEnabled": false
         }
       ],
       [

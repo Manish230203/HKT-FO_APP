@@ -210,7 +210,11 @@ export default function AttendanceScreen() {
     if (todayRecord) {
       if (todayRecord.check_in && !todayRecord.check_out) {
         hasActive = true;
-        checkInMs = new Date(todayRecord.check_in).getTime();
+        let parsed = new Date(todayRecord.check_in).getTime();
+        if (isNaN(parsed) && typeof todayRecord.check_in === 'string') {
+          parsed = new Date(todayRecord.check_in.replace(' ', 'T')).getTime();
+        }
+        checkInMs = !isNaN(parsed) ? parsed : Date.now();
       } else {
         hasActive = false;
       }
@@ -220,13 +224,16 @@ export default function AttendanceScreen() {
     }
 
     if (hasActive) {
-      timer = setInterval(() => {
+      const updateTimer = () => {
         const diff = Math.max(0, Math.floor((Date.now() - checkInMs) / 1000));
         const hrs = String(Math.floor(diff / 3600)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
         const secs = String(diff % 60).padStart(2, '0');
         setSessionTime(`${hrs}:${mins}:${secs}`);
-      }, 1000);
+      };
+
+      updateTimer();
+      timer = setInterval(updateTimer, 1000);
     } else {
       setSessionTime('00:00:00');
     }

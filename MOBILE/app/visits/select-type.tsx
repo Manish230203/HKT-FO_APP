@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Sun, Moon, BookOpen, ChevronRight, ArrowLeft, Building2 } from 'lucide-react-native';
 import { useTheme } from '../../context/ThemeContext';
@@ -55,6 +55,7 @@ export default function SelectVisitTypeScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>

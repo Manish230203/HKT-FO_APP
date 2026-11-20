@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
@@ -48,7 +50,16 @@ export default function SiteManpowerScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedShift, setSelectedShift] = useState<string>('all');
+  const [scrollProgress, setScrollProgress] = useState(0);
   const [data, setData] = useState<SiteManpowerResponse | null>(null);
+
+  const handleShiftScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const maxOffset = contentSize.width - layoutMeasurement.width;
+    if (maxOffset > 0) {
+      setScrollProgress(Math.min(1, Math.max(0, contentOffset.x / maxOffset)));
+    }
+  };
 
   const loadSiteData = useCallback(async (shift: string = selectedShift) => {
     if (!siteId) return;
@@ -141,10 +152,24 @@ export default function SiteManpowerScreen() {
       >
         {/* SHIFT SELECTOR HORIZONTAL TABS */}
         <View style={styles.shiftSection}>
+          <View style={styles.shiftSectionHeader}>
+            <View style={styles.shiftTitleRow}>
+              <Clock size={15} color="#00D2FF" style={{ marginRight: 6 }} />
+              <Text style={[styles.shiftSectionTitle, { color: colors.text }]}>Duty Shift Roster</Text>
+            </View>
+            <View style={styles.shiftSwipeHint}>
+              <Text style={[styles.shiftSwipeText, { color: colors.textSecondary }]}>
+                {shifts.length} Shifts • Swipe to view ➔
+              </Text>
+            </View>
+          </View>
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.shiftTabsScroll}
+            onScroll={handleShiftScroll}
+            scrollEventThrottle={16}
           >
             {shifts.map((sh) => {
               const isActive = selectedShift === sh.id;
@@ -159,18 +184,33 @@ export default function SiteManpowerScreen() {
                   activeOpacity={0.8}
                   onPress={() => setSelectedShift(sh.id)}
                 >
-                  <Text style={[styles.shiftTabText, { color: colors.textSecondary }, isActive && styles.shiftTabTextActive]}>
-                    {sh.name}
-                  </Text>
+                  <View style={styles.shiftTabHeader}>
+                    {isActive && <View style={styles.activeDot} />}
+                    <Text style={[styles.shiftTabText, { color: colors.textSecondary }, isActive && styles.shiftTabTextActive]}>
+                      {sh.name}
+                    </Text>
+                  </View>
                   {sh.time_range && (
                     <Text style={[styles.shiftTimeText, { color: colors.placeholder }, isActive && styles.shiftTimeTextActive]}>
-                      ({sh.time_range})
+                      {sh.time_range}
                     </Text>
                   )}
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
+
+          {/* VISUAL SCROLL PROGRESS INDICATOR */}
+          <View style={styles.shiftScrollIndicatorContainer}>
+            <View style={[styles.shiftScrollIndicatorTrack, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0' }]}>
+              <View
+                style={[
+                  styles.shiftScrollIndicatorThumb,
+                  { left: `${scrollProgress * 65}%` },
+                ]}
+              />
+            </View>
+          </View>
         </View>
 
         {loading ? (
@@ -366,14 +406,38 @@ const styles = StyleSheet.create({
   shiftSection: {
     marginBottom: 16,
   },
+  shiftSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  shiftTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  shiftSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  shiftSwipeHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  shiftSwipeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   shiftTabsScroll: {
     gap: 8,
     paddingVertical: 4,
   },
   shiftTab: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: '#0F1A36',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -387,6 +451,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 4,
+  },
+  shiftTabHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0A1128',
+    marginRight: 6,
   },
   shiftTabText: {
     color: '#94A3B8',
@@ -405,6 +480,26 @@ const styles = StyleSheet.create({
   shiftTimeTextActive: {
     color: '#0A1128',
     fontWeight: '600',
+  },
+  shiftScrollIndicatorContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  shiftScrollIndicatorTrack: {
+    width: 60,
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  shiftScrollIndicatorThumb: {
+    width: 22,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#00D2FF',
+    position: 'absolute',
+    top: 0,
   },
   sectionHeaderBox: {
     marginBottom: 12,
